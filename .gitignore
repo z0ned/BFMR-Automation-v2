@@ -1,0 +1,46 @@
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+secrets/
+credentials/
+**/google-token.json
+**/google-oauth-credentials.json
+**/service-account*.json
+*.pem
+*.key
+
+# Authenticated browser and local application state
+browser-profiles/
+profiles/
+.auth/
+playwright/.auth/
+data/
+runtime/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+backups/
+*.dump
+
+# Dependencies, build products and test artifacts
+node_modules/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Local tools and temporary files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+tmp/
+.venv/
+__pycache__/
+*.pyc
