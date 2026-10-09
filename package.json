@@ -1,0 +1,42 @@
+{
+  "name": "bfmr-automation-v2",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3000",
+    "build": "tsc && vite build",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/**/*.test.ts",
+    "wait-for-email": "tsx scripts/wait_for_email.ts",
+    "test-real-email": "tsx scripts/wait_for_real_email.ts",
+    "debug-email": "tsx scripts/debug_gmail_intake.ts",
+    "auth-gmail": "tsx scripts/auth_gmail_oauth.ts",
+    "preview": "vite preview --host 0.0.0.0 --port 3000"
+  },
+  "dependencies": {
+    "@google-cloud/pubsub": "^6.2.0",
+    "clsx": "^2.1.1",
+    "dotenv": "^18.0.6",
+    "googleapis": "^185.0.0",
+    "imapflow": "^2.3.0",
+    "lucide-react": "^1.16.0",
+    "playwright": "^1.64.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.9",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "pdf-parse": "^2.4.5",
+    "tailwindcss": "^4.0.9",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0"
+  }
+}
