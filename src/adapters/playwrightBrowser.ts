@@ -2,6 +2,28 @@ import { chromium, BrowserContext, Page } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 
+const TRUSTED_BFMR_HOSTS = new Set([
+  'bfmr.com',
+  'www.bfmr.com',
+  'buyformeretail.com',
+  'www.buyformeretail.com',
+  'app.buyformeretail.com',
+]);
+
+function isTrustedDealUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      TRUSTED_BFMR_HOSTS.has(url.hostname.toLowerCase()) &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      /^\/(?:deals?|offers?|item)\/[a-zA-Z0-9_-]+(?:\/|$)/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export interface ReservationSubmissionResult {
   status: 'SUBMITTED' | 'UNCERTAIN' | 'FAILED_500' | 'CLOSED_NO_SLOTS' | 'AUTH_REQUIRED';
   dealId?: string;
@@ -58,39 +80,68 @@ export class PlaywrightBfmrBrowser {
    * Verify session on BFMR website (Page 8 verifySession)
    * If login or MFA required, pauses for manual operator completion (OPS-002)
    */
-  public async verifySession(expectedAccount?: string): Promise<'AUTHENTICATED' | 'AUTH_REQUIRED'> {
+  public async verifySession(expectedAccount?: string, dealUrl?: string): Promise<'AUTHENTICATED' | 'AUTH_REQUIRED'> {
     const page = await this.init();
     console.log('[Playwright] Verifying BFMR website session...');
 
-    await page.goto('https://bfmr.com/deals', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const destination = dealUrl || 'https://bfmr.com/deals';
+    if (dealUrl && !isTrustedDealUrl(dealUrl)) {
+      console.error('[Playwright] Refusing an untrusted deal URL during session verification.');
+      return 'AUTH_REQUIRED';
+    }
+
+    // In the real-email runner, inspect the exact deal page from the email. This
+    // avoids replacing it with the generic deals listing during session checks.
+    const response = await page.goto(destination, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
 
-    // Require positive evidence of an authenticated account. A missing login link alone
-    // is not proof: BFMR can still be rendering, show an error, or change its navigation.
-    const loginSelector = 'a[href*="/login"], button:has-text("Sign In"), a:has-text("Login")';
-    const accountSelector = [
-      'button[aria-label*="account" i]',
-      'a[href*="/my-tracker"]',
-      'a[href*="logout" i]',
-      'button:has-text("Log out")',
-      'a:has-text("Log out")',
+    // BFMR's signed-in page does not expose a stable account-menu selector. Detect
+    // sign-in state from the login route/form itself instead of requiring a guessed
+    // account button that may not exist in the signed-in UI.
+    const loginSelector = [
+      'input[type="password"]',
+      'form[action*="login" i]',
+      'a[href*="/login"]',
+      'button:has-text("Sign In")',
+      'a:has-text("Sign In")',
+      'button:has-text("Log In")',
+      'a:has-text("Log In")',
     ].join(', ');
+    const isLoginRoute = /\/(login|signin|sign-in|auth)(\/|$)/i.test(new URL(page.url()).pathname);
+    const isLoginVisible = await page.locator(loginSelector).first().isVisible().catch(() => false);
+    const pageHasContent = await page.locator('body').evaluate((body) => (body.textContent || '').trim().length > 0).catch(() => false);
+    const badResponse = response ? response.status() >= 400 : false;
+    const finalUrl = new URL(page.url());
+    const expectedPath = dealUrl ? new URL(dealUrl).pathname.replace(/\/+$/, '') : undefined;
+    const finalPath = finalUrl.pathname.replace(/\/+$/, '');
+    const unexpectedRedirect = !TRUSTED_BFMR_HOSTS.has(finalUrl.hostname.toLowerCase()) ||
+      Boolean(expectedPath && finalPath !== expectedPath);
 
-    const hasAccountControl = async () =>
-      page.isVisible(accountSelector).catch(() => false);
-    const isLoginVisible = await page.isVisible(loginSelector).catch(() => false);
-
-    if (!(await hasAccountControl())) {
+    if (isLoginRoute || isLoginVisible || badResponse || !pageHasContent || unexpectedRedirect) {
       console.log('\n⚠️ [BFMR AUTH REQUIRED]');
-      console.log(isLoginVisible
-        ? 'The saved BFMR browser profile is signed out.'
-        : 'Could not confirm a signed-in BFMR account in the browser.');
+      console.log(isLoginRoute || isLoginVisible
+        ? 'BFMR is showing its sign-in page or form.'
+        : unexpectedRedirect
+          ? 'The email deal link redirected outside an approved BFMR host.'
+        : 'BFMR did not return a usable deals page.');
       console.log('👉 Complete BFMR login or MFA in the browser window.');
-      console.log('Waiting for a signed-in account control (up to 5 minutes)...\n');
+      console.log('Waiting for the login form to disappear and the deals page to load (up to 5 minutes)...\n');
 
       try {
-        await page.locator(accountSelector).first().waitFor({
-          state: 'visible',
+        await page.waitForFunction((requiredPath) => {
+          const path = window.location.pathname;
+          const authRoute = /\/(login|signin|sign-in|auth)(\/|$)/i.test(path);
+          const passwordField = Array.from(document.querySelectorAll('input[type="password"]'))
+            .some((input) => (input as HTMLElement).offsetParent !== null);
+          const pageText = (document.body?.innerText || '').trim();
+          const allowedHost = ['bfmr.com', 'www.bfmr.com', 'buyformeretail.com', 'www.buyformeretail.com', 'app.buyformeretail.com']
+            .includes(window.location.hostname.toLowerCase());
+          const normalizedPath = path.replace(/\/+$/, '');
+          return allowedHost && (!requiredPath || normalizedPath === requiredPath) && !authRoute && !passwordField && pageText.length > 0;
+        }, expectedPath || null, {
           timeout: 300000,
         });
       } catch {
@@ -110,6 +161,9 @@ export class PlaywrightBfmrBrowser {
    */
   public async submitReservation(dealUrl: string, dealId: string): Promise<ReservationSubmissionResult> {
     const page = await this.init();
+    if (!isTrustedDealUrl(dealUrl)) {
+      return { status: 'AUTH_REQUIRED', dealId, errorDetail: 'Refusing an untrusted BFMR deal URL' };
+    }
     console.log(`\n[Playwright] Navigating directly to deal URL: ${dealUrl}`);
 
     try {

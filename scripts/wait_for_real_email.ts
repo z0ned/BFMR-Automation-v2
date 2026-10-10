@@ -82,7 +82,7 @@ async function displayParsedDeal(emailData: {
     console.log(`\n[Stage 2/3] Launching Playwright browser & navigating to deal...`);
     const browser = new PlaywrightBfmrBrowser();
     try {
-      const session = await browser.verifySession(process.env.BFMR_EXPECTED_ACCOUNT);
+      const session = await browser.verifySession(process.env.BFMR_EXPECTED_ACCOUNT, parsed.dealUrl);
       if (session !== 'AUTHENTICATED') {
         console.error('❌ Could not establish authenticated session on BFMR website. Halting reservation.');
         return;
