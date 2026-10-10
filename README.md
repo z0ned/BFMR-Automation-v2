@@ -48,3 +48,15 @@ No dependencies, application commands or runtime versions have been invented for
 Ask the coding agent to implement MVP 1 from v1.5 as a fresh project, following AGENTS.md and the implementation plan. Provide required service access securely. Start with the repository bootstrap and offline tests; satisfy the documented evidence gates before live enablement.
 
 The repository contains no credentials, browser profiles or private email/account fixtures. Never paste secrets into issues, chat, commits or test evidence.
+
+## BFMR browser sign-in
+
+Playwright uses a dedicated persistent Chromium profile, separate from the user's regular browser. Before the first real-email run, start the BFMR sign-in helper from this repository:
+
+```bash
+npm run auth-bfmr
+```
+
+Complete BFMR login and any MFA in the opened Chromium window. After confirming the intended account is signed in, press Enter in the terminal so Chromium closes cleanly and saves the session. Then run `npm run test-real-email`; it uses the same profile. The sign-in helper never processes an email or submits a reservation. If BFMR expires the session, run the helper again.
+
+The email listener loads environment values from `.env` in the repository, then fills unset values from `~/.env.bfmr_automation` or `~/.env`. Google credentials default to `~/.bfmr/gcp-credentials.json` when that file exists and no `GOOGLE_APPLICATION_CREDENTIALS` path is set. Shell-provided variables take precedence.

@@ -63,28 +63,44 @@ export class PlaywrightBfmrBrowser {
     console.log('[Playwright] Verifying BFMR website session...');
 
     await page.goto('https://bfmr.com/deals', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
 
-    // Check if sign-in button or login page is visible
-    const isLoginVisible = await page.isVisible('a[href*="/login"], button:has-text("Sign In"), a:has-text("Login")').catch(() => false);
-    const isUserMenuVisible = await page.isVisible('button[aria-label*="account"], div:has-text("Logout"), a[href*="/my-tracker"]').catch(() => false);
+    // Require positive evidence of an authenticated account. A missing login link alone
+    // is not proof: BFMR can still be rendering, show an error, or change its navigation.
+    const loginSelector = 'a[href*="/login"], button:has-text("Sign In"), a:has-text("Login")';
+    const accountSelector = [
+      'button[aria-label*="account" i]',
+      'a[href*="/my-tracker"]',
+      'a[href*="logout" i]',
+      'button:has-text("Log out")',
+      'a:has-text("Log out")',
+    ].join(', ');
 
-    if (isLoginVisible && !isUserMenuVisible) {
+    const hasAccountControl = async () =>
+      page.isVisible(accountSelector).catch(() => false);
+    const isLoginVisible = await page.isVisible(loginSelector).catch(() => false);
+
+    if (!(await hasAccountControl())) {
       console.log('\n⚠️ [BFMR AUTH REQUIRED]');
-      console.log('You are not currently logged in on the BFMR website in Chromium.');
-      console.log('👉 Please log in to your BFMR account in the browser window now.');
-      console.log('Waiting for login completion in browser (up to 120 seconds)...\n');
+      console.log(isLoginVisible
+        ? 'The saved BFMR browser profile is signed out.'
+        : 'Could not confirm a signed-in BFMR account in the browser.');
+      console.log('👉 Complete BFMR login or MFA in the browser window.');
+      console.log('Waiting for a signed-in account control (up to 5 minutes)...\n');
 
       try {
-        await page.waitForSelector('a[href*="/my-tracker"], button:has-text("Logout"), div[class*="avatar"]', {
-          timeout: 120000,
+        await page.locator(accountSelector).first().waitFor({
+          state: 'visible',
+          timeout: 300000,
         });
-        console.log('✅ Logged in successfully!');
-        return 'AUTHENTICATED';
       } catch {
         return 'AUTH_REQUIRED';
       }
     }
 
+    if (expectedAccount) {
+      console.log('Confirm the visible BFMR account matches the configured account before continuing.');
+    }
     console.log('✅ BFMR website session is authenticated.');
     return 'AUTHENTICATED';
   }

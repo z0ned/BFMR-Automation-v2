@@ -1,16 +1,7 @@
-import fs from 'node:fs';
+import './loadEnv';
 import { parseIncomingEmail } from '../src/services/emailParser';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
 import { myTrackerService } from '../src/services/myTracker';
-
-// Load .env using Node 22 native support (zero dependency)
-if (fs.existsSync('.env')) {
-  try {
-    process.loadEnvFile();
-  } catch (err: any) {
-    // ignore if unreadable
-  }
-}
 
 // Permitted senders per Solution Design Specification v1.5 FR-001
 const PERMITTED_SENDERS = [
@@ -379,19 +370,20 @@ async function main() {
   }
 
   if (!started) {
-    console.log('\n[CONFIGURATION NEEDED ON YOUR LOCAL HOST]');
-    console.log('To listen to your real inbox without passing secrets to AI Studio, configure');
-    console.log('your local .env file on your machine (/home/wardmatt/...):\n');
-    console.log('OPTION 1 (Recommended - Quickest Gmail Setup with Google App Password):');
-    console.log('  Add to your local .env:');
-    console.log('    GMAIL_USER_EMAIL=your-gmail@gmail.com');
-    console.log('    GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx  (16-letter App Password from myaccount.google.com/apppasswords)\n');
-    console.log('OPTION 2 (Full Google Cloud Pub/Sub from v1.5):');
-    console.log('  Add to your local .env:');
-    console.log('    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json');
-    console.log('    GOOGLE_PUBSUB_SUBSCRIPTION=projects/YOUR_PROJECT/subscriptions/YOUR_SUBSCRIPTION\n');
-    console.log('Then re-run:');
-    console.log('  npm run test-real-email\n');
+    console.log('\n[NO EMAIL LISTENER COULD BE STARTED]');
+    console.log('Configuration was loaded from .env in this directory and, if present, ~/.env.bfmr_automation or ~/.env.');
+
+    if (!process.env.GMAIL_USER_EMAIL || !process.env.GMAIL_APP_PASSWORD) {
+      console.log('IMAP needs both GMAIL_USER_EMAIL and GMAIL_APP_PASSWORD.');
+    }
+    if (!process.env.GOOGLE_PUBSUB_SUBSCRIPTION) {
+      console.log('Pub/Sub needs GOOGLE_PUBSUB_SUBSCRIPTION.');
+    }
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      console.log('Pub/Sub needs Google credentials; set GOOGLE_APPLICATION_CREDENTIALS or place the service-account file at ~/.bfmr/gcp-credentials.json.');
+    }
+
+    console.log('Check the variable names and paths above, then re-run npm run test-real-email.\n');
   }
 }
 
