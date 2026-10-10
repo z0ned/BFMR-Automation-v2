@@ -11,16 +11,19 @@
 ## Preserve MVP 1 scope
 
 - Single new-deal email -> trusted BFMR browser navigation -> My Tracker duplicate check -> website quantity-one reservation -> My Tracker confirmation.
-- Accept all retailers and bundles. Quantity 1 is one BFMR offer, not one unit of each bundle component.
+- Accept all retailers and bundles at intake. After a new email reservation is confirmed, check the exact reservation's supplier list for Amazon; cancel that reservation when Amazon is absent. Unknown supplier evidence stops/alerts, never implies absence. Quantity 1 is one BFMR offer, not one unit of each bundle component.
 - Ignore multiple-deal mail and additional-slot notifications. Retailer channel in the subject is not required.
-- No financial/stock/retailer eligibility checks, purchase, cancellation or timed release. Matt releases reservations manually.
+- The 10 October evaluation amendment allows the Amazon supplier check and scoped automatic cancellation. The startup CAPTCHA reservation is always canceled after confirmation, without Amazon evaluation. No other financial/stock/purchase or timed-release behavior is approved. Successful email reservations listing Amazon remain for Matt to manage.
 - Both testing and production reserve real inventory. Automated offline tests use fake adapters; do not confuse those with the deployed testing mode.
 - Preserve Gmail cursor and unfinished work across restarts; catch up on downtime mail. Never restore the old receipt-time cutoff or overwrite the saved cursor when renewing the watch.
 
 ## External effects and correctness
 
+- The 10 October Amazon checkout rehearsal permits preparing quantity one of B09JQMJHXY in the same Chromium context with the saved default Amazon address. Stop at final order review; never click Place your order, Buy Now, or a subscription control. No automatic purchasing or email-to-order integration is authorized by this rehearsal.
+
 - Use Playwright's normal BFMR website form actions to reserve. Do not reconstruct reservation requests, call undocumented mutation endpoints or implement an API write fallback.
 - My Tracker API reads must be complete and validated. Missing pages, failed reads and unknown shapes never prove absence.
+- Cancellation is allowed only for an exact newly confirmed reservation ID (or an explicitly designated manual test). Use the documented HTTPS reservation-cancellation endpoint with form encoding, journal intent, and verify release by exact ID through complete My Tracker reads. Do not retry an uncertain cancellation POST or cancel pre-existing duplicate reservations.
 - Validate email provenance, expected account/deal identity and trusted URL/redirect destinations. These safety checks remain required despite the removal of business eligibility checks.
 - One account worker and browser owner; durable attempt record before a possible click. Reconcile uncertain outcomes before retry. At most two submit ordinals per command, as specified.
 - Real test reservations require the designated test context and documented pre-live gates. This documentation bootstrap itself grants no instruction to operate live BFMR accounts.

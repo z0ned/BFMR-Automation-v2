@@ -1,5 +1,5 @@
 import './loadEnv';
-import { parseIncomingEmail } from '../src/services/emailParser';
+import { parseBfmrEmail as parseIncomingEmail } from '../src/services/bfmrEmailLinks';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
 import { myTrackerService } from '../src/services/myTracker';
 
@@ -84,7 +84,14 @@ async function displayParsedDeal(emailData: {
     try {
       const session = await browser.verifySession(process.env.BFMR_EXPECTED_ACCOUNT, parsed.dealUrl);
       if (session !== 'AUTHENTICATED') {
-        console.error('❌ Could not establish authenticated session on BFMR website. Halting reservation.');
+        const reason = {
+          AUTH_REQUIRED: 'BFMR is still showing its sign-in page or login form.',
+          UNTRUSTED_REDIRECT: 'The deal link redirected to a host that is not approved for BFMR.',
+          DEAL_PAGE_MISMATCH: 'BFMR is on an approved host, but the redirect did not land on a deal-detail page.',
+          PAGE_ERROR: 'BFMR did not load a usable deal page after navigation or sign-in.',
+          CHALLENGE: 'BFMR presented a CAPTCHA/access challenge; automation stopped for manual handling.',
+        }[session];
+        console.error(`❌ ${reason} Halting reservation.`);
         return;
       }
 

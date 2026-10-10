@@ -1,14 +1,5 @@
 import { IntakeEmail } from '../types/bfmr';
-
-// Trusted BFMR domains per Solution Design v1.5 Page 7:
-// "initial known hosts: bfmr.com and www.bfmr.com; /deals/ path. Preserve HTML hyperlink targets when plain text omits them."
-const TRUSTED_DOMAINS = [
-  'bfmr.com',
-  'www.bfmr.com',
-  'buyformeretail.com',
-  'www.buyformeretail.com',
-  'app.buyformeretail.com',
-];
+import { isTrustedBfmrDealUrl } from './bfmrUrl';
 
 function cleanQuotedPrintable(str: string): string {
   return str
@@ -25,13 +16,13 @@ export function parseIncomingEmail(raw: {
   subject: string;
   body: string;
   receivedAt?: string;
-}): IntakeEmail {
+}, resolveDealLink: (value: string) => string | null = (value) => value): IntakeEmail {
   const subject = raw.subject.trim();
   const cleanedBody = cleanQuotedPrintable(raw.body);
   const body = cleanedBody;
 
   // Rule: Ignore multiple-deal mail
-  const isMultiDeal = 
+  let isMultiDeal =
     /multiple deals/i.test(subject) ||
     /\b\d+\s+deals?\s+available/i.test(subject) ||
     /daily deal roundup/i.test(subject) ||
@@ -48,7 +39,6 @@ export function parseIncomingEmail(raw: {
   // Valid subject patterns per Decision register:
   // "New Deal: [Title]" or "[Retailer] New Deal: [Title]" (retailer not strictly required)
   const isNewDealKeyword = /new deal/i.test(subject);
-  const isSingleDeal = isNewDealKeyword && !isMultiDeal && !isAdditionalSlotNotice;
 
   // Extract link: from HTML href attributes and plain text URLs
   const candidateUrls: string[] = [];
@@ -67,27 +57,34 @@ export function parseIncomingEmail(raw: {
   
   let dealUrl: string | undefined;
   let canonicalDealId: string | undefined;
+  const deals = new Map<string, { url: string; id: string }>();
 
   for (const rawUrl of candidateUrls) {
     try {
       // Clean trailing punctuation
-      const cleanUrl = rawUrl.replace(/[.,;>)]+$/, '');
+      const cleanUrl = resolveDealLink(rawUrl.replace(/&amp;/gi, '&').replace(/[.,;>)]+$/, ''));
+      if (!cleanUrl) continue;
       const parsed = new URL(cleanUrl);
-      const host = parsed.hostname.toLowerCase();
-
-      if (TRUSTED_DOMAINS.includes(host)) {
-        // Look for /deals/DEAL_ID or /deal/DEAL_ID or /offer/DEAL_ID
+      if (isTrustedBfmrDealUrl(cleanUrl)) {
         const match = parsed.pathname.match(/\/(?:deals?|offers?|item)\/([a-zA-Z0-9_-]+)/i);
-        if (match && match[1]) {
-          dealUrl = cleanUrl;
-          canonicalDealId = match[1];
-          break;
-        }
+        if (!match?.[1]) continue;
+
+        // Collapse plain/HTML repeats and www aliases; distinct deal paths stay distinct.
+        const key = parsed.pathname.replace(/\/+$/, '').toLowerCase();
+        deals.set(key, { url: cleanUrl, id: match[1] });
       }
     } catch {
       // invalid URL skipped
     }
   }
+
+  if (deals.size > 1) isMultiDeal = true;
+  if (deals.size === 1) {
+    const deal = [...deals.values()][0];
+    dealUrl = deal.url;
+    canonicalDealId = deal.id;
+  }
+  const isSingleDeal = isNewDealKeyword && !isMultiDeal && !isAdditionalSlotNotice;
 
   // Detect retailer from subject or body
   let retailer = 'Amazon';

@@ -17,7 +17,7 @@ import {
   ITelegramAdapter,
   GmailFetchMessage,
 } from '../adapters/interfaces';
-import { parseIncomingEmail } from '../services/emailParser';
+import { parseBfmrEmail as parseIncomingEmail } from '../services/bfmrEmailLinks';
 
 export interface EngineConfig {
   mode: RunMode;

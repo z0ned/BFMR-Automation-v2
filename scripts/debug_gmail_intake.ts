@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { parseIncomingEmail } from '../src/services/emailParser';
+import { parseBfmrEmail as parseIncomingEmail } from '../src/services/bfmrEmailLinks';
 
 // Load .env
 if (fs.existsSync('.env')) {

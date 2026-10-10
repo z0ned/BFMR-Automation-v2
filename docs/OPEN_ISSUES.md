@@ -44,4 +44,4 @@ Pin compatible runtime/dependency versions during implementation. Validate heade
 
 ## Deferred items
 
-Financial evaluation, purchasing, cancellation API contracts, shipment/payout handling, multi-deal mail and additional-slot notifications are outside MVP 1. V1.5 page 19 preserves earlier discussion without activating it.
+Financial evaluation, purchasing, shipment/payout handling, multi-deal mail and additional-slot notifications remain deferred. The 10 October amendment activates Amazon supplier evaluation for confirmed email reservations and cancellation for failed evaluation/startup cleanup. Form-encoded cancellation passed one user-authorized live test; supplier-response variants and the complete live email evaluation flow still require evidence. See the v1.6 addendum.

@@ -1,7 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseIncomingEmail } from '../src/services/emailParser';
+import { parseBfmrEmail as parseIncomingEmail } from '../src/services/bfmrEmailLinks';
 
 const PORT = process.env.INBOUND_PORT ? parseInt(process.env.INBOUND_PORT, 10) : 3005;
 const DROP_DIR = path.resolve(process.cwd(), 'inbox_drop');
