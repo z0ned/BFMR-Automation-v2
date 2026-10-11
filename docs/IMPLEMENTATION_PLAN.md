@@ -63,6 +63,16 @@ Exit criteria: AT-19/21, G-003 and G-005 pass; all applicable acceptance IDs are
 
 ## Progress updates
 
+### 11 October 2026 — one-item Amazon purchase test command
+
+Added `npm run test-amazon-purchase` for the explicitly authorized ASIN B0GTMJF7PV. It is separate from email processing and does not make a BFMR reservation. The interactive command requires an operator-provided USD total cap, checks the exact item and quantity one at final review, requests confirmation that the saved default address and payment method are selected, and submits only after exact ASIN-bound terminal confirmations. A purchase submission is attempted once; uncertain outcomes stop without retry. This code change does not itself run the command or place an order. Account-specific shipping and payment flows remain unverified by this implementation turn.
+
+The first user-run attempt reached Amazon Business order review but stopped because the page showed two identical enabled Place your order controls and repeated order totals. The verifier now accepts the observed duplicate controls and duplicate total displays only when the labels/statuses and amounts agree, then clicks only one control. TypeScript and the order-total parser fixture pass. The browser checkout fixture could not be run in this sandbox, and the purchase command was not rerun.
+
+The purchase test opens “Add gift options”, checks “This item is a gift”, and clicks “Save gift options”. It waits for the final secure-checkout button to return before proceeding. The page-scoped marker carries the saved gift action through the final pre-submit review. The existing offline checkout fixture covers the checkbox/save flow.
+
+The Amazon purchase test now selects a free shipping/delivery radio option only when the option label explicitly says free and does not mention Prime. It verifies that a matching option is selected again at final review and blocks submission otherwise. The operator is asked to make the choice manually if Amazon's markup cannot be identified safely.
+
 ### 10 October 2026 — standalone Amazon checkout rehearsal
 
 Added `npm run test-amazon-checkout` for the user-selected ASIN B09JQMJHXY, quantity one, saved default Amazon address, stopping before Place your order. Runs the shared BFMR startup cleanup, then creates an Amazon tab in the same browser context. Checks active cart isolation, validates product/quantity, adds at most once, and proceeds to order review. Account setup/intermediate checkout steps can require manual completion. The order button is never activated and email purchasing is not wired.
@@ -161,3 +171,40 @@ Replaced the blocking terminal prompt for Amazon authentication with bounded bro
 ### Amazon product-first navigation correction — 10 October 2026
 
 A user-reported unknown cart layout previously stopped navigation before the product page. Open the requested product first, preserve cart preflight before mutation, return to the product on unknown cart contents, and log sanitized structural diagnostics. Added synthetic cases for unknown-cart recovery and the shorter empty-cart heading. Live cart markup remains unverified.
+
+
+### 11 October 2026 — live Amazon checkout rehearsal reached final review
+
+The live `npm run test-amazon-checkout` run passed its BFMR startup reservation, exact startup cancellation and My Tracker release verification. It then opened the requested Amazon product, proceeded through Amazon Business checkout with the existing one-unit cart item and reported PASS after confirming the product, quantity one and order total on final review. The Place your order button was not clicked, and no order was submitted. This validates the observed account/session and this ASIN only; it is not a purchase test or evidence for other account/UI variants. The order remains in the Amazon cart for the user to manage. No automated test was run for this user-driven live run.
+
+### 11 October 2026 — purchase safeguard refinement
+
+The purchase CLI now rejects spending caps above $100 and rechecks both the cap and the exact confirmed total immediately before the single submission. Shipping verification requires an explicitly free shipping summary or an exactly offset shipping credit; item/tax arithmetic alone no longer proves free shipping. CVV fill/read errors are suppressed to avoid logging the secret. Confirmation uses the requested “Do you want me to <ACTION>?” wording with Y/N answers, and answering N to browser closure leaves Chromium open without repeated prompts. No tests, typecheck, or live checkout were run for this refinement, as instructed.
+
+### 11 October 2026 — capture Amazon Order # after purchase
+
+After a confirmed purchase, the CLI clicks Returns and Orders and reads the first displayed order section matching the purchased ASIN or exact product title. It captures the section's Order # only when its total matches the approved purchase total, and displays the result in the terminal. The Amazon Business thank-you wording is recognized even when the confirmation shows only a product image. The thank-you URL purchaseId is never treated as the Order #. Retrieval failure reports that the purchase was placed and prohibits repeating it. No tests or live actions were run for this change.
+
+### 11 October 2026 — Amazon duplicate-order warning
+
+The user explicitly authorized clicking Place your order once more when Amazon presents its duplicateOrder pending-order warning after submission. This continuation requires the recognized route and warning copy, matching product evidence and prices within the confirmed total. It is attempted at most once and never retried after an uncertain click; CVV handling and confirmation/Order # retrieval continue afterwards. This supersedes the blanket one-click restriction only for this recognized warning. No tests or live purchase were run for this change.
+
+### 11 October 2026 — wait for post-submit confirmation
+
+The user reported a placed order followed by the CLI's uncertain-outcome message, which skipped Order # retrieval. Replaced the one-shot confirmation read with bounded 60-second observation using a single URL/DOM snapshot per poll and whitespace-normalized Amazon Business confirmation text. Recognized duplicate/CVV continuations are attempted at most once each. After any uncertain click, the app only observes for confirmation and never retries or initiates another purchase action. Confirmed placement proceeds to the existing Orders lookup. No tests or live actions were run for this correction.
+
+### 11 October 2026 — duplicate-warning readiness correction
+
+The warning handler previously consumed its one permitted continuation as soon as the route appeared, even if the warning text/product/button had not rendered. It now polls read-only until all required evidence is present and consumes the continuation only when the click is attempted. Product-title matching accepts the same exact title before Amazon's pipe-separated descriptive suffix. Both button and link semantics are supported for the exact Place your order label. A successful click returns to bounded confirmation observation without demanding navigation within 1.5 seconds. Added sanitized continuation/outcome diagnostics. No tests or live actions were run.
+
+### 11 October 2026 — require empty cart before product navigation
+
+The shared Amazon checkout preparation now opens the cart first and requires verified empty-cart evidence before visiting the product page or adding one unit. An existing target item also blocks startup. Unknown/nonempty cart states remain on the cart for inspection, with existing items untouched. This supersedes product-first navigation and target-item reuse. No tests or live actions were run.
+
+### 11 October 2026 — fix browser-side order extraction runtime error
+
+The user's live run confirmed placement and navigated to Orders, then failed with `ReferenceError: __name is not defined`. Removed the local named normalization function from the Playwright evaluation callback; tsx/esbuild's function-name helper is not transferred into the browser context. Normalization is now inline and the Order # matching/total checks remain in place. No tests or live actions were run for this correction.
+
+### 11 October 2026 — user-confirmed purchase-to-order-ID success and v1.8 handoff
+
+Following the browser evaluation fix, the user reported that the complete purchase test worked, including Order # capture. The supplied preceding live log had already confirmed the duplicate-warning continuation, placement and navigation to Orders at $99.99; the final successful run is user-reported rather than a new agent-run regression suite. Created BFMR_Solution_Design_Specification_v1.8.pdf with a 13-page current-state guide covering Amazon safeguards, cart-first preparation, exact-PID browser attachment, body-only email classification, evidence boundaries and production gaps, followed by all 61 historical v1.7 pages. Saved editable current-state Markdown beside it. PDF rendering and text-preservation checks were performed; no code tests, typecheck, build or live actions were run.

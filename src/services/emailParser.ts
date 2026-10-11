@@ -8,6 +8,32 @@ function cleanQuotedPrintable(str: string): string {
     .replace(/=20/g, ' ');   // decode =20 to space
 }
 
+function bodyText(body: string): string {
+  return body
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>|<\/(?:p|div|li|h[1-6]|tr)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, value: string) => {
+      const codePoint = Number(value);
+      return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : ' ';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function bodyDealTitle(text: string): string | undefined {
+  const match = /[•◦]\s*([^•◦]{3,180}?)\s*(?:-\s*)?This retails for\b/i.exec(text);
+  const title = match?.[1].replace(/[-|]\s*$/, '').trim();
+  return title || undefined;
+}
+
 export function parseIncomingEmail(raw: {
   id?: string;
   historyId?: number;
@@ -20,34 +46,49 @@ export function parseIncomingEmail(raw: {
   const subject = raw.subject.trim();
   const cleanedBody = cleanQuotedPrintable(raw.body);
   const body = cleanedBody;
+  const readableBody = bodyText(body);
 
-  // Rule: Ignore multiple-deal mail
+  // Classify only from the message body. Subjects are preserved as header
+  // metadata, but are not evidence about message type or offer contents.
   let isMultiDeal =
-    /multiple deals/i.test(subject) ||
-    /\b\d+\s+deals?\s+available/i.test(subject) ||
-    /daily deal roundup/i.test(subject) ||
-    /deals digest/i.test(subject);
+    /multiple deals/i.test(readableBody) ||
+    /\b\d+\s+deals?\s+available/i.test(readableBody) ||
+    /daily deal roundup/i.test(readableBody) ||
+    /deals digest/i.test(readableBody) ||
+    /\b(?:two|three|four|five|six|seven|eight|nine|ten|\d+)\s+new deals?\b/i.test(readableBody) ||
+    /\ball deals\b[\s\S]{0,80}\bin stock\b/i.test(readableBody) ||
+    /\bthe following deals are in stock\b/i.test(readableBody);
 
-  // Rule: Ignore additional-slot notifications
+  // Additional reservations are a separate BFMR message type, not a new deal.
   const isAdditionalSlotNotice = 
-    /additional slots?/i.test(subject) ||
-    /more slots?/i.test(subject) ||
-    /slots? added/i.test(subject) ||
-    /capacity increased/i.test(subject);
+    /additional slots?/i.test(readableBody) ||
+    /more slots?/i.test(readableBody) ||
+    /slots? added/i.test(readableBody) ||
+    /capacity increased/i.test(readableBody) ||
+    /more reservations added/i.test(readableBody) ||
+    /added more reservations/i.test(readableBody);
 
-  // Rule: Detect single deal email
-  // Valid subject patterns per Decision register:
-  // "New Deal: [Title]" or "[Retailer] New Deal: [Title]" (retailer not strictly required)
-  const isNewDealKeyword = /new deal/i.test(subject);
+  const bodyAnnouncesNewDeal = /\bwe posted a new deal\b/i.test(readableBody);
+  const bodyIsUpdate = /\b(?:we increased our payout|we have added more reservations|we added more reservations|added more reservations|payout increase|new deal update)\b/i.test(readableBody);
+  const isNewDealAnnouncement = bodyAnnouncesNewDeal && !bodyIsUpdate;
 
   // Extract link: from HTML href attributes and plain text URLs
   const candidateUrls: string[] = [];
+  const candidateUrlTitles = new Map<string, string>();
 
   // 1. HTML href matches (preserves HTML hyperlink targets when plain text omits them)
   const hrefRegex = /href=["'](https?:\/\/[^"'>\s]+)["']/gi;
   let hrefMatch;
   while ((hrefMatch = hrefRegex.exec(body)) !== null) {
     candidateUrls.push(hrefMatch[1]);
+  }
+  const anchorRegex = /<a\b[^>]*href=["'](https?:\/\/[^"'>\s]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let anchorMatch;
+  while ((anchorMatch = anchorRegex.exec(body)) !== null) {
+    const title = bodyText(anchorMatch[2]);
+    if (title && !/^(?:click here|view deal|deal link|here)$/i.test(title)) {
+      candidateUrlTitles.set(anchorMatch[1], title);
+    }
   }
 
   // 2. Plain text URLs
@@ -57,7 +98,7 @@ export function parseIncomingEmail(raw: {
   
   let dealUrl: string | undefined;
   let canonicalDealId: string | undefined;
-  const deals = new Map<string, { url: string; id: string }>();
+  const deals = new Map<string, { url: string; id: string; title?: string }>();
 
   for (const rawUrl of candidateUrls) {
     try {
@@ -71,7 +112,8 @@ export function parseIncomingEmail(raw: {
 
         // Collapse plain/HTML repeats and www aliases; distinct deal paths stay distinct.
         const key = parsed.pathname.replace(/\/+$/, '').toLowerCase();
-        deals.set(key, { url: cleanUrl, id: match[1] });
+        const existing = deals.get(key);
+        deals.set(key, { url: cleanUrl, id: match[1], title: candidateUrlTitles.get(rawUrl) || existing?.title });
       }
     } catch {
       // invalid URL skipped
@@ -84,19 +126,13 @@ export function parseIncomingEmail(raw: {
     dealUrl = deal.url;
     canonicalDealId = deal.id;
   }
-  const isSingleDeal = isNewDealKeyword && !isMultiDeal && !isAdditionalSlotNotice;
+  const isSingleDeal = isNewDealAnnouncement && deals.size === 1 && !isMultiDeal && !isAdditionalSlotNotice;
 
-  // Detect retailer from subject or body
-  let retailer = 'Amazon';
-  if (/best buy/i.test(subject) || /best buy/i.test(body)) retailer = 'Best Buy';
-  else if (/target/i.test(subject) || /target/i.test(body)) retailer = 'Target';
-  else if (/walmart/i.test(subject) || /walmart/i.test(body)) retailer = 'Walmart';
-  else if (/b&h|bhphoto/i.test(subject) || /bhphoto/i.test(body)) retailer = 'B&H Photo';
-  else if (/apple/i.test(subject) || /apple/i.test(body)) retailer = 'Apple Store';
-  else if (/costco/i.test(subject) || /costco/i.test(body)) retailer = 'Costco';
+  // Only an explicit body field is enough to identify the retailer. Retailer
+  // names in subjects or product names (for example, an Apple product) are not.
+  const retailer = readableBody.match(/\bretailer\s*:\s*(Amazon|Best Buy|Target|Walmart|B&H Photo|Costco)\b/i)?.[1];
 
-  // Detect bundles
-  const isBundle = /bundle/i.test(subject) || /bundle/i.test(body) || /\+\s*[a-zA-Z0-9]/i.test(subject);
+  const isBundle = /\bbundle\b/i.test(readableBody) || /\+\s*[a-zA-Z0-9]/i.test(readableBody);
 
   // Detect prices
   const payoutMatch = body.match(/Payout:?\s*\$([0-9,.]+)/i) || body.match(/Payout\s+Price:?\s*\$([0-9,.]+)/i);
@@ -105,11 +141,8 @@ export function parseIncomingEmail(raw: {
   const payoutPrice = payoutMatch ? parseFloat(payoutMatch[1].replace(/,/g, '')) : undefined;
   const retailPrice = retailMatch ? parseFloat(retailMatch[1].replace(/,/g, '')) : undefined;
 
-  // Deal title
-  let dealTitle = subject.replace(/^(?:(?:\[?[^\]]+\]?\s*)?new deal:?\s*)/i, '').trim();
-  if (!dealTitle || dealTitle === subject) {
-    dealTitle = subject;
-  }
+  const singleDeal = deals.size === 1 ? [...deals.values()][0] : undefined;
+  const dealTitle = singleDeal?.title || bodyDealTitle(readableBody);
 
   return {
     id: raw.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,

@@ -1,4 +1,4 @@
-import { chromium, BrowserContext, Page } from 'playwright';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 import { isTrustedBfmrDealUrl, isTrustedBfmrDealsListingUrl, isTrustedBfmrHost, TRUSTED_BFMR_HOSTS } from '../services/bfmrUrl';
@@ -12,6 +12,73 @@ export interface ReservationSubmissionResult {
   toastAcknowledgement?: boolean;
   errorDetail?: string;
   definitiveNonCreation?: boolean;
+}
+
+interface ChromiumCdpTarget {
+  endpoint: string;
+  port: number;
+}
+
+function readFlag(args: string[], name: string): string | undefined {
+  const prefix = `${name}=`;
+  const equalsArg = args.find((arg) => arg.startsWith(prefix));
+  if (equalsArg) return equalsArg.slice(prefix.length);
+  const index = args.indexOf(name);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+function readBrowserPid(): number | null {
+  const args = process.argv.slice(2);
+  const rawPid = readFlag(args, '--browser-pid') ?? process.env.BFMR_CHROMIUM_PID;
+  if (rawPid === undefined) return null;
+  if (!/^\d+$/.test(rawPid) || Number(rawPid) < 2) {
+    throw new Error('Invalid Chromium PID. Pass a positive process ID with --browser-pid <pid>.');
+  }
+  return Number(rawPid);
+}
+
+function resolveCdpTarget(pid: number): ChromiumCdpTarget {
+  const procPath = `/proc/${pid}`;
+  let args: string[];
+  let executable: string;
+  try {
+    args = fs.readFileSync(path.join(procPath, 'cmdline'), 'utf8').split('\0').filter(Boolean);
+    executable = path.basename(fs.realpathSync(path.join(procPath, 'exe'))).replace(/\s+\(deleted\)$/, '');
+  } catch (error) {
+    throw new Error(`Cannot inspect Chromium PID ${pid}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!/^(?:chromium(?:-browser)?|chrome|google-chrome(?:-stable)?)$/i.test(executable)) {
+    throw new Error(`PID ${pid} is not a Chromium browser process (executable: ${executable}).`);
+  }
+
+  const userDataDir = readFlag(args, '--user-data-dir');
+  if (!userDataDir) {
+    throw new Error(`Chromium PID ${pid} has no --user-data-dir. Start the wrapped browser with a dedicated profile and remote debugging enabled.`);
+  }
+  const remoteAddress = readFlag(args, '--remote-debugging-address');
+  if (remoteAddress && !['127.0.0.1', 'localhost', '::1'].includes(remoteAddress.toLowerCase())) {
+    throw new Error(`Chromium PID ${pid} exposes remote debugging on a non-loopback address; refusing to attach.`);
+  }
+
+  const rawPort = readFlag(args, '--remote-debugging-port');
+  if (!rawPort || !/^\d+$/.test(rawPort)) {
+    throw new Error(`Chromium PID ${pid} was not started with --remote-debugging-port.`);
+  }
+  let port = Number(rawPort);
+  if (port === 0) {
+    const portFile = path.join(userDataDir, 'DevToolsActivePort');
+    let portFileContents: string;
+    try {
+      portFileContents = fs.readFileSync(portFile, 'utf8');
+    } catch (error) {
+      throw new Error(`Could not read Chromium's DevToolsActivePort for PID ${pid}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const portLine = portFileContents.split(/\r?\n/, 1)[0];
+    if (!/^\d+$/.test(portLine)) throw new Error(`Chromium PID ${pid} wrote an invalid DevToolsActivePort file.`);
+    port = Number(portLine);
+  }
+  if (port < 1 || port > 65535) throw new Error(`Chromium PID ${pid} has an invalid remote debugging port.`);
+  return { endpoint: `http://127.0.0.1:${port}`, port };
 }
 
 async function hasAccessChallenge(page: Page): Promise<boolean> {
@@ -36,12 +103,15 @@ async function hasAccessChallenge(page: Page): Promise<boolean> {
 
 export class PlaywrightBfmrBrowser {
   private context: BrowserContext | null = null;
+  private connectedBrowser: Browser | null = null;
   private page: Page | null = null;
   private profilePath: string;
   private isHeadless: boolean;
+  private browserPid: number | null;
   private verifiedDealTarget: string | null = null;
 
-  constructor(options?: { profilePath?: string; headless?: boolean }) {
+  constructor(options?: { profilePath?: string; headless?: boolean; browserPid?: number }) {
+    this.browserPid = options?.browserPid ?? readBrowserPid();
     this.profilePath = options?.profilePath || 
       process.env.CHROMIUM_PROFILE_PATH || 
       path.resolve(process.env.HOME || '/home/wardmatt', '.config/bfmr/chromium-profile');
@@ -51,7 +121,7 @@ export class PlaywrightBfmrBrowser {
       ? options.headless 
       : process.env.PLAYWRIGHT_HEADLESS === 'true';
 
-    if (!fs.existsSync(this.profilePath)) {
+    if (this.browserPid === null && !fs.existsSync(this.profilePath)) {
       fs.mkdirSync(this.profilePath, { recursive: true });
     }
   }
@@ -61,18 +131,51 @@ export class PlaywrightBfmrBrowser {
       return this.page;
     }
 
-    console.log(`[Playwright] Launching Chromium (headed: ${!this.isHeadless})`);
-    console.log(`[Playwright] Profile: ${this.profilePath}`);
+    if (this.browserPid !== null) {
+      const target = resolveCdpTarget(this.browserPid);
+      console.log(`[Playwright] Attaching to Chromium PID ${this.browserPid} over loopback CDP port ${target.port}`);
+      this.connectedBrowser = await chromium.connectOverCDP(target.endpoint);
+      try {
+        const cdp = await this.connectedBrowser.newBrowserCDPSession();
+        try {
+          const processInfo = await cdp.send('SystemInfo.getProcessInfo') as {
+            processInfo?: Array<{ type: string; id: number }>;
+          };
+          const browserProcess = processInfo.processInfo?.find((item) => item.type === 'browser');
+          if (browserProcess?.id !== this.browserPid) {
+            throw new Error(`CDP endpoint from PID ${this.browserPid} resolved to browser PID ${browserProcess?.id ?? 'unknown'}. Refusing to attach to a different browser.`);
+          }
+        } finally {
+          await cdp.detach().catch(() => {});
+        }
+      } catch (error) {
+        await this.connectedBrowser.close().catch(() => {});
+        this.connectedBrowser = null;
+        throw error;
+      }
+      const contexts = this.connectedBrowser.contexts();
+      if (contexts.length === 0) {
+        await this.connectedBrowser.close().catch(() => {});
+        this.connectedBrowser = null;
+        throw new Error(`Chromium PID ${this.browserPid} exposed no browser context to attach to.`);
+      }
+      // Playwright exposes Chromium's default persistent profile context first;
+      // additional private contexts in this same process are left untouched.
+      this.context = contexts[0];
+    } else {
+      console.log(`[Playwright] Launching Chromium (headed: ${!this.isHeadless})`);
+      console.log(`[Playwright] Profile: ${this.profilePath}`);
 
-    this.context = await chromium.launchPersistentContext(this.profilePath, {
-      headless: this.isHeadless,
-      viewport: { width: 1280, height: 800 },
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-      ],
-    });
+      this.context = await chromium.launchPersistentContext(this.profilePath, {
+        headless: this.isHeadless,
+        viewport: { width: 1280, height: 800 },
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+        ],
+      });
+    }
 
     const pages = this.context.pages();
     this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
@@ -485,7 +588,15 @@ export class PlaywrightBfmrBrowser {
   }
 
   public async close(): Promise<void> {
-    if (this.context) {
+    if (this.connectedBrowser) {
+      // Closing a CDP-connected Browser disconnects Playwright from the
+      // wrapper-owned Chromium process; the wrapper remains responsible for it.
+      await this.connectedBrowser.close().catch(() => {});
+      this.connectedBrowser = null;
+      this.context = null;
+      this.page = null;
+      this.verifiedDealTarget = null;
+    } else if (this.context) {
       await this.context.close().catch(() => {});
       this.context = null;
       this.page = null;

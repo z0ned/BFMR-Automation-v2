@@ -11,7 +11,7 @@ function tracked(destination: string) {
   return trackedPayload(new URLSearchParams({ d: 'synthetic', l: destination, 'recipient-email': 'fixture@example.invalid' }).toString());
 }
 function parse(body: string, subject = 'Fw: NEW DEAL - FULL RETAIL | AIRPODS PRO 3') {
-  return parseBfmrEmail({ messageId: 'synthetic-email', sender: 'fixture@example.invalid', subject, body });
+  return parseBfmrEmail({ messageId: 'synthetic-email', sender: 'fixture@example.invalid', subject, body: `<p>We posted a new deal!</p>${body}` });
 }
 
 test('accepts one tracked product among tracked navigation, images and unsubscribe links', () => {
@@ -65,8 +65,33 @@ test('decoding never makes navigation, unsafe destinations or lookalike trackers
   ]) assert.equal(decodeBfmrEmailDealLink(value), null);
 });
 
-test('tracked links do not override additional-slot or roundup exclusions', () => {
-  for (const subject of ['NEW DEAL additional slots', 'NEW DEAL daily deal roundup']) {
-    assert.equal(parse(tracked(deal), subject).isSingleDeal, false);
-  }
+test('subjects never affect message classification or inferred deal contents', () => {
+  const body = `<p>We posted a new deal!</p><p>Retailer: Best Buy</p>${tracked(deal)}`;
+  const subjects = ['NEW DEAL', 'PAYMENT SENT', 'ALL DEALS IN STOCK', 'arbitrary header'];
+  const interpretations = subjects.map(subject => {
+    const result = parseBfmrEmail({
+      messageId: 'synthetic-email', sender: 'fixture@example.invalid', subject, body,
+    });
+    return {
+      isSingleDeal: result.isSingleDeal,
+      isMultiDeal: result.isMultiDeal,
+      isAdditionalSlotNotice: result.isAdditionalSlotNotice,
+      dealUrl: result.dealUrl,
+      canonicalDealId: result.canonicalDealId,
+      dealTitle: result.dealTitle,
+      retailer: result.retailer,
+      isBundle: result.isBundle,
+    };
+  });
+  assert.ok(interpretations.every(value => JSON.stringify(value) === JSON.stringify(interpretations[0])));
+  assert.equal(interpretations[0].isSingleDeal, true);
+  assert.equal(interpretations[0].retailer, 'Best Buy');
+});
+
+test('a new-deal subject cannot turn an update body into a new-deal trigger', () => {
+  const result = parseBfmrEmail({
+    messageId: 'synthetic-email', sender: 'fixture@example.invalid',
+    subject: 'NEW DEAL', body: `<p>We increased our payout for the following deal.</p>${tracked(deal)}`,
+  });
+  assert.equal(result.isSingleDeal, false);
 });

@@ -109,3 +109,35 @@ Synthetic Chromium regression coverage includes cart and product login detours t
 ### Product navigation before cart preflight — 10 October 2026
 
 The Amazon rehearsal opens and validates the requested product URL before inspecting the active cart. A failed cart inspection returns to the requested product for inspection and reports the cart path, active container/row counts and whether an explicit empty-cart message was found. Unknown contents still prevent Add to cart. Empty-cart recognition accepts “Your cart is empty” in addition to the Amazon/Shopping variants. These are fixture-tested UI variants; the reported live cart layout has not been captured or verified.
+
+
+### Optional Amazon protection prompt — 11 October 2026
+
+After Add to cart, Amazon may conditionally show a protection-plan offer. The rehearsal briefly checks for the exact visible “No thanks” button and clicks it only when one unique control is present. If the offer does not appear, processing continues normally. An ambiguous prompt pauses for inspection. This declines optional add-on coverage; it does not advance checkout or submit an order.
+
+### Amazon Business cart checkout control — 11 October 2026
+
+A live screenshot showed the requested AirPods item in the cart at quantity one and a visible Proceed to checkout button in the cart sidebar, but the role/name locator did not resolve it. The rehearsal now prefers Amazon's cart sidebar submit input (`#sc-buy-box-ptc-button-announce` or the named submit within `#sc-buy-box-ptc-button`) and retains the exact Proceed to checkout label whitelist. It falls back to one visible button/link with the expected label; ambiguity pauses with sanitized selector counts. The final Place your order action remains prohibited. Live rerun is required to verify this Amazon Business markup.
+
+### Amazon Business order-review evidence — 11 October 2026
+
+A user screenshot confirmed the requested AirPods title, quantity-one stepper, visible order total and Place your order control on Amazon Business checkout. The review page did not expose a target product link or a “Qty” text label, so the original verifier paused despite the correct visible review. The verifier now captures the visible product title on the exact requested product page, then accepts that title or a target-ASIN link as product evidence. It also inspects visible quantity widgets/data attributes when explicit Qty/Quantity text is absent. Quantity must still be unambiguously one and an order-total label must be visible. The final order control remains observe-only. The user screenshot is evidence for this layout; live rerun is required to verify the updated DOM selectors.
+
+### Amazon Business order-review parser follow-up — 11 October 2026
+
+The next live screenshot showed the AirPods title, a visible quantity stepper set to one, and the order total, but reported no target link, title match, or quantity values. The fixed ASIN now has a known title fallback matching the visible order-review title. When quantity selectors/attributes are absent, the parser checks for the exact numeral `1` within the matching product-title container alongside a quantity/remove/increment control. It still requires the visible order total and never clicks Place your order. TypeScript passes; no additional live order-review run or automated test was performed for this parser change. The existing screenshot remains the visual evidence for this layout.
+
+
+### Amazon Business checkout rehearsal reached final review — 11 October 2026
+
+Live run of `npm run test-amazon-checkout` completed the BFMR startup reservation and exact cancellation/release check, reused the requested AirPods item already in the cart and reached the final order-review screen. The runner reported PASS after verifying the product, quantity one, and order total. `Place your order` was not clicked; no Amazon order was submitted. This validates the observed Amazon Business flow for this account/session and the requested ASIN. It does not establish behavior for other Amazon accounts, product offers, or future UI variants.
+
+### One-item Amazon purchase-test command — 11 October 2026
+
+Matt explicitly authorized a separate command-line purchase test for one `Google Fitbit Air - Screenless Activity Tracker, Berry` item (ASIN `B0GTMJF7PV`). This is separate from the AirPods checkout rehearsal and MVP 1 email processing. `npm run test-amazon-purchase -- --max-total <USD-limit>` does not run the BFMR startup reservation. It checks the exact product, quantity one and an unambiguous USD order total below the operator-provided limit. The operator must visually confirm the saved default address and payment method, then enter the exact ASIN-bound review and purchase phrases. The test has one final submission action and never retries an uncertain response. It does not enable email-to-order automation or authorize other items. Account-specific shipping/payment behavior and an actual purchase remain unverified until the user runs this command.
+
+The initial purchase-test run stopped on the visible final-order controls while Amazon Business displayed duplicate order buttons and repeated the same total in the summary and sticky footer. The checker now accepts at most two visible controls whose accessible names start with “Place your order”, selects one enabled control for the single submission, and accepts repeated USD totals only when all amounts match. It blocks conflicting totals, non-USD totals, when all visible controls are disabled, and more than two visible matching controls. A regression fixture covers duplicate controls with one disabled and one enabled, but the browser fixture could not be run in this sandbox. The command was not rerun and no order was submitted by the coding agent.
+
+Latest purchase-test requirement: every Amazon purchase must be marked as a gift at checkout. The user clarified the Amazon Business interaction: open “Add gift options”, select “This item is a gift”, and click “Save gift options” to return to secure checkout. The one-item command performs that sequence and requires checkout to return before proceeding. This applies to the authorized standalone test only and does not enable email-driven purchasing.
+
+Latest delivery requirement: choose a free delivery option that does not require Prime, even when Amazon also shows free Prime shipping and a selected paid option. The purchase command identifies a visible delivery radio from its own option label, selects a matching option that says “Free Shipping” or “Free Delivery” without mentioning Prime, and verifies that selection again before submission. If Amazon's option markup is ambiguous or no eligible option is available, the command stops rather than choosing Prime-only or paid delivery.

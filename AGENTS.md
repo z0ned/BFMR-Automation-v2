@@ -19,7 +19,7 @@
 
 ## External effects and correctness
 
-- The 10 October Amazon checkout rehearsal permits preparing quantity one of B09JQMJHXY in the same Chromium context with the saved default Amazon address. Stop at final order review; never click Place your order, Buy Now, or a subscription control. No automatic purchasing or email-to-order integration is authorized by this rehearsal.
+- The 10 October Amazon checkout rehearsal permits preparing quantity one of B09JQMJHXY in the same Chromium context with the saved default Amazon address. That rehearsal stops at final order review. A separate one-item Amazon purchase test for B0GTMJF7PV was explicitly authorized on 11 October 2026; it must be run manually with a required USD total cap and exact terminal confirmation. It must never be connected to email intake or purchase any other item. Every Amazon purchase performed by an authorized test must use a selected free delivery option that does not require Prime, and must be marked as a gift before submission. For Amazon Business, open “Add gift options”, select “This item is a gift”, and click “Save gift options”. Do not treat the purchase-test authorization as approval for other purchases.
 
 - Use Playwright's normal BFMR website form actions to reserve. Do not reconstruct reservation requests, call undocumented mutation endpoints or implement an API write fallback.
 - My Tracker API reads must be complete and validated. Missing pages, failed reads and unknown shapes never prove absence.

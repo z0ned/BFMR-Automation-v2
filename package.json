@@ -9,6 +9,7 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
+    "test-amazon-purchase": "tsx scripts/test_amazon_purchase.ts",
     "test-bfmr-ipad-reservation": "tsx scripts/test_bfmr_ipad_reservation.ts",
     "test-amazon-checkout": "tsx scripts/test_amazon_checkout.ts",
     "inspect-tracker-api": "tsx scripts/inspect_tracker_api.ts",

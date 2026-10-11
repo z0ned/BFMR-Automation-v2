@@ -24,6 +24,18 @@ User decisions from 9–10 October 2026. The table includes the latest Amazon ev
 
 Latest checkout clarification (10 October): the user selected `https://www.amazon.com/dp/B09JQMJHXY`, quantity one and Amazon's saved default delivery address for a standalone rehearsal in the same Chromium browser. Stop at the final Place your order screen; actual order submission is explicitly excluded. No email-to-order integration is enabled. The test includes the usual BFMR startup reservation and cancellation.
 
+## 11 October 2026 — one-item Amazon purchase test
+
+Matt explicitly authorized a separate command-line purchase test for exactly one item at `https://www.amazon.com/dp/B0GTMJF7PV` (Google Fitbit Air, Berry). This is not MVP 1 email automation and must not run a BFMR startup reservation. The command requires an interactive terminal, an operator-specified USD order-total limit, confirmation that the saved default delivery address and payment method are selected, and exact ASIN-bound terminal phrases before one final order submission. It checks the final product, quantity, and total; an uncertain submission is never retried. This authorization is limited to this named item and test command.
+
+## 11 October 2026 — gift flag on Amazon purchases
+
+Every Amazon purchase performed by an authorized test must be marked as a gift before submission. For the authorized Amazon Business purchase test, open “Add gift options”, select “This item is a gift”, and click “Save gift options” to return to secure checkout. The final review must accept the gift state before submission.
+
+## 11 October 2026 — free delivery without Prime
+
+For Amazon purchases, select a free delivery option that does not require Prime. Amazon may show multiple delivery options, including Prime-only free delivery and non-Prime free shipping. Select and verify the non-Prime free option before continuing to final order confirmation.
+
 ## Superseded intermediate choices
 
 The 10 October Amazon evaluation amendment below reopens only supplier presence and scoped cancellation. The broader financial evaluation and purchasing proposals remain deferred.
@@ -74,3 +86,7 @@ User authorized an Amazon supplier check after confirmation of new email reserva
 ### Amazon login continuation — 10 October 2026
 
 Manual sign-in and MFA happen in Chromium. Detect completion and resume automatically, without requiring Enter in the terminal. Restore the intended cart/product route after login redirects, while preserving the existing no-repeat cart action and no-order-submission constraints.
+
+### 11 October 2026 — Amazon duplicate-order warning
+
+The user explicitly authorized clicking Place your order once more when Amazon presents its duplicateOrder pending-order warning after submission. This continuation requires the recognized route and warning copy, matching product evidence and prices within the confirmed total. It is attempted at most once and never retried after an uncertain click; CVV handling and confirmation/Order # retrieval continue afterwards. This supersedes the blanket one-click restriction only for this recognized warning. No tests or live purchase were run for this change.

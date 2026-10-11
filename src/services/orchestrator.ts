@@ -318,8 +318,8 @@ class BfmrOrchestrator {
 
       const reservation = await myTrackerService.recordReservation({
         canonicalDealId: email.canonicalDealId,
-        title: email.dealTitle || email.subject,
-        retailer: email.retailer || 'Amazon',
+        title: email.dealTitle || email.canonicalDealId,
+        retailer: email.retailer || 'Unknown',
         colorVariant: 'Standard',
         source: 'AUTOMATION_MVP1',
       });

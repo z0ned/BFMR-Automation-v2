@@ -1,7 +1,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium, type Browser } from 'playwright';
-import { AMAZON_TEST_PRODUCT, amazonProductAsin, runAmazonCheckoutRehearsal } from '../src/services/amazonCheckoutRehearsal';
+import { AMAZON_TEST_PRODUCT, amazonProductAsin, ensureAmazonGiftSelected, readAmazonOrderReview, runAmazonCheckoutRehearsal, submitAmazonOrderOnce } from '../src/services/amazonCheckoutRehearsal';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
 
 let browser: Browser;
@@ -17,7 +17,7 @@ async function fixture(options: { initial?: 'EMPTY' | 'TARGET' | 'OTHER'; quanti
   await context.route('**/*', async route => {
     const path = new URL(route.request().url()).pathname;
     let body = '';
-    if (path === '/order-submit') { placed++; body = 'Order complete'; }
+    if (path === '/order-submit') { placed++; body = 'Order placed, thank you! Test product'; }
     else if (path === '/cart/add-to-cart') { added++; cart = 'TARGET'; body = '<p>Added to cart</p>'; }
     else if (path === '/gp/cart/view.html') {
       body = cart === 'EMPTY' ? '<h1>Your Amazon Cart is empty.</h1>' :
@@ -59,6 +59,52 @@ test('empty cart adds exactly one requested product and stops without placing an
     assert.deepEqual(f.counters(), { added: 1, placed: 0, manualCalls: 0 });
     assert.match(f.messages.at(-1)!, /Place your order was NOT clicked/);
     assert.equal(await f.page.getByRole('button', { name: 'Place your order', exact: true }).isVisible(), true);
+  } finally { await f.context.close(); }
+});
+
+test('Amazon Business duplicate review controls and repeated total verify, then submit only once', async () => {
+  const f = await fixture({ initial: 'TARGET' });
+  try {
+    await f.page.goto(`https://www.amazon.com/checkout/review`);
+    await f.page.setContent(`<main>
+      <a href="/dp/${asin}">Test product</a><p>Qty: 1</p>
+      <p>Order total: $10.00</p><p>Order total: $10.00</p><p>Gift options selected</p>
+      <label><input type="radio" checked>Monday, Nov 9 - Tuesday, Dec 1 FREE Shipping</label>
+      <button disabled onclick="location.href='/wrong-order-submit'">Place your order</button>
+      <button onclick="location.href='/order-submit'">Place your order</button>
+    </main>`);
+    const evidence = await readAmazonOrderReview(f.page, asin, 'Test product');
+    assert.equal(evidence?.totalCents, 1000);
+    assert.equal(await submitAmazonOrderOnce(f.page, asin, 'Test product'), 'PLACED');
+    assert.equal(f.counters().placed, 1);
+  } finally { await f.context.close(); }
+});
+
+test('purchase verification requires the This is a gift option to be selected and saved', async () => {
+  const f = await fixture({ initial: 'TARGET' });
+  try {
+    await f.page.goto('https://www.amazon.com/checkout/review');
+    await f.page.setContent(`<main>
+      <a href="/dp/${asin}">Test product</a><p>Qty: 1</p><p>Order total: $10.00</p>
+      <button id="add-gift">Add gift options</button>
+      <section role="dialog" aria-label="Gift options" hidden>
+        <label><input id="gift-checkbox" type="checkbox">This is a gift</label>
+        <button id="save-gift">Save gift options</button>
+      </section>
+      <p id="gift-status"></p>
+      <button>Place your order</button>
+      <script>
+        document.querySelector('#add-gift').onclick = () => document.querySelector('[role=dialog]').hidden = false;
+        document.querySelector('#save-gift').onclick = () => {
+          if (document.querySelector('#gift-checkbox').checked) document.querySelector('#gift-status').textContent = 'Gift options saved';
+          document.querySelector('[role=dialog]').hidden = true;
+        };
+      </script>
+    </main>`);
+
+    await ensureAmazonGiftSelected(f.page);
+    const evidence = await readAmazonOrderReview(f.page, asin, 'Test product', { requireGift: true });
+    assert.equal(evidence?.giftSelected, true);
   } finally { await f.context.close(); }
 });
 
