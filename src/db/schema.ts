@@ -108,6 +108,7 @@ export interface AttemptRow {
 }
 
 export interface DealBlockRow {
+  incident_id?: string | null;
   id: string;
   run_id: string;
   account_id: string;

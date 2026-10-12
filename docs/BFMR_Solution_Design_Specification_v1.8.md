@@ -1,5 +1,7 @@
 # BFMR Automation - Solution Design Specification v1.8
 
+> **Historical and superseded:** compiled 11 October 2026, before the 12 October review fixes and v1.9 update. Use `BFMR_Solution_Design_Specification_v1.9.md` and `.pdf` for current requirements and code state. This file remains unchanged beyond this status notice for traceability.
+
 Compiled 11 October 2026. Part I current-state source. Part II of the PDF preserves v1.7 in full.
 
 ## 1. Solution Design Specification v1.8

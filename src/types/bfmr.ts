@@ -22,6 +22,9 @@ export type IntakeEmail = {
   isSingleDeal: boolean;
   isAdditionalSlotNotice: boolean;
   isMultiDeal: boolean;
+  isMultiDealAnnouncement: boolean;
+  /** Trusted deal-detail links in the order they occur in the body. */
+  deals: Array<{ canonicalDealId: string; dealUrl: string; dealTitle?: string }>;
   dealUrl?: string;
   canonicalDealId?: string;
   dealTitle?: string;

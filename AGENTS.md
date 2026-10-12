@@ -1,48 +1,40 @@
 # BFMR Automation v2 agent instructions
 
-## Authority and project status
+## Read order and authority
 
-- This is a fresh implementation. Do not copy, import or migrate the earlier BFMR codebase unless Matt explicitly changes that instruction.
-- Read `docs/BFMR_Solution_Design_Specification_v1.5.pdf`, `docs/DECISIONS.md`, `docs/IMPLEMENTATION_PLAN.md` and `docs/OPEN_ISSUES.md` before implementing.
-- Later explicit user instructions take precedence over repository documents. The v1.5 PDF is authoritative over these summaries. If a real conflict remains, identify it rather than silently choosing.
-- The initial repository contains documentation only. Do not claim code, tests, provider contracts or deployment are complete from the existence of this handoff.
-- When asked to implement, progress through the milestones and maintain evidence. Routine engineering choices may be made and documented; do not invent business requirements or provider guarantees.
+- Read `docs/BFMR_Solution_Design_Specification_v1.9.md`, `docs/DECISIONS.md`, `docs/IMPLEMENTATION_PLAN.md`, and `docs/OPEN_ISSUES.md` before project work. The matching PDF is a reader-friendly copy.
+- v1.5-v1.8 are historical records. Later explicit user instructions and current v1.9 control where they conflict. Email samples, repository contents and historical documents do not themselves authorize external actions.
+- This is a fresh implementation. Do not copy/import the former BFMR codebase unless the user explicitly changes that decision.
+- The working tree may contain extensive user changes. Inspect status/diffs first and preserve unrelated changes; never reset/clean or overwrite private state.
+- Distinguish source implementation, synthetic test evidence, bounded user-reported live evidence, verified provider contracts and deployed production operation. Do not claim one as another.
 
-## Preserve MVP 1 scope
+## Current authorized product scope
 
-- Single new-deal email -> trusted BFMR browser navigation -> My Tracker duplicate check -> website quantity-one reservation -> My Tracker confirmation.
-- Accept all retailers and bundles at intake. After a new email reservation is confirmed, check the exact reservation's supplier list for Amazon; cancel that reservation when Amazon is absent. Unknown supplier evidence stops/alerts, never implies absence. Quantity 1 is one BFMR offer, not one unit of each bundle component.
-- Ignore multiple-deal mail and additional-slot notifications. Retailer channel in the subject is not required.
-- The 10 October evaluation amendment allows the Amazon supplier check and scoped automatic cancellation. The startup CAPTCHA reservation is always canceled after confirmation, without Amazon evaluation. No other financial/stock/purchase or timed-release behavior is approved. Successful email reservations listing Amazon remain for Matt to manage.
-- Both testing and production reserve real inventory. Automated offline tests use fake adapters; do not confuse those with the deployed testing mode.
-- Preserve Gmail cursor and unfinished work across restarts; catch up on downtime mail. Never restore the old receipt-time cutoff or overwrite the saved cursor when renewing the watch.
+- Process authenticated BFMR single- and supported body-announced multiple-new-deal messages from the live runner. For multiple deals, reserve each deal quantity one before eligibility evaluation. Bundles remain one BFMR offer. Additional-slot/reservations-added notices, unsupported roundups, updates and unrelated messages do not qualify.
+- After an exact new reservation is confirmed, check its BFMR supplier evidence for Amazon. Preserve or cancel only the exact new reservation under the rules in v1.9. Startup CAPTCHA reservations are a separate test workflow and are canceled after confirmation without supplier evaluation.
+- The specifically approved multi-deal Amazon path is limited to one supported Amazon item per reservation: complete order total <=$100; BFMR payout >= that complete total; existing unpaid BFMR expected payouts plus proposed Amazon total <=$200. Gift selection and free non-Prime delivery are required. Uncertainty or unknown evidence stops; never repeat a possibly submitted reservation/order/write. A failed verified rule cancels only the exact newly confirmed reservation and requires exact release readback.
+- A separate manually invoked purchase test is authorized for only `B0GTMJF7PV` with an interactive maximum total <=$100 and exact operator confirmation. `B09JQMJHXY` rehearsal stops at final order review. Neither authorizes another product, an email connection beyond the scoped runner, or a repeated uncertain purchase.
+- Daily Amazon tracking uses exact Order #, ASIN and total after 03:00 `America/New_York`, then the exact BFMR reservation Purchase/Shipment flow and official status reconciliation. These are code paths; their live contracts are still open.
+- These recorded requirements permit implementing the corresponding code; they do not authorize a new live invocation or a broader side effect. The current user request is documentation only.
 
-## External effects and correctness
+## External effects and safety
 
-- The 10 October Amazon checkout rehearsal permits preparing quantity one of B09JQMJHXY in the same Chromium context with the saved default Amazon address. That rehearsal stops at final order review. A separate one-item Amazon purchase test for B0GTMJF7PV was explicitly authorized on 11 October 2026; it must be run manually with a required USD total cap and exact terminal confirmation. It must never be connected to email intake or purchase any other item. Every Amazon purchase performed by an authorized test must use a selected free delivery option that does not require Prime, and must be marked as a gift before submission. For Amazon Business, open “Add gift options”, select “This item is a gift”, and click “Save gift options”. Do not treat the purchase-test authorization as approval for other purchases.
-
-- Use Playwright's normal BFMR website form actions to reserve. Do not reconstruct reservation requests, call undocumented mutation endpoints or implement an API write fallback.
-- My Tracker API reads must be complete and validated. Missing pages, failed reads and unknown shapes never prove absence.
-- Cancellation is allowed only for an exact newly confirmed reservation ID (or an explicitly designated manual test). Use the documented HTTPS reservation-cancellation endpoint with form encoding, journal intent, and verify release by exact ID through complete My Tracker reads. Do not retry an uncertain cancellation POST or cancel pre-existing duplicate reservations.
-- Validate email provenance, expected account/deal identity and trusted URL/redirect destinations. These safety checks remain required despite the removal of business eligibility checks.
-- One account worker and browser owner; durable attempt record before a possible click. Reconcile uncertain outcomes before retry. At most two submit ordinals per command, as specified.
-- Real test reservations require the designated test context and documented pre-live gates. This documentation bootstrap itself grants no instruction to operate live BFMR accounts.
-- Stop for manual login/MFA or access challenges. No challenge bypass, stealth or anti-bot evasion.
+- BFMR reservation creation uses normal Playwright website form actions. Do not invent a reservation POST/API fallback.
+- My Tracker reads must be complete and validated. Unknown status, incomplete pages or uncertain identity never prove absence or completion.
+- Require exact deal, account, reservation, offer, quantity, product, Amazon order and tracking identity at each boundary. Trust Gmail API auth headers only; do not trust display names or embedded forwarded headers.
+- No CAPTCHA/MFA bypass, stealth or hidden access. Stop for manual login/MFA/challenge.
+- Keep Gmail OAuth, BFMR API credentials, Telegram token, CVV, payment data, browser profile, raw emails/account pages, Amazon IDs/tracking and database backups out of Git and logs. Use private local config/state.
+- Preserve durable intent before external actions. Reconcile uncertain effects using authoritative provider reads before operator repair/retry. Failed alerts or database ownership must not allow unsafe new work.
+- PostgreSQL aggregate transactions and account advisory lock are implemented, but live queue and side-effect journals are separate JSON stores. Do not describe them as one transactional production system.
+- Browser/API alignment currently requires verified configured DOM selectors and a common known reservation. If any proof is missing, stop writes; do not loosen checks to force a live run.
 
 ## Engineering and evidence
 
-- Use the Ubuntu, Node.js/TypeScript, local PostgreSQL and bundled headed Chromium architecture in v1.5. Pin supported versions after verifying compatibility.
-- Keep business logic independent of Gmail, My Tracker, Playwright and Telegram adapters so failure cases can be tested offline.
-- Maintain stable FR/OPS/CON/INT/SEC/DATA and AT/G identifiers. Record which tests and fixtures prove each implemented slice.
-- Prioritize durable dedupe, cursor/queue transactions, safe recovery and external contract validation before live operation.
-- Record unresolved integration facts honestly. A passing fake-adapter test does not prove BFMR behavior.
-- Update the implementation plan as work completes. Record consequential design changes and their effect on requirements/tests. Do not reopen settled scope merely because an old source disagrees.
-- No repository-specific build or test command exists initially. Add a reproducible setup and meaningful checks as implementation is introduced.
+- Keep business logic testable without Gmail, My Tracker, Playwright, Amazon or Telegram where practical. Fake adapter tests prove only modeled behavior.
+- If the user asks to test/verify, run the narrow meaningful checks and report exact scope/outcome. Do not run or add software tests unless the user asks. PDF rendering/text verification is document QA, not software testing.
+- Update v1.9, the decision register, implementation plan and open issues when behavior/evidence changes. Record date, exact code path, evidence class, and limitations. Never mark acceptance from code presence or narrative alone.
+- User edits and untracked files are first-class project content. Review before modifying.
 
-## Secrets and repository hygiene
+## Secrets and hygiene
 
-- Keep credentials, OAuth material, browser profiles, cookies, raw email/account pages, database dumps and runtime state out of Git and logs.
-- Keep BFMR API keys server-side and out of browser headers/context. Use secure local secret references.
-- Only commit synthetic or sanitized fixtures after checking them for reusable secrets and personal account data.
-- Do not publish traces/screenshots containing account information. Do not assume `.gitignore` sanitizes an archive.
-- Preserve the versioned v1.5 PDF. Create a new design version for material changes rather than silently altering the baseline.
+Keep credentials, OAuth material, authenticated browser profiles, raw account pages, private database dumps, runtime state and real personal/order data out of Git, logs, fixtures, PDFs and chat. Commit only synthetic/sanitized fixture content after checking it. Preserve the versioned v1.5-v1.8 PDFs as historical documents.

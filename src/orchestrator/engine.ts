@@ -1,7 +1,9 @@
+import { isTrustedBfmrDealUrl } from '../services/bfmrUrl';
+import { bfmrStatusClass } from '../services/bfmrStatus';
+import { PostgresDatabase } from '../db/postgresDatabase';
+import { authenticateGmailSender } from '../services/emailProvenance';
 import {
   TransactionalDatabase,
-  TransactionContext,
-  db as defaultDb,
 } from '../db/database';
 import {
   RunRow,
@@ -53,7 +55,14 @@ export class BfmrOrchestrationEngine {
     this.tracker = adapters.tracker;
     this.browser = adapters.browser;
     this.telegram = adapters.telegram;
-    this.db = database || defaultDb;
+    if (!database) throw new Error('An explicit database is required; production must use PostgresDatabase.');
+    if (config.mode === 'production' && !(database instanceof PostgresDatabase)) throw new Error('Production requires PostgreSQL persistence.');
+    if (database instanceof PostgresDatabase && !adapters.browser.close) throw new Error('Production browser must support closing on ownership loss.');
+    this.db = database;
+    if (database instanceof PostgresDatabase) database.onOwnershipLost(() => {
+      // Production browser adapters must close their context on ownership loss.
+      void this.browser.close?.();
+    });
   }
 
   /**
@@ -61,13 +70,17 @@ export class BfmrOrchestrationEngine {
    * Per Solution Design v1.5 Page 13:
    * "Process singleton lock plus dedicated PostgreSQL advisory lock for the BFMR account."
    */
-  public acquireSingletonLock(): boolean {
+  public acquireSingletonLock(): boolean | Promise<boolean> {
     const lockKey = `bfmr_worker_lock_${this.config.accountId}`;
-    return this.db.acquireAdvisoryLock(lockKey);
+    return this.db instanceof PostgresDatabase ? this.db.claimAccount(lockKey) : this.db.acquireAdvisoryLock(lockKey);
   }
 
-  public releaseSingletonLock(): void {
+  public releaseSingletonLock(): void | Promise<void> {
     const lockKey = `bfmr_worker_lock_${this.config.accountId}`;
+    if (this.db instanceof PostgresDatabase) {
+      const database = this.db;
+      return this.browser.close!().then(() => database.relinquishAccount());
+    }
     this.db.releaseAdvisoryLock(lockKey);
   }
 
@@ -75,7 +88,7 @@ export class BfmrOrchestrationEngine {
    * Start or recover run
    */
   public async startRun(): Promise<RunRow> {
-    const acquired = this.acquireSingletonLock();
+    const acquired = await this.acquireSingletonLock();
     if (!acquired) {
       throw new Error(`Failed to acquire singleton advisory lock for account ${this.config.accountId}. Another worker is running.`);
     }
@@ -178,6 +191,7 @@ export class BfmrOrchestrationEngine {
     processedCount: number;
     admittedCommands: CommandRow[];
   }> {
+    if (this.db instanceof PostgresDatabase) await this.db.refresh();
     const state = this.db.getGmailState(this.config.mailbox);
     if (!state) throw new Error('Gmail state not initialized');
 
@@ -244,17 +258,8 @@ export class BfmrOrchestrationEngine {
         else if (parsed.isAdditionalSlotNotice) classification = 'ADDITIONAL_SLOTS';
         else if (parsed.isSingleDeal) classification = 'SINGLE_DEAL';
 
-        // Check sender policy:
-        // Production: direct deals@buyformeretail.com
-        // Testing: also matt.ward@live.com
-        const senderLower = msg.sender.toLowerCase();
-        const isAllowedSender =
-          senderLower.includes('deals@buyformeretail.com') ||
-          (this.config.mode === 'testing' && senderLower.includes('matt.ward@live.com'));
-
-        if (!isAllowedSender) {
-          classification = 'UNRELATED';
-        }
+        const authenticated = authenticateGmailSender(msg.sender, msg.headers ?? [], this.config.mode);
+        if (!authenticated) classification = 'UNRELATED';
 
         const emailId = `em-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const emailRow: EmailRow = {
@@ -263,7 +268,7 @@ export class BfmrOrchestrationEngine {
           gmail_id: msg.id,
           internal_date: msg.internalDate,
           outer_sender: msg.sender,
-          auth_result: 'PASS',
+          auth_result: authenticated ? 'PASS' : 'FAIL',
           inbox_at_fetch: msg.inboxAtFetch,
           admission_run_id: this.activeRunId,
           classification,
@@ -273,7 +278,7 @@ export class BfmrOrchestrationEngine {
         tx.insertEmail(emailRow);
 
         // If qualifying single deal with canonical deal ID, enqueue AUTO command
-        if (classification === 'SINGLE_DEAL' && parsed.canonicalDealId) {
+        if (classification === 'SINGLE_DEAL' && msg.inboxAtFetch && parsed.canonicalDealId) {
           const cmdId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           const cmd = tx.insertCommand({
             id: cmdId,
@@ -313,208 +318,169 @@ export class BfmrOrchestrationEngine {
     state: CommandRow['state'];
     attempts: AttemptRow[];
   }> {
-    // 1. T3 Attempt Preparation
-    const prep = await this.db.withTransaction(async (tx) => {
-      const cmd = tx.getCommand(commandId);
-      if (!cmd) throw new Error(`Command ${commandId} not found`);
+    if (this.isProcessingCommands) throw new Error('The account browser worker is already processing a command.');
+    this.isProcessingCommands = true;
+    try {
+      // 1. T3 Attempt Preparation
+      const prep = await this.db.withTransaction(async (tx) => {
+        const cmd = tx.getCommand(commandId);
+        if (!cmd) throw new Error(`Command ${commandId} not found`);
 
-      // Check gates
-      if (tx.isGateActive('TELEGRAM_BLOCKED')) {
-        throw new Error('Execution halted: TELEGRAM_BLOCKED gate active');
-      }
+        // Check gates
+        if (tx.isGateActive('TELEGRAM_BLOCKED')) {
+          throw new Error('Execution halted: TELEGRAM_BLOCKED gate active');
+        }
 
-      // Check run deal block
-      const dealBlock = tx.getDealBlock(cmd.admission_run_id, this.config.accountId, cmd.deal_id);
-      if (dealBlock) {
-        tx.updateCommand(cmd.id, { state: dealBlock.type === 'EXHAUSTED' ? 'EXHAUSTED' : 'REVIEW' });
-        return { shouldProceed: false, reason: dealBlock.type };
-      }
+        if (!['QUEUED', 'WAIT_STATUS', 'RETRY_PENDING'].includes(cmd.state)) return { shouldProceed: false, reason: 'NOT_EXECUTABLE' };
 
-      // Check max attempts
-      if (cmd.attempt_count >= 2) {
-        tx.updateCommand(cmd.id, { state: 'EXHAUSTED' });
-        return { shouldProceed: false, reason: 'EXHAUSTED' };
-      }
+        // Check run deal block
+        const dealBlock = tx.getDealBlock(cmd.admission_run_id, this.config.accountId, cmd.deal_id);
+        if (dealBlock) {
+          tx.updateCommand(cmd.id, { state: dealBlock.type === 'EXHAUSTED' ? 'EXHAUSTED' : 'REVIEW' });
+          return { shouldProceed: false, reason: dealBlock.type };
+        }
 
-      // Verify browser session
-      const session = await this.browser.verifySession(this.config.accountId);
-      if (session !== 'AUTHENTICATED') {
-        tx.setGate('BFMR_AUTH_REQUIRED', `Session status: ${session}`);
-        tx.updateCommand(cmd.id, { state: 'WAIT_STATUS' });
-        return { shouldProceed: false, reason: 'AUTH_REQUIRED' };
-      }
+        // Check max attempts
+        if (cmd.attempt_count >= 2) {
+          tx.updateCommand(cmd.id, { state: 'EXHAUSTED' });
+          return { shouldProceed: false, reason: 'EXHAUSTED' };
+        }
 
-      // Duplicate check via My Tracker
-      const trackerRes = await this.tracker.inspectReservations(this.config.accountId, cmd.deal_id);
-      if (trackerRes.status === 'UNKNOWN') {
-        // Failed or incomplete status read holds the queue (Page 9)
-        tx.updateCommand(cmd.id, { state: 'WAIT_STATUS' });
-        return { shouldProceed: false, reason: 'WAIT_STATUS' };
-      }
+        // Verify browser session
+        const session = await this.browser.verifySession(this.config.accountId);
+        if (session !== 'AUTHENTICATED') {
+          tx.setGate('BFMR_AUTH_REQUIRED', `Session status: ${session}`);
+          tx.updateCommand(cmd.id, { state: 'WAIT_STATUS' });
+          return { shouldProceed: false, reason: 'AUTH_REQUIRED' };
+        }
 
-      if (trackerRes.status === 'RESERVED') {
-        // Active reservation already exists -> SKIPPED (AT-04)
-        tx.updateCommand(cmd.id, { state: 'SKIPPED' });
-        return { shouldProceed: false, reason: 'SKIPPED_DUPLICATE' };
-      }
+        // Duplicate check via My Tracker
+        const email = tx.getEmail(cmd.email_id);
+        const dealUrl = email?.candidate_refs?.dealUrl;
+        if (!dealUrl || !isTrustedBfmrDealUrl(dealUrl)) throw new Error('Command lacks a trusted deal URL.');
+        const deal = await this.browser.readDeal(dealUrl);
+        if (!deal.dealId?.trim() || !isTrustedBfmrDealUrl(deal.canonicalUrl) || !deal.offers[0]?.id) throw new Error('Browser did not establish authoritative deal/offer identity.');
+        if (deal.isClosed) { tx.updateCommand(cmd.id, { state: 'SKIPPED' }); return { shouldProceed: false, reason: 'CLOSED' }; }
+        tx.updateCommand(cmd.id, { deal_id: deal.dealId });
+        cmd.deal_id = deal.dealId;
+        if (tx.isDealBlocked(cmd.admission_run_id, this.config.accountId, cmd.deal_id)) {
+          tx.updateCommand(cmd.id, { state: 'REVIEW' }); return { shouldProceed: false, reason: 'BLOCKED' };
+        }
+        const trackerRes = await this.tracker.inspectReservations(this.config.accountId, cmd.deal_id);
+        if (trackerRes.status === 'UNKNOWN' || trackerRes.incompleteRead || trackerRes.records.some(row => row.dealId !== cmd.deal_id || bfmrStatusClass(row.status) === 'UNKNOWN')) {
+          // Failed or incomplete status read holds the queue (Page 9)
+          tx.updateCommand(cmd.id, { state: 'WAIT_STATUS' });
+          return { shouldProceed: false, reason: 'WAIT_STATUS' };
+        }
 
-      // Allocate ordinal (1 or 2)
-      const nextOrdinal = (cmd.attempt_count + 1) as 1 | 2;
-      const attemptId = `att-${cmd.id}-ord${nextOrdinal}`;
+        if (trackerRes.status === 'RESERVED' || trackerRes.records.some(row => bfmrStatusClass(row.status) === 'OPEN')) {
+          // Active reservation already exists -> SKIPPED (AT-04)
+          tx.updateCommand(cmd.id, { state: 'SKIPPED' });
+          return { shouldProceed: false, reason: 'SKIPPED_DUPLICATE' };
+        }
 
-      const attemptRow: AttemptRow = {
-        id: attemptId,
-        command_id: cmd.id,
-        ordinal: nextOrdinal,
-        account_id: this.config.accountId,
-        deal_id: cmd.deal_id,
-        selected_offer: 'offer-1',
-        quantity: 1, // Quantity 1 strictly
-        prepared_at: new Date().toISOString(),
-        invoked_at: null,
-        result: null,
-        reservation_id: null,
-        evidence: null,
-      };
+        // Allocate ordinal (1 or 2)
+        const nextOrdinal = (cmd.attempt_count + 1) as 1 | 2;
+        const attemptId = `att-${cmd.id}-ord${nextOrdinal}`;
 
-      tx.insertAttempt(attemptRow);
-      tx.updateCommand(cmd.id, {
-        state: 'SUBMITTING',
-        attempt_count: nextOrdinal,
-        execution_run_id: this.activeRunId,
+        const attemptRow: AttemptRow = {
+          id: attemptId,
+          command_id: cmd.id,
+          ordinal: nextOrdinal,
+          account_id: this.config.accountId,
+          deal_id: cmd.deal_id,
+          selected_offer: deal.offers[0].id,
+          quantity: 1, // Quantity 1 strictly
+          prepared_at: new Date().toISOString(),
+          invoked_at: null,
+          result: null,
+          reservation_id: null,
+          evidence: null,
+        };
+
+        tx.insertAttempt(attemptRow);
+        tx.updateCommand(cmd.id, {
+          state: 'SUBMITTING',
+          attempt_count: nextOrdinal,
+          execution_run_id: this.activeRunId,
+        });
+
+        return {
+          shouldProceed: true,
+          ordinal: nextOrdinal,
+          attemptId,
+          dealId: cmd.deal_id,
+          offerId: deal.offers[0].id,
+        };
       });
 
-      return {
-        shouldProceed: true,
-        ordinal: nextOrdinal,
-        attemptId,
-        dealId: cmd.deal_id,
-      };
-    });
+      if (!prep.shouldProceed) {
+        const finalCmd = (await this.db.getCommands()).find((c) => c.id === commandId)!;
+        return {
+          state: finalCmd.state,
+          attempts: this.db.getAttempts().filter((a) => a.command_id === commandId),
+        };
+      }
 
-    if (!prep.shouldProceed) {
-      const finalCmd = (await this.db.getCommands()).find((c) => c.id === commandId)!;
-      return {
-        state: finalCmd.state,
-        attempts: this.db.getAttempts().filter((a) => a.command_id === commandId),
-      };
-    }
-
-    // 2. Perform external browser click (outside transaction!)
-    const submitResult = await this.browser.submitOne('offer-1');
-
-    // 3. T4 Outcome & Reconciliation
-    await this.db.withTransaction(async (tx) => {
-      const cmd = tx.getCommand(commandId)!;
-
+      // 2. Perform external browser click (outside transaction!)
+      if (this.db instanceof PostgresDatabase) await this.db.verifyOwnership();
+      let submitResult = await this.browser.submitOne(prep.offerId!);
+      let confirmed: Awaited<ReturnType<IMyTrackerAdapter['inspectReservations']>>['records'][number] | undefined;
       if (submitResult.status === 'SUBMITTED') {
-        // Reconcile with My Tracker
-        const recon = await this.tracker.inspectReservations(this.config.accountId, prep.dealId!);
-        if (recon.status === 'RESERVED') {
+        try {
+          const recon = await this.tracker.inspectReservations(this.config.accountId, prep.dealId!);
           const rec = recon.records[0];
+          if (!recon.incompleteRead && recon.status === 'RESERVED' && recon.records.length === 1 &&
+              rec?.rid?.trim() && rec.dealId === prep.dealId && rec.quantity === 1 &&
+              rec.offerId === prep.offerId && rec.status.toLowerCase() === 'reserved') confirmed = rec;
+        } catch { /* A failed read cannot confirm an external mutation. */ }
+        if (!confirmed) submitResult = { status: 'UNCERTAIN', errorDetail: 'Submission lacks unique authoritative tracker confirmation.' };
+      }
+
+      // 3. T4 Outcome & Reconciliation
+      await this.db.withTransaction(async (tx) => {
+        const cmd = tx.getCommand(commandId)!;
+
+        if (submitResult.status === 'SUBMITTED') {
           tx.updateAttempt(prep.attemptId!, {
-            invoked_at: new Date().toISOString(),
-            result: 'SUCCESS',
-            reservation_id: rec?.rid || 'RID-AUTO',
-            evidence: { toast: submitResult.toastAcknowledgement, trackerRecord: rec },
+            invoked_at: new Date().toISOString(), result: 'SUCCESS', reservation_id: confirmed!.rid,
+            evidence: { toast: submitResult.toastAcknowledgement, trackerRecord: confirmed },
           });
           tx.updateCommand(cmd.id, { state: 'RESERVED' });
-        } else {
-          // Toast received but not seen in tracker yet:
+        } else if (submitResult.status === 'UNCERTAIN') {
+          // Page 9: Network timeout waiting for confirmation.
+          // Stop retries, create review, alert operator.
           tx.updateAttempt(prep.attemptId!, {
             invoked_at: new Date().toISOString(),
-            result: 'SUCCESS',
-            reservation_id: 'RID-AUTO-CONFIRMED',
-            evidence: { toast: submitResult.toastAcknowledgement },
+            result: 'UNCERTAIN',
+            evidence: { error: submitResult.errorDetail },
           });
-          tx.updateCommand(cmd.id, { state: 'RESERVED' });
-        }
-      } else if (submitResult.status === 'UNCERTAIN') {
-        // Page 9: Network timeout waiting for confirmation.
-        // Stop retries, create review, alert operator.
-        tx.updateAttempt(prep.attemptId!, {
-          invoked_at: new Date().toISOString(),
-          result: 'UNCERTAIN',
-          evidence: { error: submitResult.errorDetail },
-        });
-        tx.updateCommand(cmd.id, { state: 'REVIEW' });
+          tx.updateCommand(cmd.id, { state: 'REVIEW' });
 
-        // Add deal block
-        tx.insertDealBlock({
-          id: `block-${cmd.id}`,
-          run_id: this.activeRunId!,
-          account_id: this.config.accountId,
-          deal_id: prep.dealId!,
-          type: 'REVIEW',
-          reason: 'Uncertain submit outcome: timeout waiting for response modal',
-          opened_at: new Date().toISOString(),
-          resolved_at: null,
-        });
-
-        // Open incident & Telegram outbox
-        const incId = `inc-${cmd.id}`;
-        tx.insertIncident({
-          id: incId,
-          scope: 'RESERVATION',
-          type: 'UNCERTAIN_OUTCOME',
-          episode: `ep-${cmd.id}`,
-          state: 'ACTIVE',
-          opened_at: new Date().toISOString(),
-          resolved_at: null,
-          disposition: 'Uncertain browser submission outcome; stopped to prevent duplicate booking',
-        });
-        tx.insertNotificationOutbox({
-          id: `notif-${incId}`,
-          incident_id: incId,
-          phase: 'ALERT',
-          state: 'PENDING',
-          due_at: new Date().toISOString(),
-          tries: 0,
-          telegram_message_id: null,
-        });
-      } else if (submitResult.status === 'CLOSED_NO_SLOTS') {
-        // Silent skip, no retry or alert
-        tx.updateAttempt(prep.attemptId!, {
-          invoked_at: new Date().toISOString(),
-          result: 'CLOSED_NO_SLOTS',
-          evidence: { error: submitResult.errorDetail },
-        });
-        tx.updateCommand(cmd.id, { state: 'SKIPPED' });
-      } else if (submitResult.status === 'FAILED_500') {
-        tx.updateAttempt(prep.attemptId!, {
-          invoked_at: new Date().toISOString(),
-          result: 'FAILED',
-          evidence: { error: submitResult.errorDetail },
-        });
-
-        if (prep.ordinal === 1) {
-          // Allow exactly one retry (ordinal 2)
-          tx.updateCommand(cmd.id, { state: 'RETRY_PENDING' });
-        } else {
-          // Second failure -> EXHAUSTED (Page 9: No ordinal 3)
-          tx.updateCommand(cmd.id, { state: 'EXHAUSTED' });
-
+          // Add deal block
           tx.insertDealBlock({
             id: `block-${cmd.id}`,
+            incident_id: `inc-${cmd.id}`,
             run_id: this.activeRunId!,
             account_id: this.config.accountId,
             deal_id: prep.dealId!,
-            type: 'EXHAUSTED',
-            reason: 'Two submit ordinals failed; attempt budget exhausted',
+            type: 'REVIEW',
+            reason: 'Uncertain submit outcome: timeout waiting for response modal',
             opened_at: new Date().toISOString(),
             resolved_at: null,
           });
 
-          const incId = `inc-exh-${cmd.id}`;
+          // Open incident & Telegram outbox
+          const incId = `inc-${cmd.id}`;
           tx.insertIncident({
             id: incId,
             scope: 'RESERVATION',
-            type: 'ATTEMPTS_EXHAUSTED',
-            episode: `ep-exh-${cmd.id}`,
+            type: 'UNCERTAIN_OUTCOME',
+            episode: `ep-${cmd.id}`,
             state: 'ACTIVE',
             opened_at: new Date().toISOString(),
             resolved_at: null,
-            disposition: 'Both submit ordinals failed',
+            disposition: 'Uncertain browser submission outcome; stopped to prevent duplicate booking',
           });
           tx.insertNotificationOutbox({
             id: `notif-${incId}`,
@@ -525,15 +491,70 @@ export class BfmrOrchestrationEngine {
             tries: 0,
             telegram_message_id: null,
           });
-        }
-      }
-    });
+        } else if (submitResult.status === 'CLOSED_NO_SLOTS') {
+          // Silent skip, no retry or alert
+          tx.updateAttempt(prep.attemptId!, {
+            invoked_at: new Date().toISOString(),
+            result: 'CLOSED_NO_SLOTS',
+            evidence: { error: submitResult.errorDetail },
+          });
+          tx.updateCommand(cmd.id, { state: 'SKIPPED' });
+        } else if (submitResult.status === 'FAILED_500') {
+          tx.updateAttempt(prep.attemptId!, {
+            invoked_at: new Date().toISOString(),
+            result: 'FAILED',
+            evidence: { error: submitResult.errorDetail },
+          });
 
-    const finalCmd = (await this.db.getCommands()).find((c) => c.id === commandId)!;
-    return {
-      state: finalCmd.state,
-      attempts: this.db.getAttempts().filter((a) => a.command_id === commandId),
-    };
+          if (prep.ordinal === 1) {
+            // Allow exactly one retry (ordinal 2)
+            tx.updateCommand(cmd.id, { state: 'RETRY_PENDING' });
+          } else {
+            // Second failure -> EXHAUSTED (Page 9: No ordinal 3)
+            tx.updateCommand(cmd.id, { state: 'EXHAUSTED' });
+
+            tx.insertDealBlock({
+              id: `block-${cmd.id}`,
+            incident_id: `inc-exh-${cmd.id}`,
+              run_id: this.activeRunId!,
+              account_id: this.config.accountId,
+              deal_id: prep.dealId!,
+              type: 'EXHAUSTED',
+              reason: 'Two submit ordinals failed; attempt budget exhausted',
+              opened_at: new Date().toISOString(),
+              resolved_at: null,
+            });
+
+            const incId = `inc-exh-${cmd.id}`;
+            tx.insertIncident({
+              id: incId,
+              scope: 'RESERVATION',
+              type: 'ATTEMPTS_EXHAUSTED',
+              episode: `ep-exh-${cmd.id}`,
+              state: 'ACTIVE',
+              opened_at: new Date().toISOString(),
+              resolved_at: null,
+              disposition: 'Both submit ordinals failed',
+            });
+            tx.insertNotificationOutbox({
+              id: `notif-${incId}`,
+              incident_id: incId,
+              phase: 'ALERT',
+              state: 'PENDING',
+              due_at: new Date().toISOString(),
+              tries: 0,
+              telegram_message_id: null,
+            });
+          }
+        }
+      });
+
+      const finalCmd = (await this.db.getCommands()).find((c) => c.id === commandId)!;
+      return {
+        state: finalCmd.state,
+        attempts: this.db.getAttempts().filter((a) => a.command_id === commandId),
+      };
+    } finally { this.isProcessingCommands = false; }
   }
 
   /**
@@ -552,7 +573,7 @@ export class BfmrOrchestrationEngine {
       });
 
       // Clear matching deal blocks
-      const blocks = tx.getDealBlocks().filter((b) => b.resolved_at === null);
+      const blocks = tx.getDealBlocks().filter((b) => b.resolved_at === null && b.incident_id === incidentId);
       for (const b of blocks) {
         tx.updateDealBlock(b.id, {
           resolved_at: new Date().toISOString(),

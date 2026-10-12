@@ -1,47 +1,51 @@
-# Open issues and implementation inputs
+# Open issues and release inputs
 
-These items do not reopen settled MVP 1 scope. Separate a product decision from an external fact that must be verified and from a setup input.
+Current status is controlled by [Solution Design Specification v1.9](BFMR_Solution_Design_Specification_v1.9.md). These items distinguish unresolved user decisions, external provider evidence, environment setup and unimplemented operational work. Code coverage alone does not close provider evidence.
 
-## OQ-001 Recovery after Gmail history expires
+## Release blockers and external evidence
 
-**Type:** unresolved requirement boundary.
+### EV-001 BFMR account identity and browser/API alignment
 
-The user requires catch-up after downtime. V1.5 implements this using the saved Gmail history cursor while retaining the earlier prohibition on Inbox sweeps. If Gmail rejects an expired cursor, the specified behavior is to preserve the gap, alert and stop new intake. Restart cannot silently reset it.
+The browser write guard needs exact account identity and a common known reservation visible in the browser and complete My Tracker API. Obtain sanitized current-page evidence for `BFMR_ACCOUNT_IDENTITY_SELECTOR`, `BFMR_TRACKER_BROWSER_URL`, `BFMR_ACCOUNT_RESERVATION_SELECTOR`, `data-reserve-id`, and `data-deal-id`. The current implementation cannot prove an account with no common known reservation. Determine a safe authoritative alternative. Until validated, missing selectors/identity fail closed and live reservation writes do not proceed.
 
-This does not guarantee catch-up after arbitrarily long downtime. If that guarantee is required, Matt must decide whether a bounded recovery Inbox scan is permitted. Implement the documented stop-and-alert behavior in the meantime; do not silently broaden access or claim lossless recovery.
+### EV-002 Gmail provenance and message templates
 
-## EV-001 BFMR browser identity and quantity
+Capture sanitized Gmail API headers for direct BFMR mail and the authorized `matt.ward@live.com` testing forward. Confirm Google Authentication-Results, Received, DMARC, DKIM/SPF layouts, and ensure legitimate messages pass without trusting display names or body text. Rendered sample PDFs do not provide this evidence. Test subject invariance, body announcements, tracked links, multi-deal counts, duplicates, bundles, additional-slot notices and updates using sanitized fixtures.
 
-**Type:** integration evidence, G-001.
+### EV-003 My Tracker and BFMR API contracts
 
-Prove direct email-link navigation, expected account identity, canonical deal_id extraction, correct form/offer association, bundle quantity-one meaning and variant selection. Unknown identity cannot submit. Historical observations are not target-environment test results.
+Validate deal slug to `deal_id`, complete unfiltered pagination, retention of old active reservations, exact reserve ID, status and quantity/offer fields, supplier list, payout totals and unit amounts, amount paid, all open/terminal statuses and immediate post-submit visibility. Validate Purchase and Shipment request fields, returned IDs, eventual readback and behavior after an uncertain POST. Never treat an incomplete read as absence. Keep `BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED` unset until payout/status arithmetic is evidenced.
 
-## EV-002 My Tracker contract
+### EV-004 Amazon Business checkout and tracking UI
 
-**Type:** integration evidence, G-001.
+Verify real logged-in DOM layouts for saved account choice, exact single ASIN line/quantity, gift editor and saved gift state, free non-Prime delivery, total, duplicate warning, CVV challenge, submission confirmation Order #, Orders history card and package tracking details. The current order identity and tracking extractors have synthetic coverage; no single synthetic test proves live layout. Do not rerun a purchase to find an existing Order #.
 
-Verify required fields, pagination completion, date-filter semantics/timezone, RID, deal/status/quantity/offer mapping, account alignment, active-reservation coverage, immediate visibility and manual-release removal. The supplied reference's empty-object response sample is insufficient.
+### EV-005 Full exposure semantics
 
-If immediate visibility cannot be proved, an empty result after an uncertain click cannot authorize automatic resubmission. Do not rely on a 24-hour date window if evidence shows active reservations can be older.
+The user settled a $100 total cap, BFMR payout >= full Amazon order cost, and <=$200 for existing unpaid BFMR expected payouts plus the proposed Amazon total. The code assumes unit payout multiplies quantity, total fields describe the whole row, `amount_paid` subtracts from expected payout, and current new reservation is excluded from the prior-orders subtotal. Validate those exact BFMR field meanings and which unpaid statuses count. Until then, leave the contract gate unset.
 
-## EV-003 Email authentication and templates
+## Environment and operations
 
-**Type:** integration evidence, G-002.
+### SETUP-001 PostgreSQL and private state
 
-Obtain sanitized direct and forwarded MIME/authentication examples. Verify trusted Gmail evidence, link preservation, both subject formats, repeated links, bundles versus multiple distinct deals, and extra-slot notices.
+Configure a dedicated `DATABASE_URL` and the normalized account namespace. `src/db/migrations/002_runtime_state.sql` is for the JSONB aggregate. The live runner also needs private persistent storage/backups for Gmail queue, multi-deal journal, Amazon order ledger and BFMR status history. Build and test backup/restore and stale backup reconciliation before deployment. Never test against production database.
 
-## SETUP-001 Secure service configuration
+### SETUP-002 First queue initialization/recovery
 
-**Type:** environment input.
+First-ever setup can use `BFMR_INITIALIZE_GMAIL_QUEUE=YES`, then remove it. Restore an existing queue if missing. `PROCESSING` rows and expired-history gaps require external BFMR/Amazon reconciliation and an explicit repair procedure; never delete state to restart intake. Expired Gmail history remains unresolved without an authorized recovery scan.
 
-Required: Gmail account/OAuth setup, Google project/topic/pull subscription, BFMR expected account and API credentials, dedicated browser login profile, Telegram bot/private chat, Ubuntu desktop/service access, PostgreSQL and backup destination. Supply secrets through secure local configuration, never Git or chat.
+### SETUP-003 Runner service and notifications
 
-## SETUP-002 Versions and operational evidence
+The runner currently uses Gmail history polling and a single interactive process. Production service supervision, watch renewal/StreamingPull, durable notification delivery gates, browser desktop access after reboot, log retention, monitoring, Telegram outage behavior and restart recovery need an integrated runbook and acceptance.
 
-**Type:** engineering setup and validation.
+## Code completion versus acceptance
 
-Pin compatible runtime/dependency versions during implementation. Validate headed browser boot/login, singleton ownership, encrypted backups and restore. Repository creation and the PDF do not establish those capabilities.
+- PostgreSQL transaction and advisory lock code exists and passed a disposable synthetic PostgreSQL integration. This is not production DB migration or backup acceptance.
+- File-backed queue, multi-deal, order and status journals exist but are not committed in one shared DB transaction with every external side effect.
+- Amazon purchase and BFMR tracking write code exists; no complete current live multi-deal Amazon/BFMR write cycle was verified.
+- Dashboard remains simulated and provides no live state.
+- User-reported live fixed-item purchase success is limited to that specific test/product/session; do not expand it as general evidence.
 
-## Deferred items
+## Resolved source-review findings (12 October 2026)
 
-Financial evaluation, purchasing, shipment/payout handling, multi-deal mail and additional-slot notifications remain deferred. The 10 October amendment activates Amazon supplier evaluation for confirmed email reservations and cancellation for failed evaluation/startup cleanup. Form-encoded cancellation passed one user-authorized live test; supplier-response variants and the complete live email evaluation flow still require evidence. See the v1.6 addendum.
+The source review findings are fixed in code and have offline regression coverage: wrong-deal title fallback and open-status duplicates; unauthenticated sender/hardcoded auth pass; reminder-only browser account check; memory-only Gmail cursor/work; incompatible lifecycle status sets; daily history loss; fabricated reservation IDs; all-block incident clearing; process-local default orchestration persistence/locking; dashboard fabricated acceptance status; and the previously reported checkout single-line/order identity issues. See `REVIEW_FIXES_2026-10-12.md` and v1.9 Sections 4-11. Do not confuse “code fixed” with the live provider evidence listed above.

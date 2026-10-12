@@ -29,26 +29,10 @@ export interface DatabaseState {
   advisory_locks: Set<string>;
 }
 
-function cloneState(state: DatabaseState): DatabaseState {
-  return {
-    runs: new Map(Array.from(state.runs.entries()).map(([k, v]) => [k, { ...v }])),
-    inbound_events: new Map(Array.from(state.inbound_events.entries()).map(([k, v]) => [k, { ...v }])),
-    gmail_state: new Map(Array.from(state.gmail_state.entries()).map(([k, v]) => [k, { ...v }])),
-    emails: new Map(Array.from(state.emails.entries()).map(([k, v]) => [k, { ...v }])),
-    deal_observations: new Map(Array.from(state.deal_observations.entries()).map(([k, v]) => [k, { ...v }])),
-    commands: new Map(Array.from(state.commands.entries()).map(([k, v]) => [k, { ...v }])),
-    attempts: new Map(Array.from(state.attempts.entries()).map(([k, v]) => [k, { ...v }])),
-    deal_blocks: new Map(Array.from(state.deal_blocks.entries()).map(([k, v]) => [k, { ...v }])),
-    incidents: new Map(Array.from(state.incidents.entries()).map(([k, v]) => [k, { ...v }])),
-    notification_outbox: new Map(Array.from(state.notification_outbox.entries()).map(([k, v]) => [k, { ...v }])),
-    runtime_gates: new Map(Array.from(state.runtime_gates.entries()).map(([k, v]) => [k, { ...v }])),
-    workflow_events: new Map(Array.from(state.workflow_events.entries()).map(([k, v]) => [k, { ...v }])),
-    advisory_locks: new Set(state.advisory_locks),
-  };
-}
+function cloneState(state: DatabaseState): DatabaseState { return structuredClone(state); }
 
 export class TransactionalDatabase {
-  private state: DatabaseState = {
+  protected state: DatabaseState = {
     runs: new Map(),
     inbound_events: new Map(),
     gmail_state: new Map(),
@@ -64,37 +48,41 @@ export class TransactionalDatabase {
     advisory_locks: new Set(),
   };
 
-  private monotonicSequence = 0;
+  protected monotonicSequence = 0;
+  private transactionTail: Promise<void> = Promise.resolve();
 
   /**
    * Execute an atomic transaction.
    * If `fn` throws, all mutations are rolled back.
    */
   public async withTransaction<T>(fn: (tx: TransactionContext) => Promise<T>): Promise<T> {
-    const backup = cloneState(this.state);
-    const tx = new TransactionContext(this.state, () => ++this.monotonicSequence);
+    const prior = this.transactionTail;
+    let release!: () => void;
+    this.transactionTail = new Promise<void>((resolve) => { release = resolve; });
+    await prior;
+    const working = cloneState(this.state);
+    const tx = new TransactionContext(working, () => ++this.monotonicSequence);
     try {
       const result = await fn(tx);
-      return result;
-    } catch (err) {
-      // Rollback
-      this.state = backup;
-      throw err;
-    }
+      const detached = structuredClone(result);
+      working.advisory_locks = this.state.advisory_locks;
+      this.state = working;
+      return detached;
+    } finally { release(); }
   }
 
   // Direct read-only helpers
-  public getRuns() { return Array.from(this.state.runs.values()); }
-  public getInboundEvents() { return Array.from(this.state.inbound_events.values()); }
-  public getGmailState(mailbox: string) { return this.state.gmail_state.get(mailbox); }
-  public getEmails() { return Array.from(this.state.emails.values()); }
-  public getCommands() { return Array.from(this.state.commands.values()); }
-  public getAttempts() { return Array.from(this.state.attempts.values()); }
-  public getDealBlocks() { return Array.from(this.state.deal_blocks.values()); }
-  public getIncidents() { return Array.from(this.state.incidents.values()); }
-  public getNotificationOutbox() { return Array.from(this.state.notification_outbox.values()); }
-  public getRuntimeGates() { return Array.from(this.state.runtime_gates.values()); }
-  public getWorkflowEvents() { return Array.from(this.state.workflow_events.values()); }
+  public getRuns() { return structuredClone(Array.from(this.state.runs.values())); }
+  public getInboundEvents() { return structuredClone(Array.from(this.state.inbound_events.values())); }
+  public getGmailState(mailbox: string) { return structuredClone(this.state.gmail_state.get(mailbox)); }
+  public getEmails() { return structuredClone(Array.from(this.state.emails.values())); }
+  public getCommands() { return structuredClone(Array.from(this.state.commands.values())); }
+  public getAttempts() { return structuredClone(Array.from(this.state.attempts.values())); }
+  public getDealBlocks() { return structuredClone(Array.from(this.state.deal_blocks.values())); }
+  public getIncidents() { return structuredClone(Array.from(this.state.incidents.values())); }
+  public getNotificationOutbox() { return structuredClone(Array.from(this.state.notification_outbox.values())); }
+  public getRuntimeGates() { return structuredClone(Array.from(this.state.runtime_gates.values())); }
+  public getWorkflowEvents() { return structuredClone(Array.from(this.state.workflow_events.values())); }
 
   // Advisory lock
   public acquireAdvisoryLock(key: string): boolean {

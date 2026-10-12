@@ -15,7 +15,7 @@ export interface StartupReservationDependencies {
   listDeals(): Promise<string[]>;
   inspectDeal(url: string): Promise<StartupDeal | null>;
   submit(deal: StartupDeal): Promise<ReservationSubmissionResult>;
-  check(deal: StartupDeal): Promise<IpadReservationCheck>;
+  check(deal: StartupDeal, purpose?: 'DUPLICATE' | 'CONFIRMATION'): Promise<IpadReservationCheck>;
   waitForManualAccess(): Promise<void>;
   journal: { load(): Promise<StartupAttempt | null>; save(attempt: StartupAttempt): Promise<void> };
   wait(ms: number): Promise<void>;
@@ -37,7 +37,7 @@ export async function runStartupReservation(deps: StartupReservationDependencies
     await confirmed(previous, previous.reference);
   }
   if (previous && ['SUBMITTING', 'REVIEW'].includes(previous.state)) {
-    const recovery = await deps.check(previous);
+    const recovery = await deps.check(previous, 'CONFIRMATION');
     if (recovery.status !== 'CONFIRMED') {
       throw new Error('A previous startup reservation is unresolved. Check My Tracker before any new startup submission.');
     }
@@ -87,12 +87,12 @@ export async function runStartupReservation(deps: StartupReservationDependencies
 
       // Manual CAPTCHA completion happens in the browser; no CHECK-API prompt.
       // Neither a toast nor an empty tracker response proves creation/non-creation.
-      let check: IpadReservationCheck = await deps.check(deal);
+      let check: IpadReservationCheck = await deps.check(deal, 'CONFIRMATION');
       for (const delay of [10000, 20000]) {
         if (check.status === 'CONFIRMED' || check.status === 'EXISTING') break;
         await deps.waitForManualAccess();
         await deps.wait(delay);
-        check = await deps.check(deal);
+        check = await deps.check(deal, 'CONFIRMATION');
       }
       if (check.status === 'CONFIRMED') {
         await confirmed(attempt, check.reference);

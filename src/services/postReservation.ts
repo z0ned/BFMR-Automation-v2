@@ -12,8 +12,10 @@ export interface PostReservationDependencies {
   log(message: string): void;
 }
 
-async function processTask(task: PostReservationTask, dependencies: PostReservationDependencies): Promise<void> {
-  if (task.state === 'KEPT' || task.state === 'CANCELLED') return;
+export type PostReservationOutcome = 'KEPT' | 'CANCELLED';
+
+async function processTask(task: PostReservationTask, dependencies: PostReservationDependencies): Promise<PostReservationOutcome> {
+  if (task.state === 'KEPT' || task.state === 'CANCELLED') return task.state;
   if (task.state === 'CANCEL_PENDING') {
     // The previous process could have sent its POST. Recovery is read-only.
     await dependencies.cancel(task.reference, true);
@@ -24,7 +26,7 @@ async function processTask(task: PostReservationTask, dependencies: PostReservat
       if (amazon === 'PRESENT') {
         await dependencies.journal.save({ ...task, state: 'KEPT' });
         dependencies.log('PASS: Amazon is listed as a supplier. Reservation retained.');
-        return;
+        return 'KEPT';
       }
       dependencies.log('Amazon is not listed as a supplier; canceling this reservation.');
     } else dependencies.log('Startup CAPTCHA reservation confirmed; canceling it before continuing.');
@@ -33,6 +35,7 @@ async function processTask(task: PostReservationTask, dependencies: PostReservat
   }
   await dependencies.journal.save({ ...task, state: 'CANCELLED' });
   dependencies.log('My Tracker confirmed that the reservation is no longer reserved.');
+  return 'CANCELLED';
 }
 
 export async function recoverPostReservation(dependencies: PostReservationDependencies): Promise<void> {
@@ -41,18 +44,17 @@ export async function recoverPostReservation(dependencies: PostReservationDepend
 }
 
 export async function completePostReservation(reference: ReservationReference | undefined, kind: 'STARTUP' | 'EMAIL',
-  dependencies: PostReservationDependencies): Promise<void> {
+  dependencies: PostReservationDependencies): Promise<PostReservationOutcome> {
   if (!reference?.reserveId || !reference.dealId) throw new Error('My Tracker did not expose exact reservation/deal IDs; post-reservation action requires review.');
   const previous = await dependencies.journal.load();
   if (previous && previous.reference.reserveId === reference.reserveId) {
     if (previous.reference.dealId !== reference.dealId || previous.kind !== kind) throw new Error('Post-reservation journal identity conflict.');
-    await processTask(previous, dependencies);
-    return;
+    return processTask(previous, dependencies);
   }
   if (previous && !['KEPT', 'CANCELLED'].includes(previous.state)) {
     throw new Error('An earlier evaluation/cancellation is unresolved; refusing to replace its recovery evidence.');
   }
   const task: PostReservationTask = { reference, kind, state: 'EVALUATE' };
   await dependencies.journal.save(task);
-  await processTask(task, dependencies);
+  return processTask(task, dependencies);
 }

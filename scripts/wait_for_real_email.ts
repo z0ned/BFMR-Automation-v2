@@ -101,8 +101,8 @@ async function displayParsedDeal(emailData: {
       if (result.status === 'SUBMITTED') {
         const record = await myTrackerService.recordReservation({
           canonicalDealId: parsed.canonicalDealId,
-          title: parsed.dealTitle,
-          retailer: parsed.retailer,
+          title: parsed.dealTitle ?? 'Unknown deal',
+          retailer: parsed.retailer ?? 'Unknown retailer',
         });
 
         console.log('\n' + '='.repeat(80));
@@ -189,7 +189,7 @@ async function startImapListener() {
     }
 
     // Listen for new messages using IDLE
-    client.on('exists', async (data) => {
+    client.on('exists', async (data: { count: number }) => {
       try {
         const message = await client.fetchOne(data.count, { envelope: true, source: true });
         if (message) {

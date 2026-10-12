@@ -1,3 +1,5 @@
+import { bfmrStatus, bfmrStatusClass } from './bfmrStatus';
+import { isTrustedBfmrDealUrl } from './bfmrUrl';
 import type { ReservationReference } from './amazonEvaluation';
 
 const TRACKER_PAGE_SIZE = 1000;
@@ -25,29 +27,30 @@ function reservationQuantity(row: TrackerReservationRow): number {
   return Number(row.qty ?? row.quantity);
 }
 
-function reservationMatchesDeal(row: TrackerReservationRow, dealId: string, dealTitle: string): boolean {
-  const status = ['status', 'item_status', 'reservation_status']
-    .map((key) => row[key])
-    .find((value): value is string => typeof value === 'string');
-  const quantity = row.qty ?? row.quantity;
-  const normalizedStatus = normalizedText(status || '');
-  // Use the status returned on each unfiltered row. The live API has returned
-  // a zero-result sentinel for status=reserved even while an unfiltered page
-  // contains a matching reserved row.
-  const reserved = normalizedStatus === 'reserved';
-  if (!reserved || Number(quantity) <= 0) return false;
+function reservationMatchesDeal(row: TrackerReservationRow, dealId: string, _dealTitle: string): boolean {
+  // A title is descriptive text, never an identity fallback.
+  return String(row.deal_id ?? '').trim() === dealId.trim();
+}
 
-  const rowDealId = row.deal_id;
-  if (typeof rowDealId === 'string' && rowDealId.trim().toLowerCase() === dealId.trim().toLowerCase()) {
-    return true;
+export async function resolveBfmrDealId(dealUrl: string, request: typeof fetch = fetch): Promise<string> {
+  if (!isTrustedBfmrDealUrl(dealUrl)) throw new Error('Cannot resolve an untrusted BFMR deal link.');
+  const slug = new URL(dealUrl).pathname.split('/').filter(Boolean).at(-1)!;
+  const key = process.env.BFMR_API_KEY;
+  const secret = process.env.BFMR_API_SECRET;
+  if (!key || !secret) throw new Error('BFMR API credentials are required to resolve deal identity.');
+  const response = await request(`https://api.bfmr.com/api/v2/deals/${encodeURIComponent(slug)}`, {
+    headers: { 'API-KEY': key, 'API-SECRET': secret, accept: 'application/json' },
+    redirect: 'error', signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error(`BFMR deal identity read failed (HTTP ${response.status}).`);
+  const payload = await response.json() as { deal?: { deal_id?: unknown; slug?: unknown } };
+  const value = payload.deal?.deal_id;
+  if ((typeof value !== 'string' && typeof value !== 'number') || !String(value).trim() ||
+    (typeof value === 'number' && (!Number.isSafeInteger(value) || value <= 0)) ||
+    (payload.deal?.slug !== undefined && payload.deal.slug !== slug)) {
+    throw new Error('BFMR deal detail did not establish an exact authoritative deal ID.');
   }
-  const expectedTitle = normalizedText(dealTitle);
-  if (!expectedTitle) return false;
-  const titles = ['title', 'deal_title', 'item_title', 'product_name', 'item_name', 'name', 'product']
-    .map((key) => row[key])
-    .filter((value): value is string => typeof value === 'string')
-    .map(normalizedText);
-  return titles.some((title) => title === expectedTitle);
+  return String(value).trim();
 }
 
 function configuredTrackerEndpoint(): URL {
@@ -324,16 +327,31 @@ export type IpadReservationCheck =
   | { status: 'UNKNOWN'; error: string };
 
 /** Read-only duplicate and confirmation check for a specific deal email. */
-export async function checkDealReservation(dealId: string, dealTitle: string): Promise<IpadReservationCheck> {
+export async function checkDealReservation(dealId: string, dealTitle: string,
+  purpose: 'DUPLICATE' | 'CONFIRMATION' = 'DUPLICATE',
+  readRows: () => Promise<TrackerReservationRow[]> = readRecentReservedRows): Promise<IpadReservationCheck> {
   try {
-    const rows = await readRecentReservedRows();
-    const matches = rows.filter((candidate) => reservationMatchesDeal(candidate, dealId, dealTitle));
+    const rows = await readRows();
+    const matches = rows.filter((candidate) => {
+      if (!reservationMatchesDeal(candidate, dealId, dealTitle)) {
+        if (!candidate.deal_id && normalizedText(String(candidate.deal_title ?? candidate.title ?? '')) === normalizedText(dealTitle)) {
+          throw new Error('A title-matching tracker row has no deal ID; duplicate evidence is inconclusive.');
+        }
+        return false;
+      }
+      const status = candidate.status ?? candidate.item_status ?? candidate.reservation_status;
+      const classification = bfmrStatusClass(status);
+      if (classification === 'UNKNOWN') throw new Error('Matching My Tracker row has an unknown lifecycle status.');
+      return purpose === 'CONFIRMATION' ? bfmrStatus(status) === 'reserved' : classification === 'OPEN';
+    });
     if (matches.length > 1) throw new Error('Multiple matching reserved rows; reservation identity is ambiguous.');
     const row = matches[0];
     if (!row) return { status: 'NOT_VISIBLE_YET' };
     const quantity = reservationQuantity(row);
     const reference = reservationReference(row);
-    return quantity === 1 ? { status: 'CONFIRMED', quantity: 1, ...(reference ? { reference } : {}) } : { status: 'EXISTING', quantity };
+    if (purpose === 'DUPLICATE') return { status: 'EXISTING', quantity };
+    if (!reference) throw new Error('New reservation has no authoritative reservation ID.');
+    return quantity === 1 ? { status: 'CONFIRMED', quantity: 1, reference } : { status: 'EXISTING', quantity };
   } catch (error) {
     return { status: 'UNKNOWN', error: error instanceof Error ? error.message : String(error) };
   }
@@ -348,8 +366,8 @@ export function reservationReference(row: TrackerReservationRow): ReservationRef
 }
 
 /** Compatibility wrapper retained for the dedicated iPad Air live test. */
-export function checkIpadAirReservation(slug: string): Promise<IpadReservationCheck> {
-  return checkDealReservation(slug, 'Apple iPad Air 11 inch M4 256GB Wi-Fi');
+export function checkIpadAirReservation(slug: string, purpose: 'DUPLICATE' | 'CONFIRMATION' = 'DUPLICATE'): Promise<IpadReservationCheck> {
+  return checkDealReservation(slug, 'Apple iPad Air 11 inch M4 256GB Wi-Fi', purpose);
 }
 
 export const trackerApiTestHelpers = {

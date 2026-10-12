@@ -1,41 +1,28 @@
-BFMR AUTOMATION - MVP 1 OVERVIEW
+BFMR AUTOMATION V2 - CURRENT OVERVIEW (12 OCTOBER 2026)
 
-Purpose
-The app processes qualifying BFMR new-deal emails one at a time and creates a quantity-one BFMR reservation through the authenticated website. It confirms the result through My Tracker and applies the approved Amazon-supplier check to newly confirmed email reservations. This overview summarizes the current MVP 1 scope; the dated solution specification and decision register remain controlling when details differ.
+AUTHORITATIVE DOCUMENT
+Read docs/BFMR_Solution_Design_Specification_v1.9.pdf first, then AGENTS.md, docs/DECISIONS.md, docs/IMPLEMENTATION_PLAN.md and docs/OPEN_ISSUES.md. v1.5-v1.8 are historical records. Later explicit user decisions supersede conflicting older scope statements.
 
-IN-SCOPE EMAIL FLOW
-   - Intake trusted BFMR emails from the configured Gmail account and process them serially.
-   - Qualify a single new-deal announcement with exactly one distinct, trusted BFMR deal-detail destination. Decode supported BFMR tracked links locally; never visit tracking, unsubscribe or unrelated links.
-   - Accept any retailer and bundles. Quantity one means one BFMR offer.
-   - Skip duplicates, multiple-deal roundups, all-open-deals mail, additional-slot/reservations-added notices, deal updates, payout changes and unrelated BFMR messages.
-   - Before reserving, complete a My Tracker duplicate check. Create reservations only through the visible BFMR website form, then confirm quantity one using complete My Tracker reads.
-   - For a newly confirmed email reservation, retain it if validated supplier evidence lists Amazon. If complete evidence proves Amazon is absent, cancel that exact new reservation and verify release. Unknown or conflicting evidence stops and alerts; it never implies absence.
-   - Do not purchase products from email intake. Successful email reservations listing Amazon remain for the operator to manage. A separate, manually invoked one-item Amazon purchase test is documented outside MVP 1.
+CURRENT PURPOSE AND STATUS
+Receive qualifying BFMR new-deal emails, create one quantity-one reservation per deal, check the exact confirmed reservation's supplier list for Amazon and, when eligible and all rules pass, place the approved Amazon quantity-one order. Check known Amazon orders after 03:00 Atlanta local time for tracking, submit matching order/tracking identifiers to BFMR through the implemented write workflow, and compare BFMR official statuses against local order history. The project contains code for these workflows but is not an accepted unattended production service.
 
-LIVE TEST STARTUP
-   - The designated live reservation test scripts make a separate quantity-one startup reservation for manual CAPTCHA completion, confirm it through My Tracker, then cancel that exact startup reservation and verify release.
-   - The startup CAPTCHA reservation is excluded from Amazon supplier evaluation. Offline tests use fakes and fixtures and do not mutate BFMR inventory.
-   - Unexpected challenges or uncertain submissions stop processing and use the configured failure alert path. Never replay a possibly submitted action blindly.
+MULTI-DEAL EMAIL
+A distinct, body-announced multi-new-deal email can be processed when the declared deal set and trusted BFMR detail links are unambiguous. Reserve each deal once before evaluating the batch. Bundles remain one BFMR offer. Multiple-deal/all-open roundups without an explicit supported new-deal announcement, additional-slot/reservations-added messages, updates, payout changes and unrelated mail are not new-deal triggers. Subject text does not determine the body classification.
 
-BROWSER WRAPPER AND SESSION OWNERSHIP
-   - A wrapper starts headed Chromium with a dedicated persistent profile and loopback-only remote debugging enabled.
-   - The wrapper passes the PID of the exact Chromium browser process to the app as `--browser-pid <pid>` or `BFMR_CHROMIUM_PID`. It must pass the browser process PID, not a shell or launcher PID.
-   - The app resolves that process's CDP endpoint and verifies through CDP that the endpoint belongs to the supplied PID. It must attach only to that process; it must not scan the machine and select an arbitrary browser when multiple browser processes may be open.
-   - The app reuses the attached authenticated session. The wrapper owns Chromium startup and shutdown; app shutdown disconnects the app without closing the wrapper-owned browser.
+AMAZON POLICY
+Per order: maximum complete total $100; BFMR payout must be at least the complete Amazon total; existing unpaid BFMR expected payouts plus proposed Amazon total may not exceed $200. The current reservation payout is excluded from the existing-unpaid subtotal and is checked separately against Amazon total. A failed rule cancels only the exact new BFMR reservation and requires readback. Unknown identity, amount, supplier, checkout selection or side-effect result blocks for review. Amazon order must be gift-marked and use free non-Prime delivery. See v1.9 for the complete identity and exposure rules.
 
-OUT OF MVP 1 SCOPE
-   - Multiple distinct deals in one message, all-open-deal roundups, additional-slot/reservations-added mail and automatic processing of deal updates.
-   - Retailer or shipper email processing, order-status synchronization and proactive retailer-site monitoring.
-   - Automatic purchasing, financial/stock/profitability evaluation, shipment/payout workflows and timed reservation release.
+EMAIL AND ACCOUNT SAFETY
+The live Gmail queue stores fetched email work and history cursor together in a private atomic JSON file. Sender identity needs trusted Gmail authentication headers; the testing sender is allowed only in explicit testing mode. The worker obtains PostgreSQL advisory ownership before queue/browser actions. Browser writes require configured visible account identity and matching known reservation evidence from both browser My Tracker and the API. Missing evidence stops writes.
 
-IMPLEMENTATION STATUS
-   - M0 project/bootstrap scaffolding is complete. M1 remains scaffolding; durable PostgreSQL persistence, transactional orchestration and production recovery are unfinished. M2-M5 are not complete.
-   - Live test scripts can mutate real BFMR inventory. Use offline fake-adapter tests for parser and orchestration validation.
+TRACKING AND DAILY STATUS
+Use the exact Amazon Order #, ASIN and total to find the corresponding Orders card, then store labeled package tracking locally. BFMR Purchase and Shipment writes use the exact reservation and verified My Tracker readback. Daily BFMR reconciliation stores status history for open and terminal reservations and persistent discrepancies, with Telegram alerts. Actual Amazon selectors and BFMR read/write contracts still need live validation.
 
-SAMPLE EMAILS
-   - Sanitized synthetic parser fixtures are derived from the PDFs in `docs/sample_emails/from_bfmr`. The current folder has 25 BFMR PDFs across `new_deal`, `multiple_new_deals`, `all_open_deals`, `deal_update`, `reservations_added`, `pay_out` and `other`; the `deal_closing` directory currently contains no PDF samples. No retailer email PDFs are present yet.
-   - The subject line is header metadata only. Never use it to classify the email or infer any message contents, including deal count, deal type, retailer, bundle status, title or offer details. Determine all such values from the body and its trusted deal-detail links. The same body must produce the same interpretation regardless of subject; a subject that says "NEW DEAL" cannot turn an update into a new-deal trigger.
-   - Treat explicit multi-new-deal announcements and all-deal/in-stock roundups as multi-deal exclusions, including when the body states the number of new deals. Treat reservations-added notices as additional-slot exclusions. Payout increases, deal updates and unrelated BFMR messages are not new-deal triggers even if they contain a BFMR link.
-   - Accept a new-deal message only when exactly one distinct trusted BFMR deal-detail URL remains after local tracked-link decoding. Repeated links to that same path collapse; unrelated navigation and footer links do not count as deal paths.
-   - Use sample emails as reference data for parser requirements and fixture design. They do not authorize live reservations, cancellations or purchases. Preserve privacy by keeping recipient names/addresses, message IDs, deal links/tokens and raw account data out of fixtures, logs and Git.
-   - The PDFs are rendered email examples, not raw MIME/authentication evidence. They do not prove Gmail provenance, link preservation in the actual intake path or coverage of every provider template.
+PERSISTENCE AND DASHBOARD
+PostgreSQL stores the orchestration engine aggregate and cross-process account lock. Live Gmail work, batch progress, Amazon order ledger and BFMR status history are separate private JSON files. These stores are not yet integrated into a supervised service with production backups/restore. The dashboard is explicitly simulated; it reports no live service health and has no completed acceptance evidence.
+
+RELEASE BLOCKERS
+Validate real Gmail auth headers, BFMR account/tracker DOM selectors and cross-account evidence, My Tracker fields/paging/statuses/payout and purchase/shipment contracts, Amazon Business cart/review/order/tracking layouts, production PostgreSQL setup and backups, and supervised recovery. Keep provider evidence gates closed until verified. Expired Gmail history remains a persistent stop condition; no cursor reset or Inbox sweep is authorized.
+
+SAMPLES
+Rendered emails under docs/sample_emails/from_bfmr support local parser work only. They do not prove Gmail authenticity or authorize actions. Preserve privacy: no raw recipient data, tokens, account pages, secrets or real order/tracking identifiers in Git.

@@ -1,12 +1,12 @@
 import './loadEnv';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
-import { checkIpadAirReservation } from '../src/services/bfmrTrackerApi';
+import { checkIpadAirReservation, resolveBfmrDealId } from '../src/services/bfmrTrackerApi';
 import { runLiveTestStartup } from './live_test_startup';
 import { automaticConfirmation } from '../src/services/automaticConfirmation';
 import { requireReservationAlerts, withReservationFailureAlert } from '../src/services/reservationAlerts';
 
 const dealUrl = 'https://www.bfmr.com/deals/apple-ipad-air-8-11-2026-m4-256gb-wifi-3';
-const dealId = new URL(dealUrl).pathname.split('/').filter(Boolean).at(-1)!;
+const emailDealId = new URL(dealUrl).pathname.split('/').filter(Boolean).at(-1)!;
 
 async function main() {
   if (!process.stdin.isTTY) throw new Error('This live reservation test requires an interactive terminal.');
@@ -31,6 +31,7 @@ async function main() {
         throw new Error('The BFMR page still shows a CAPTCHA/login challenge or is not a usable deal page. No reservation was attempted.');
       }
 
+      const dealId = await resolveBfmrDealId((await browser.init()).url());
       const existing = await checkIpadAirReservation(dealId);
       if (existing.status === 'CONFIRMED' || existing.status === 'EXISTING') {
         console.log(`[Live BFMR test] SKIPPED: My Tracker already shows a reserved iPad Air (quantity ${existing.quantity}). No duplicate reservation was attempted.`);
@@ -47,7 +48,7 @@ async function main() {
       }
 
       console.log('[Live BFMR test] Checking My Tracker automatically.');
-      const lastCheck = await automaticConfirmation(() => checkIpadAirReservation(dealId));
+      const lastCheck = await automaticConfirmation(() => checkIpadAirReservation(dealId, 'CONFIRMATION'));
       if (lastCheck.status === 'EXISTING') {
         throw new Error(`My Tracker shows the deal reserved with quantity ${lastCheck.quantity}, not quantity 1. Check My Tracker before any retry.`);
       }

@@ -1,98 +1,43 @@
 # BFMR Automation v2
 
-Fresh implementation of the BFMR reservation MVP. The repository includes interactive live test runners and offline orchestration scaffolding. Production PostgreSQL persistence and deployment remain unfinished.
+Fresh TypeScript implementation for BFMR email reservations and the separately authorized Amazon workflows. The repository contains active live scripts, offline tests, an incomplete orchestration engine, and a simulated dashboard. It is not a deployed unattended production service.
 
-## Authoritative design
+## Current authoritative handoff
 
-Read [Solution Design Specification v1.5](docs/BFMR_Solution_Design_Specification_v1.5.pdf). It supersedes conflicting instructions in earlier BFMR documents. Later explicit instructions from Matt take precedence.
+Read [Solution Design Specification v1.9](docs/BFMR_Solution_Design_Specification_v1.9.pdf) for the current requirements, implemented behavior, assumptions, evidence, setup, source map, and open work. The editable companion is [v1.9 Markdown](docs/BFMR_Solution_Design_Specification_v1.9.md). Then read [AGENTS.md](AGENTS.md), [DECISIONS.md](docs/DECISIONS.md), [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md), and [OPEN_ISSUES.md](docs/OPEN_ISSUES.md). v1.5-v1.8 are historical versions; they are retained for traceability and do not override v1.9.
 
-The earlier BFMR codebase is not the starting point. Do not import or migrate it by default.
+Later explicit user decisions supersede conflicting historical documents. Email and PDF examples, code comments, test output, and the presence of a live script do not authorize external actions. Preserve the existing dirty working tree and private runtime state.
 
-## MVP 1 behavior
+## Current behavior
 
-1. Receive a qualifying single new-deal email through Gmail watch and Google Pub/Sub.
-2. Open the trusted BFMR deal link in a dedicated authenticated browser and establish the deal identity.
-3. Use the My Tracker API to check for an existing active reservation for that deal. Skip if one exists, including a manual reservation or another color.
-4. Submit quantity 1 through the BFMR website form using Playwright.
-5. Confirm the outcome using My Tracker; reconcile uncertain results before any retry.
-6. For a newly confirmed email reservation, check BFMR's suppliers for Amazon. Keep the reservation if Amazon is listed; otherwise cancel that exact reservation and verify release with My Tracker. Unknown supplier evidence or cancellation outcome stops processing and alerts through Telegram.
+The interactive email runner accepts authenticated BFMR new-deal mail and, in explicit testing mode, authenticated mail from `matt.ward@live.com`. It validates trusted deal links, saves Gmail messages and cursor together, makes one BFMR reservation per announced deal, then checks confirmed reservations for Amazon eligibility. The approved order path uses a $100 per-order ceiling, BFMR payout at least the complete order total, and no more than $200 in existing unpaid BFMR payout exposure plus the proposed Amazon cost. It marks purchases as gifts, verifies free non-Prime shipping, matches orders to the submission that just completed, and persists supported order/tracking data locally.
 
-Any retailer and bundle deal can trigger intake. The Amazon supplier evaluation happens after confirmation; there are no financial, profitability, retailer-stock, email-driven purchase, or one-minute-release checks. Multiple-deal emails and additional-slot notifications are ignored. Live tests make real reservations. A separately authorized, manually invoked one-item Amazon purchase test is not part of email automation or MVP 1. The latest scope is in the [v1.6 addendum](docs/BFMR_Solution_Design_v1.6_Addendum.md); it supersedes older manual-release-only descriptions in the PDFs.
+A separate daily process in the active runner checks Amazon Order History after 03:00 Atlanta time and reconciles official BFMR status, with Telegram discrepancy alerts. BFMR order/tracking writes are bound to exact reservations and require readback. These retailer selectors and BFMR write contracts have not been validated live as a complete workflow.
 
-Persist the Gmail history cursor and catch up after downtime, with durable deduplication. The expired-history limitation is documented in the specification and [open issues](docs/OPEN_ISSUES.md).
+PostgreSQL-backed transactions and cross-process advisory ownership exist in `src/db/postgresDatabase.ts`; the live runner uses PostgreSQL ownership but its Gmail queue and order/status journals remain separate private files. The React dashboard is demonstration-only. Account selectors, Gmail auth-header arrangements, provider field contracts, backup/restore and supervised production deployment remain open. Do not call the project production-ready.
 
-## Technical direction
-
-- Single Ubuntu host, Node.js and TypeScript.
-- Local PostgreSQL for durable intake, queue, attempts and audit records.
-- Playwright bundled Chromium in headed mode, with a secured desktop for manual login/MFA.
-- Website form submission only; no reservation-creation API or reconstructed HTTP request.
-- My Tracker API for duplicate and confirmation reads.
-- Pub/Sub pull, outbound connectivity and no public webhook.
-- Telegram incidents, local CLI and operational recovery as defined in v1.5.
-
-## Handoff contents
-
-| File | Purpose |
-| --- | --- |
-| [AGENTS.md](AGENTS.md) | Instructions and boundaries for a coding agent |
-| [Design PDF](docs/BFMR_Solution_Design_Specification_v1.5.pdf) | Complete requirements, architecture, contracts and acceptance criteria |
-| [Implementation plan](docs/IMPLEMENTATION_PLAN.md) | Milestones and required evidence |
-| [Decision register](docs/DECISIONS.md) | Final scope and supersession summary |
-| [Open issues](docs/OPEN_ISSUES.md) | Unresolved decisions, integration evidence and setup inputs |
-
-See the implementation plan for offline test evidence and live integration checks. These do not establish production readiness.
-
-## Starting implementation
-
-Ask the coding agent to implement MVP 1 from v1.5 as a fresh project, following AGENTS.md and the implementation plan. Provide required service access securely. Start with the repository bootstrap and offline tests; satisfy the documented evidence gates before live enablement.
-
-The repository contains no credentials, browser profiles or private email/account fixtures. Never paste secrets into issues, chat, commits or test evidence.
-
-## BFMR browser sign-in
-
-The browser wrapper starts headed Chromium with a dedicated persistent profile and loopback remote debugging, then passes the Chromium browser-process PID to the app (not a shell or launcher PID). The app resolves that process's CDP port from its launch arguments (or its profile's `DevToolsActivePort` file when the wrapper uses port `0`), then verifies through CDP that the endpoint belongs to that PID. It does not search for an arbitrary open browser. Pass the PID as `--browser-pid <pid>` after the npm script name, or set `BFMR_CHROMIUM_PID` in the app process environment. For example:
+## Commands
 
 ```bash
-npm run test-real-email -- --browser-pid 12345
+npm test
+npm run typecheck
+npm run typecheck:all
+npm run build
+npm run dev
 ```
 
-The wrapper must supply `--user-data-dir` and `--remote-debugging-port` to Chromium. Keep the CDP endpoint bound to loopback; the app refuses an explicitly non-loopback remote debugging address. A fixed debugging port or `--remote-debugging-port=0` is supported. Use the same wrapped browser for BFMR sign-in and subsequent runs so they share its authenticated profile. The app disconnects from a wrapped browser when it exits; the wrapper owns browser shutdown. Without a PID, the adapter retains its existing standalone-launch behavior for manual local setup.
+`npm test` and build are software checks; do not run them unless the user requests testing or verification. Commands below have real external effects and require the exact gates and setup in v1.9:
 
-Complete BFMR login and any MFA directly in the wrapper-opened Chromium window. The sign-in helper never processes an email or submits a reservation. If BFMR expires the session, run the sign-in helper again through the wrapper with the same browser PID.
+- `npm run test-real-email` / `npm run test-real-email-e2e`: real BFMR intake/reservations and potentially Amazon purchases.
+- `npm run test-bfmr-ipad-reservation`: live BFMR test reservation/startup workflow.
+- `npm run test-amazon-checkout`: live BFMR startup reservation/cleanup, then Amazon rehearsal stopping before order submission.
+- `npm run test-amazon-purchase -- --max-total <USD>`: can place the specifically authorized fixed-item Amazon purchase after final terminal approval.
+- `node --import tsx scripts/test_multi_deal_pdf.ts [path]`: local PDF parsing exercise only.
 
-The email listener loads environment values from `.env` in the repository, then fills unset values from `~/.env.bfmr_automation` or `~/.env`. Google credentials default to `~/.bfmr/gcp-credentials.json` when that file exists and no `GOOGLE_APPLICATION_CREDENTIALS` path is set. Shell-provided variables take precedence.
+The dedicated PostgreSQL integration test requires a disposable `BFMR_TEST_DATABASE_URL`; never use production state for a test.
 
+## Configuration and private data
 
-## Amazon checkout rehearsal
+Environment loading is described in v1.9. Keep credentials, browser profiles, OAuth files, message content, Amazon order/tracking details, PostgreSQL data and runtime journals out of Git and logs. First-time Gmail queue creation requires an explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES`; never use it to replace a lost existing queue.
 
-Run `npm run test-amazon-checkout` in an interactive terminal for `https://www.amazon.com/dp/B09JQMJHXY`, quantity one, using Amazon's saved default delivery address. Stop another BFMR test runner first so it releases the persistent Chromium profile. The command runs the usual BFMR startup reservation/confirmation/cancellation, then opens Amazon in another tab of that same browser context. BFMR stays open and both sites retain their sessions in the profile.
-
-The rehearsal opens the requested product first, then checks the cart before adding anything. If the cart cannot be verified, it returns to the product for inspection and logs structural diagnostics. The rehearsal requires an empty active cart or a cart containing only one unit of this product. Other items or uncertain cart contents stop it without cart changes. It adds the product only when needed, proceeds to checkout, and stops at final order review without clicking Place your order or Buy Now. Login/MFA, challenges, address/payment choices and unfamiliar intermediate steps require manual action. Use the saved default address and an existing payment method; do not submit the order. Press Enter at the final terminal prompt to close Chromium. If Amazon conditionally displays its protection offer after Add to cart, the runner clicks the single visible “No thanks” button; if no offer appears, it continues without waiting for a required dialog. If checkout is verified, the runner uses Amazon’s cart sidebar submit control or a uniquely labeled visible “Proceed to checkout” button/link. The cart item remains for inspection.
-
-This is a separate fixed-product rehearsal; automatic email purchasing is not enabled. On 11 October 2026, a live run reached final review and verified the requested product, quantity one and order total; Place your order was not clicked. This confirms the observed account/session flow, not other accounts or future Amazon UI variants.
-
-## Amazon one-item purchase test
-
-The user authorized a separate command-line test for exactly one `Google Fitbit Air - Screenless Activity Tracker, Berry` item (ASIN `B0GTMJF7PV`). It does not run the BFMR startup reservation. The command requires an interactive terminal and a USD total cap, checks that the active cart is empty or contains only one unit of this exact ASIN, and stops on uncertain product, delivery, cart, quantity, order-total, or confirmation evidence. Before submission, it selects and verifies a free delivery option whose option label does not mention Prime; if automatic detection fails, the operator can select it manually and the command rechecks. It opens “Add gift options”, checks “This item is a gift”, and clicks “Save gift options” when the gift editor appears; it waits for secure checkout to return before continuing. It handles up to two visible “Place your order” controls by selecting one enabled control, and accepts repeated order totals only when they agree. It asks the operator to verify the free non-Prime delivery option, saved default delivery address, and payment method, then requires exact `REVIEWED B0GTMJF7PV` and `PLACE B0GTMJF7PV` terminal entries before submitting once. It never retries an uncertain order submission. No email intake path invokes this command.
-
-Example, replacing the value with the operator's chosen USD spending limit:
-
-```bash
-npm run test-amazon-purchase -- --max-total <USD-limit>
-```
-
-The `--max-total` value is an operator-selected USD limit and must cover the complete displayed order total. If using the Chromium wrapper, also pass `--browser-pid <pid>` after the npm separator. This command performs a real purchase when all checks and both exact terminal confirmations pass.
-
-## Live reservation test startup
-
-The startup reservation exists only to trigger CAPTCHA. After My Tracker confirms it, the app cancels that exact reservation and confirms release before proceeding. Startup never runs the Amazon evaluation. `resume-watch-series-reservation` remains excluded from startup; its recovery target and the dedicated iPad test's target do not run the email-only Amazon evaluation.
-
-Post-confirmation recovery uses `~/.local/state/bfmr/post-reservation.json` (override with `BFMR_POST_RESERVATION_STATE_PATH`). Keep this file across restarts. An uncertain cancellation is reconciled read-only; it never automatically repeats the cancellation POST.
-
-`npm run test-real-email` (also `test-real-email-e2e`) and `npm run test-bfmr-ipad-reservation` now attempt a real quantity-one reservation on every startup: open BFMR Deals and inspect deals in displayed order without selecting a filter, skipping duplicates/unavailable deals and advancing after proved failures until one succeeds. Complete any CAPTCHA directly in Chromium. Startup and subsequent reservations check My Tracker automatically; no CHECK-API prompt is required. The iPad test can create an additional reservation for its original target.
-
-Uncertain startup outcomes stop processing for inspection. Recovery evidence lives in `~/.local/state/bfmr/startup-reservation.json` and its adjacent `.events.jsonl` file (override with `BFMR_STARTUP_STATE_PATH`). Keep that path consistent across restarts. See the [v1.6 addendum](docs/BFMR_Solution_Design_v1.6_Addendum.md) for retry and recovery behavior. Offline tests and sign-in/read-only helpers do not reserve startup inventory.
-
-
-Live reservation tests require `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the existing local environment configuration. Failed or unconfirmed reservations send a Telegram alert; duplicate/unavailable email skips continue normally. Complete CAPTCHA at startup in Chromium. An unexpected later challenge or uncertain submission stops processing and alerts. Notification delivery failure is logged locally and stops further processing; the live test sender does not persist failed alerts for automatic redelivery.
+Sample PDFs under `docs/sample_emails/from_bfmr` are parser reference material only. They are not authentication evidence and do not authorize live reservation, cancellation, ordering or tracking actions.

@@ -101,6 +101,7 @@ async function debugGmailIntake() {
         const lock = await client.getMailboxLock('INBOX');
         try {
           const status = await client.status('INBOX', { messages: true, unseen: true });
+          if (!status) throw new Error('IMAP status read failed');
           console.log(`  • INBOX status: ${status.messages} total, ${status.unseen} unread.`);
         } finally {
           lock.release();

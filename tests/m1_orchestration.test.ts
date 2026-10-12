@@ -98,8 +98,9 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
         id: 'gmail-msg-ipad',
         internalDate: Date.now(),
         sender: 'deals@buyformeretail.com',
+        headers: [{ name: 'From', value: 'deals@buyformeretail.com' }, { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' }, { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' }],
         subject: 'New Deal: iPad Pro M4 11-inch',
-        body: 'Deal link: https://www.buyformeretail.com/deals/ipad-m4',
+        body: 'We posted a new deal. Deal link: https://www.buyformeretail.com/deals/ipad-m4',
         inboxAtFetch: true,
       },
     ];
@@ -119,7 +120,7 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
     tracker.reservations = [];
     tracker.shouldFailRead = true;
     // Reset command state to QUEUED to test retry
-    db.getCommands()[0].state = 'QUEUED';
+    await db.withTransaction(async tx => { tx.updateCommand(db.getCommands()[0].id, { state: 'QUEUED' }); });
 
     const exec2 = await engine.executeCommand(cmdId);
     assert.equal(exec2.state, 'WAIT_STATUS');
@@ -132,8 +133,9 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
         id: 'gmail-msg-sony',
         internalDate: Date.now(),
         sender: 'deals@buyformeretail.com',
+        headers: [{ name: 'From', value: 'deals@buyformeretail.com' }, { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' }, { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' }],
         subject: 'New Deal: Sony WH-1000XM5',
-        body: 'Deal link: https://www.buyformeretail.com/deals/sony-xm5',
+        body: 'We posted a new deal. Deal link: https://www.buyformeretail.com/deals/sony-xm5',
         inboxAtFetch: true,
       },
     ];
@@ -177,8 +179,9 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
         id: 'gmail-msg-switch',
         internalDate: Date.now(),
         sender: 'deals@buyformeretail.com',
+        headers: [{ name: 'From', value: 'deals@buyformeretail.com' }, { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' }, { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' }],
         subject: 'New Deal: Nintendo Switch OLED',
-        body: 'Deal link: https://www.buyformeretail.com/deals/switch-oled',
+        body: 'We posted a new deal. Deal link: https://www.buyformeretail.com/deals/switch-oled',
         inboxAtFetch: true,
       },
     ];
@@ -215,8 +218,9 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
         id: 'gmail-msg-bose',
         internalDate: Date.now(),
         sender: 'deals@buyformeretail.com',
+        headers: [{ name: 'From', value: 'deals@buyformeretail.com' }, { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' }, { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' }],
         subject: 'New Deal: Bose Headphones',
-        body: 'Deal link: https://www.buyformeretail.com/deals/bose-qc',
+        body: 'We posted a new deal. Deal link: https://www.buyformeretail.com/deals/bose-qc',
         inboxAtFetch: true,
       },
     ];
@@ -259,8 +263,9 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
         id: 'gmail-msg-camera',
         internalDate: Date.now(),
         sender: 'deals@buyformeretail.com',
+        headers: [{ name: 'From', value: 'deals@buyformeretail.com' }, { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' }, { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' }],
         subject: 'New Deal: Canon EOS R50',
-        body: 'Deal link: https://www.buyformeretail.com/deals/canon-r50',
+        body: 'We posted a new deal. Deal link: https://www.buyformeretail.com/deals/canon-r50',
         inboxAtFetch: true,
       },
     ];
@@ -289,6 +294,8 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
 
     // Replay executes with fresh budget (no duplicate active before submit)
     browser.submitOutcome = 'SUBMITTED';
+    const originalSubmit = browser.submitOne.bind(browser);
+    browser.submitOne = async offer => { const result = await originalSubmit(offer); tracker.addReservation(db.getCommands().find(cmd => cmd.state === 'SUBMITTING')!.deal_id, offer); return result; };
     tracker.reservations = [];
     const execReplay = await engine.executeCommand(reprocessedCmd.id);
     assert.equal(execReplay.state, 'RESERVED');
@@ -318,8 +325,9 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
         id: 'gmail-msg-restart-test',
         internalDate: Date.now(),
         sender: 'deals@buyformeretail.com',
+        headers: [{ name: 'From', value: 'deals@buyformeretail.com' }, { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' }, { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' }],
         subject: 'New Deal: Pixel 9 Pro',
-        body: 'Deal link: https://www.buyformeretail.com/deals/pixel-9-pro',
+        body: 'We posted a new deal. Deal link: https://www.buyformeretail.com/deals/pixel-9-pro',
         inboxAtFetch: true,
       },
     ];
@@ -343,6 +351,8 @@ describe('Milestone M1: Durable Orchestration & Invariant Tests', () => {
 
     // Command should retain attempt_count = 1 and only execute ordinal 2
     browser.submitOutcome = 'SUBMITTED';
+    const originalSubmit = browser.submitOne.bind(browser);
+    browser.submitOne = async offer => { const result = await originalSubmit(offer); tracker.addReservation(db.getCommands().find(cmd => cmd.state === 'SUBMITTING')!.deal_id, offer); return result; };
     const retryExec = await restartedEngine.executeCommand(cmdId);
     assert.equal(retryExec.state, 'RESERVED');
     assert.equal(retryExec.attempts.length, 2);

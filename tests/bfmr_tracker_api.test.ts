@@ -6,12 +6,12 @@ describe('BFMR My Tracker reservation matching', () => {
   const dealId = 'apple-ipad-air-8-11-2026-m4-256gb-wifi-3';
   const title = 'Apple iPad Air 11 inch M4 256GB Wi-Fi';
 
-  it('matches an exact deal title or deal ID, regardless of quantity, to block duplicates', () => {
+  it('requires an exact deal ID; titles alone cannot establish identity', () => {
     assert.equal(trackerApiTestHelpers.reservationMatchesDeal({
       title,
       status: 'Reserved',
       qty: 1,
-    }, dealId, title), true);
+    }, dealId, title), false);
 
     assert.equal(trackerApiTestHelpers.reservationMatchesDeal({
       deal_id: dealId,
@@ -24,7 +24,7 @@ describe('BFMR My Tracker reservation matching', () => {
       deal_title: 'Apple Watch Series 11 - 46mm - Sport Band - M/L',
       status: 'reserved',
       qty: '1',
-    }, 'd-bbsqg', 'Apple Watch Series 11 - 46mm - Sport Band - M/L'), true);
+    }, 'd-bbsqg', 'Apple Watch Series 11 - 46mm - Sport Band - M/L'), false);
   });
 
   it('does not treat another product or a non-reserved row as confirmation', () => {

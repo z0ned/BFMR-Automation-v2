@@ -1,67 +1,75 @@
-# MVP 1 implementation plan
+# Implementation plan and evidence
 
-Baseline: Solution Design Specification v1.5, especially pages 16-18 and 21. M0 project/bootstrap scaffolding is complete. M1 orchestration scaffolding exists, but production-grade durable persistence and the remaining production milestones are unfinished. The “initial handoff” refers to the documentation-only starting repository, not the current working tree.
+**Current baseline:** `BFMR_Solution_Design_Specification_v1.9.md` and its PDF. Older entries below v1.8 are historical. Mark code completion separately from provider acceptance and production deployment. A passing synthetic fixture does not prove live BFMR/Amazon behavior.
 
-## M0 Establish the fresh project [COMPLETED]
+## Current status
 
-- Read the baseline, decisions and open issues. Fresh implementation without legacy code.
-- Pinned supported Node.js 22, TypeScript 5.7, Vite 6.2, Playwright and PostgreSQL 16 schema.
-- Established project structure (`src/db`, `src/domain`, `src/adapters`, `src/orchestrator`, `tests`), reproducible scripts (`npm test`, `npm run typecheck`, `npm run build`, `npm run dev`), package-lock, and non-secret `.env.example`.
-- Documented adapter interfaces (`IGmailAdapter`, `IMyTrackerAdapter`, `IBrowserAdapter`, `ITelegramAdapter`) and safe local configuration.
-- Captured implementation evidence index keyed by AT/G IDs.
+| Milestone | State | Completed code / remaining evidence |
+|---|---|---|
+| M0 Fresh project/bootstrap | Code complete | TypeScript/React/Vite project, package lock, scripts and instructions exist. Historical clean-checkout evidence should not be mistaken for deployment. |
+| M1 Durable orchestration and ownership | Partial | Isolated in-memory test DB; PostgreSQL JSONB transactional store and cross-process advisory lock; engine safety gates and incident scoping. Need integrated production engine/browser and all-journal consistency, service lifecycle, migration/backup/restore acceptance. |
+| M2 Gmail and Pub/Sub intake | Partial | Live runner uses authenticated Gmail API history plus durable private queue/cursor/dedupe, restart continuation and explicit gap. It still polls history; no deployed Gmail watch/StreamingPull/Pub/Sub ACK service or production long-outage recovery. |
+| M3 BFMR read contracts | Partial / live blocked | Trusted URL/deal API resolver, exact-ID My Tracker reads, shared status rules, account evidence gate and supplier check. Actual DOM selectors, account alignment, provider schema/status/payout/supplier coverage and immediate visibility need evidence. |
+| M4 Reservation and side-effect controls | Partial | Live interactive runner, quantity-one website reservations, post-reservation evaluation/cancellation, Amazon checks/order path, journals, retailer tracking, BFMR writes and daily discrepancy alerts. Amazon layouts and BFMR side-effect contracts are not fully validated live; operator recovery and production notification gates remain incomplete. |
+| M5 Deployment/operations | Not accepted | No supervised deployment, backup/restore proof, health/watch monitoring, operational runbook or complete acceptance report. |
 
-Completion evidence:
-- Setup verified on clean checkout: `npm test`, `npm run typecheck`, and `npm run build` pass cleanly.
-- Zero secrets tracked in Git.
+Do not mark a milestone complete until the relevant offline and live evidence gates in v1.5 are matched to current requirements and documented. The UI is not evidence. The repository currently has uncommitted changes from ongoing work; preserve them.
 
-## M1 Orchestration scaffolding [PARTIAL]
+## Next work, in order
 
-- Added PostgreSQL schema/migration and TypeScript interfaces as scaffolding. The current `src/db/database.ts` implementation stores state in process-local Maps and uses an in-process lock; it is not a PostgreSQL-backed database and does not provide ACID transactions, cross-process ownership, or restart durability.
-- Added an in-memory orchestration model for the T1–T6 transaction boundaries, retry/review states, duplicate checks, and notification gating. These are simulated state transitions, not durable commits around real provider side effects.
-- Added fake Gmail, My Tracker, browser, and Telegram adapters for offline testing. Fake-adapter coverage verifies modeled invariants only; it does not prove provider behavior, persistence, or crash recovery.
+1. **Close identity and provenance release blockers:** collect sanitized Gmail API auth headers and sanitized BFMR account/My Tracker DOM. Implement/test only observed selectors and account association. Provide an empty-account proof mechanism before permitting writes when no known common reservation exists. Confirm no sensitive account content enters fixtures.
+2. **Validate My Tracker read contract:** deal-ID mapping, row IDs, pagination completeness, retention/date behavior, all statuses, quantities, offer IDs, amounts paid, payouts and immediate visibility. Validate supplier-list data. Keep all purchase and cancellation gates closed for unknown values.
+3. **Validate Amazon order path read-only/fixtures first:** authenticated Business account choices, cart line boundaries, free non-Prime shipping, gift persistence, order total, exact thank-you Order # and order-history/package tracking cards. Do not repeat an order to debug identity; inspect Orders after any uncertain action.
+4. **Validate BFMR Purchase/Shipment APIs with a separately authorized, exact test reservation:** capture safe intent/reconciliation evidence; never retry unknown writes until readback resolves them. Confirm actual field values/statuses and local journal behavior.
+5. **Integrate durable service semantics:** database transactions and account ownership are code; integrate Gmail queue, side-effect journals, notification outbox, command attempts and orderly shutdown/recovery. Implement production watch/StreamingPull if required, boot supervision, persistent storage, backup and restore. Consider migration of separate JSON state only with explicit recovery and evidence.
+6. **Operational acceptance:** perform test reservations/cancellations and retailer actions only under the user's explicit live instruction, then record date, code version, test account scope, outcome and limitation. No automatic unattended rollout until all evidence gates and manual recovery procedures work.
 
-Scaffolding evidence:
-- `tests/m1_orchestration.test.ts` exercises the in-memory model and its failure cases.
-- The earlier 11-test result is historical scaffolding evidence, not acceptance of production M1. Current required M1 work remains: implement and migrate the PostgreSQL store; make T1–T6 atomic and durable; implement cross-process singleton ownership; prove restart recovery, cursor preservation, and Telegram outbox behavior against PostgreSQL; then record the resulting test and migration evidence.
-- No production PostgreSQL persistence or live BFMR operation is established by this scaffolding.
+## Current verification snapshot (recorded 12 October 2026)
 
-## M2 Gmail and Pub/Sub intake
+- Full offline suite: 118 passed, zero failed; one PostgreSQL integration is skipped in ordinary suite execution without `BFMR_TEST_DATABASE_URL`.
+- Separately used a disposable PostgreSQL 18 cluster with synthetic state. Restart persistence, rollback, a separately spawned process being denied the account lock, and connection-loss fail-closed behavior passed.
+- `npm run typecheck`, `npm run typecheck:all`, `npm run build`, and `git diff --check` passed after the code fixes.
+- No production DB migration, live BFMR write, Amazon order, tracking update, deployment or Telegram discrepancy alert was run for those fixes.
+- Current documentation-only task must run PDF text/render/layout QA. Do not run additional software tests unless the user asks for testing or verification.
 
-- Implement watch renewal, StreamingPull, persistence before ACK, serialized history reads and email classification.
-- Preserve cursor across restart; perform startup/reconnect continuation. Keep watch baseline separate from consumption cursor.
-- Support both subject families, direct/testing-forward sender policy and single-deal classification.
-- Treat expired/missing established cursor as an explicit fault; no silent reset or Inbox sweep.
+## Release blockers / open issues
 
-Exit criteria: AT-01/02, AT-06/07 and intake portions of AT-13 pass. G-002 fixtures and G-004 recovery evidence are recorded.
+See `OPEN_ISSUES.md`. At minimum: BFMR account DOM/alignment selectors are unverified and block reservation writes; real Gmail auth headers are unverified; My Tracker supplier/status/payout/purchase/shipment contracts are not proven in the current account; Amazon Business order/tracking selectors require live validation; private journals and production database backups/recovery need integration; expired Gmail cursor retains a stop-gap with no authorized Inbox sweep.
 
-## M3 Validate BFMR read contracts
+## Historical progress log
 
-- Implement dedicated authenticated browser navigation and stable deal/offer identity extraction.
-- Implement My Tracker read adapter with secure credentials, verified account alignment and complete date/pagination handling.
-- Validate bundles, color variants, duplicate detection and reported reservation visibility/release behavior using sanitized evidence.
-- Resolve documented contract gaps from actual observations; do not guess field names or guarantees.
+The detailed 10-12 October implementation notes below are retained as chronology. Treat dated test results as historical and apply v1.9 current-state summary above where old entries conflict. Do not infer current completion from an old entry's heading or an old test count.
 
-Exit criteria: AT-04/20/22 and read portions of G-001 pass. Record which live claims remain unproven and prevent unsafe submission/retry paths from using them.
 
-## M4 Reservation and operational controls
+### 12 October 2026 — require exactly one checkout product line before submission
 
-- Implement one-unit website-form submission, reconciliation, one proved-failure retry and review/exhaustion blocks.
-- Implement Telegram acceptance/recovery gates and local status/review/reprocessing CLI.
-- Accept arbitrary retailers and bundles at intake. Apply the 10 October post-confirmation Amazon supplier evaluation to email reservations, cancel when Amazon is absent, and cancel confirmed startup CAPTCHA reservations. No purchasing or other financial/stock checks are approved.
-- Complete offline side-effect failure tests, then designated real reservation tests under the documented gates.
+The final order-review validator now derives item containers from visible ASIN identity and scoped quantity evidence, requires exactly one line with the expected ASIN and quantity one, and repeats this check immediately before the Place your order click. It rejects extra products, duplicate same-ASIN lines, missing identity, unscoped or conflicting quantities, and ambiguous item boundaries even when the combined total is under the approved cap. Repeated product links inside one verified line remain supported. Product-title matching and global quantity text no longer authorize a purchase. Offline intercepted Chromium regressions cover extra lines injected after a valid review and verify zero submit actions; no live purchases were made. Unsupported live checkout layouts stop for review.
 
-Exit criteria: AT-03, AT-08 to AT-18, AT-20, AT-22/23 pass with appropriate offline/live evidence; G-001 and relevant G-005 records are complete.
+### 12 October 2026 — bind Amazon order identity to submission confirmation
 
-## M5 Ubuntu deployment and acceptance
+Removed the post-purchase history lookup that could choose an older purchase of the same product and total. The submission observer now captures labeled Order # values on the thank-you page reached by that submission, bound to its page, ASIN and checked total. The lookup waits for delayed identity on that exact confirmation URL and requires a single distinct order number; it never falls back to history or treats the URL's purchaseId as an Order #. Missing or ambiguous identity stops before the callers record an order or send its number to BFMR, without repeating the purchase. Five intercepted Chromium regressions cover older identical history, delayed/missing/ambiguous confirmation identity, mismatched request evidence and stale evidence invalidation. No live Amazon purchase or BFMR mutation was made.
 
-- Package service startup, exclusive process-group shutdown, headed Chromium desktop access, secure configuration and logs.
-- Implement off-host encrypted backups, restore procedure, disk/watch monitoring and operator runbook.
-- Demonstrate reboot, login/MFA recovery, Telegram failure and stale-backup reconciliation.
-- Assemble the complete acceptance report and identify any unresolved limitations before enabling unattended operation.
+### 12 October 2026 — daily BFMR official status reconciliation
 
-Exit criteria: AT-19/21, G-003 and G-005 pass; all applicable acceptance IDs are accounted for. No acceptance item is marked complete solely from a narrative claim.
+The real-email runner now performs one complete unfiltered My Tracker read per Atlanta day after its nightly Amazon tracking checks. It stores a sanitized, fsynced snapshot of all open BFMR rows and updates each matching Amazon ledger entry with BFMR's observed status, quantity, purchase/shipment IDs, order number and tracking number. It compares the new read with the prior snapshot and local orders, then sends bounded Telegram messages for discrepancies. The notification text is journaled before sending and retried on delivery failure. New Gmail messages take priority before the BFMR read. Synthetic tests cover all-open snapshot persistence, mismatch alerts, once-daily scheduling and Telegram retry. The local files are the current runner's durable state; the intended PostgreSQL database is not implemented. No live BFMR or Telegram request was made for this change.
 
-## Progress updates
+### 12 October 2026 — nightly Amazon shipment tracking in the real-email runner
+
+Confirmed multi-deal Amazon purchases now persist exact retailer Order #, BFMR reservation ID, ASIN and verified total in an fsynced private local ledger before the batch journal marks ordering finished. The fixed-ASIN purchase test also records future confirmed purchases there without a BFMR reservation. When the real-email runner is active, its idle loop checks due orders after 03:00 `America/New_York` daily. Each read-only Playwright lookup opens the approved Amazon Orders page in the existing browser context, requires one visible order section with matching Order #, ASIN and total, then reads only its scoped tracking links. Multiple labeled package tracking numbers are stored separately; an ambiguous/missing order or unsupported tracking control alerts and preserves existing data. Gmail history is probed before each order, so new deal processing takes priority between lookups. Each lookup has a 90-second deadline. A just-purchased order waits until the next Atlanta 03:00. Synthetic tests cover DST timing, durable mapping, new-mail yielding and exact order/package selection. The authenticated Amazon Orders layout has not been validated live; no live tracking check or order was performed for this change. The live runner still lacks a production durable Gmail queue and must remain running for scheduled checks.
+
+### 12 October 2026 — BFMR purchase and shipment submission from confirmed Amazon orders
+
+The multi-deal runner now journals and submits each confirmed Amazon Order # as a BFMR Purchase through the documented `POST /api/v2/my-tracker` request for its exact reservation. A complete unfiltered My Tracker read must show the same reservation/deal, quantity one, Amazon Order # and purchase ID before the batch proceeds. The nightly Amazon tracking callback submits one verified package tracking number as a BFMR Shipment against that purchase ID, then requires exact shipment ID and tracking-number readback. Intent is fsynced before each POST. After an uncertain POST or missing readback, no automatic repeat is made; the nightly path alerts for review. Multiple package numbers for one BFMR unit stop for manual matching. The standalone Amazon purchase test has no BFMR reservation and does not submit to BFMR. Synthetic tests prove request shape, exact-ID matching, idempotency and no repeat after an uncertain response; BFMR's actual mutation and readback fields have not been validated live.
+
+### 11 October 2026 — multi-deal live email runner (code only)
+
+Added ordered trusted deal-link extraction for body-announced multi-deal emails whose declared deal count matches the distinct links. The real-email runner performs all quantity-one BFMR reservation attempts first, confirms each exact reservation through My Tracker, and then evaluates confirmed reservations for Amazon supplier presence. Non-Amazon reservations use the existing exact-ID cancellation path. It never creates a second BFMR reservation for a qualifying deal. For retained reservations with one item, one direct Amazon product link and exact payout, the unattended checkout path checks a $100 order cap, BFMR payout at least the complete Amazon order total, and a $200 cumulative exposure cap, along with gift, selected free non-Prime delivery and visible selected address/card sections. Exposure is existing unpaid My Tracker expected payouts (excluding the current reservation) plus the proposed Amazon total. Definitive checkout rule failures cancel the exact reservation after exact cart cleanup; missing/ambiguous evidence or uncertain actions stop for review. The status/payout mapping and complete coverage of unpaid My Tracker rows remain unverified, so the exposure reader and order submission are disabled by default. No automatic replay is added.
+
+The two rendered multi-deal sample PDFs show two product bullets each. Their plain text extraction hides the deal links, but Poppler XML extraction of the supplied PDF preserves its two trusted deal URLs. Neither PDF proves MIME authentication. The fixed-ASIN purchase test keeps its specifically authorized duplicate-warning continuation; the new arbitrary-product path does not click that warning and instead requires manual Orders review. A local fsynced batch journal records confirmed references and stage transitions; an incomplete batch stops a later live run for manual My Tracker/Orders reconciliation. This is a stop guard, not automatic crash recovery or PostgreSQL durability. The multi-deal live runner has not been run live. Its Gmail history baseline and local journals still leave M1/M2 production durability and intake incomplete, so this code is not ready for unattended operation.
+
+### 12 October 2026 — local PDF test entrypoint
+
+Added `test-multi-deal-pdf`, which extracts the supplied Outlook PDF's two product bullets and embedded BFMR deal-detail links, validates a one-to-one ordered match through the shared intake parser, and reports the result without account mutations by default. `--live` passes that same parsed message to the existing startup and multi-deal processing flow, with its current live gates and recovery journal. The PDF is a manually supplied test source; it does not establish original email authentication. The default preview was run against the supplied file and identified both expected deals. No live reservations, cancellations, or Amazon actions were run for this entrypoint.
 
 ### 11 October 2026 — one-item Amazon purchase test command
 
@@ -183,7 +191,7 @@ The purchase CLI now rejects spending caps above $100 and rechecks both the cap 
 
 ### 11 October 2026 — capture Amazon Order # after purchase
 
-After a confirmed purchase, the CLI clicks Returns and Orders and reads the first displayed order section matching the purchased ASIN or exact product title. It captures the section's Order # only when its total matches the approved purchase total, and displays the result in the terminal. The Amazon Business thank-you wording is recognized even when the confirmation shows only a product image. The thank-you URL purchaseId is never treated as the Order #. Retrieval failure reports that the purchase was placed and prohibits repeating it. No tests or live actions were run for this change.
+Historical behavior, superseded by the 12 October submission-confirmation identity fix above: after a confirmed purchase, the CLI clicked Returns and Orders and read the first displayed order section matching the purchased ASIN or exact product title and approved total. That did not establish that the order was newly submitted. The current code requires a unique Order # from this submission's thank-you confirmation and stops for review if identity is missing. The thank-you URL purchaseId is never treated as the Order #.
 
 ### 11 October 2026 — Amazon duplicate-order warning
 
@@ -208,3 +216,7 @@ The user's live run confirmed placement and navigated to Orders, then failed wit
 ### 11 October 2026 — user-confirmed purchase-to-order-ID success and v1.8 handoff
 
 Following the browser evaluation fix, the user reported that the complete purchase test worked, including Order # capture. The supplied preceding live log had already confirmed the duplicate-warning continuation, placement and navigation to Orders at $99.99; the final successful run is user-reported rather than a new agent-run regression suite. Created BFMR_Solution_Design_Specification_v1.8.pdf with a 13-page current-state guide covering Amazon safeguards, cart-first preparation, exact-PID browser attachment, body-only email classification, evidence boundaries and production gaps, followed by all 61 historical v1.7 pages. Saved editable current-state Markdown beside it. PDF rendering and text-preservation checks were performed; no code tests, typecheck, build or live actions were run.
+
+## 12 October 2026 review corrections
+
+Implemented review items 1–6 and 9–12 with offline regression coverage: exact reservation identity and lifecycle matching, Gmail provenance/mode, account-evidence gate, durable Gmail queue/cursor, shared unpaid exposure rules, reservation history/discrepancies, uncertain outcomes, incident-specific blocks, isolated test transactions plus durable PostgreSQL/account locking, and honest dashboard evidence. Standard and extended TypeScript checks and build pass. Offline suite: 118 pass, zero fail; PostgreSQL integration runs separately against a disposable cluster. Live account selectors/auth-header fixtures remain a release gate, not completed integration evidence. Detailed setup and limits: `REVIEW_FIXES_2026-10-12.md`.

@@ -1,3 +1,4 @@
+import { verifyBfmrAccountIdentity } from '../services/bfmrAccountIdentity';
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -311,8 +312,10 @@ export class PlaywrightBfmrBrowser {
       return 'PAGE_ERROR';
     }
 
-    if (expectedAccount) {
-      console.log('Confirm the visible BFMR account matches the configured account before continuing.');
+    if (!await verifyBfmrAccountIdentity(page, expectedAccount)) {
+      this.verifiedDealTarget = null;
+      console.error('BFMR browser/API account identity could not be positively verified. Reservation actions are blocked.');
+      return 'AUTH_REQUIRED';
     }
     this.verifiedDealTarget = dealUrl || null;
     console.log('✅ BFMR website session is authenticated.');
@@ -337,6 +340,7 @@ export class PlaywrightBfmrBrowser {
     if (await page.locator(loginSelector).first().isVisible().catch(() => false)) return false;
     if (!(await page.locator('body').innerText().then((text) => text.trim().length > 0).catch(() => false))) return false;
 
+    if (!await verifyBfmrAccountIdentity(page, process.env.BFMR_EXPECTED_ACCOUNT)) return false;
     this.verifiedDealTarget = dealUrl;
     return true;
   }
@@ -436,6 +440,10 @@ export class PlaywrightBfmrBrowser {
           dealId,
           errorDetail: 'BFMR presented a CAPTCHA/access challenge; no reservation action was taken',
         };
+      }
+
+      if (!await verifyBfmrAccountIdentity(page, process.env.BFMR_EXPECTED_ACCOUNT)) {
+        return { status: 'AUTH_REQUIRED', dealId, errorDetail: 'Browser/API account alignment is unverified; no reservation submitted.' };
       }
 
       // Check if deal is closed / no slots available

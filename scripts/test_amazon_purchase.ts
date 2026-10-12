@@ -1,6 +1,9 @@
 import './loadEnv';
 import { createInterface } from 'node:readline/promises';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
+import os from 'node:os';
+import path from 'node:path';
+import { amazonOrderLedger } from '../src/services/amazonOrderLedger';
 import {
   AMAZON_PURCHASE_TEST_PRODUCT,
   amazonProductAsin,
@@ -101,8 +104,11 @@ async function main() {
     console.log('[Amazon purchase test] Rechecking the final order screen before the single permitted submission.');
     const result = await submitAmazonOrderOnce(page, TARGET_ASIN, expectedTitle, process.env.AMAZON_DEFAULT_CARD, { maxTotalCents, confirmedTotalCents: review.totalCents, log: message => console.log(`[Amazon purchase test] ${message}`) });
     if (result === 'PLACED') {
-      console.log('[Amazon purchase test] Amazon confirmed the order. Retrieving Order # from Returns and Orders.');
+      console.log('[Amazon purchase test] Amazon confirmed the order. Reading Order # from this purchase confirmation.');
       const orderId = await retrieveAmazonOrderId(page, TARGET_ASIN, expectedTitle, review.totalCents);
+      const ledger = amazonOrderLedger(process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(os.homedir(), '.local/state/bfmr/amazon-orders.json'));
+      await ledger.add({ orderId, reserveId: null, dealId: null, asin: TARGET_ASIN,
+        totalCents: review.totalCents, purchasedAt: new Date().toISOString(), status: 'PENDING', packages: [] });
       console.log(`[Amazon purchase test] Order #: ${orderId}`);
     } else {
       console.error('[Amazon purchase test] Order submission outcome is uncertain. Do not rerun; inspect Amazon Orders first.');

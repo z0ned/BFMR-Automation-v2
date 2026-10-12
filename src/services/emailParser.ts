@@ -68,9 +68,12 @@ export function parseIncomingEmail(raw: {
     /more reservations added/i.test(readableBody) ||
     /added more reservations/i.test(readableBody);
 
-  const bodyAnnouncesNewDeal = /\bwe posted a new deal\b/i.test(readableBody);
+  const bodyAnnouncesNewDeal = /\bwe posted (?:a|an|two|three|four|five|six|seven|eight|nine|ten|\d+) new deals?\b/i.test(readableBody);
   const bodyIsUpdate = /\b(?:we increased our payout|we have added more reservations|we added more reservations|added more reservations|payout increase|new deal update)\b/i.test(readableBody);
   const isNewDealAnnouncement = bodyAnnouncesNewDeal && !bodyIsUpdate;
+  const announcedCountWord = /\bwe posted (two|three|four|five|six|seven|eight|nine|ten|\d+) new deals\b/i.exec(readableBody)?.[1]?.toLowerCase();
+  const wordCounts: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+  const announcedCount = announcedCountWord ? (wordCounts[announcedCountWord] ?? Number(announcedCountWord)) : undefined;
 
   // Extract link: from HTML href attributes and plain text URLs
   const candidateUrls: string[] = [];
@@ -127,6 +130,8 @@ export function parseIncomingEmail(raw: {
     canonicalDealId = deal.id;
   }
   const isSingleDeal = isNewDealAnnouncement && deals.size === 1 && !isMultiDeal && !isAdditionalSlotNotice;
+  const isMultiDealAnnouncement = isNewDealAnnouncement && isMultiDeal && !isAdditionalSlotNotice &&
+    deals.size >= 2 && announcedCount === deals.size;
 
   // Only an explicit body field is enough to identify the retailer. Retailer
   // names in subjects or product names (for example, an Apple product) are not.
@@ -155,6 +160,8 @@ export function parseIncomingEmail(raw: {
     isSingleDeal,
     isAdditionalSlotNotice,
     isMultiDeal,
+    isMultiDealAnnouncement,
+    deals: [...deals.values()].map(deal => ({ canonicalDealId: deal.id, dealUrl: deal.url, ...(deal.title ? { dealTitle: deal.title } : {}) })),
     dealUrl,
     canonicalDealId,
     dealTitle,

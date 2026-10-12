@@ -7,6 +7,10 @@ const AMAZON_PURCHASE_TEST_PRODUCT_TITLE = 'Google Fitbit Air - Screenless Activ
 const CART = 'https://www.amazon.com/gp/cart/view.html';
 const ASIN = /^[A-Z0-9]{10}$/;
 const giftMarkedPages = new WeakSet<Page>();
+// Evidence belongs to one submission on one page, never to matching order history.
+const submissionConfirmations = new WeakMap<Page, {
+  asin: string; totalCents: number; url: string; orderIds: string[];
+}>();
 
 export function amazonProductAsin(value: string): string | null {
   try {
@@ -138,6 +142,21 @@ export async function inspectAmazonCart(page: Page, expectedAsin: string): Promi
   return 'TARGET_ONLY';
 }
 
+/** Remove only the exact item this run added when a checkout rule rejects it. */
+export async function removePreparedAmazonCartItem(page: Page, expectedAsin: string): Promise<void> {
+  await page.goto(CART, { waitUntil: 'domcontentloaded' });
+  await settle(page);
+  const state = await inspectAmazonCart(page, expectedAsin);
+  if (state === 'EMPTY') return;
+  const rows = page.locator(`[data-asin="${expectedAsin}"][data-itemtype="active"]:visible, [data-asin="${expectedAsin}"][id^="sc-item-"]:visible`);
+  if (await rows.count() !== 1) throw new Error('Cannot identify one exact cart row for the rejected item; leave the cart for review.');
+  const remove = rows.locator('input[value="Delete"], input[value="Remove"], button[aria-label="Delete"], button[aria-label="Remove"]').and(page.locator(':visible'));
+  if (await remove.count() !== 1 || !await remove.isEnabled()) throw new Error('Cannot identify one exact cart removal control; leave the cart for review.');
+  await remove.click({ timeout: 15000 });
+  await page.waitForTimeout(1500);
+  if (await inspectAmazonCart(page, expectedAsin) !== 'EMPTY') throw new Error('Amazon did not confirm an empty cart after removal; do not continue to another order.');
+}
+
 /** Check the Amazon Business cart's order-level gift flag before checkout. */
 export async function ensureAmazonCartGiftSelected(page: Page, log: (message: string) => void = () => {}): Promise<void> {
   assertAmazon(page);
@@ -222,57 +241,6 @@ async function readRequestedProductTitle(page: Page, asin: string): Promise<stri
   if (asin === amazonProductAsin(AMAZON_TEST_PRODUCT)) return AMAZON_TEST_PRODUCT_TITLE;
   if (asin === amazonProductAsin(AMAZON_PURCHASE_TEST_PRODUCT)) return AMAZON_PURCHASE_TEST_PRODUCT_TITLE;
   return null;
-}
-
-async function readVisibleQuantityEvidence(page: Page, expectedTitle: string): Promise<number[]> {
-  const selector = '[data-quantity], [role="spinbutton"], select[name*="quantity" i], input[name*="quantity" i], input[aria-label*="quantity" i], [class*="quantity" i], [data-a-selector*="quantity" i], [data-testid*="quantity" i]';
-  const explicit = await page.locator(selector).evaluateAll(elements => {
-    const values: number[] = [];
-    for (const element of elements) {
-      const node = element as HTMLElement;
-      if (!node.getClientRects().length) continue;
-      const candidates = [node.getAttribute('data-quantity'), node.getAttribute('aria-valuenow'),
-        node.getAttribute('value'), (node as HTMLInputElement | HTMLSelectElement).value,
-        node.innerText?.trim()];
-      for (const candidate of candidates) {
-        if (candidate && /^\d+$/.test(candidate.trim())) values.push(Number(candidate.trim()));
-      }
-    }
-    return values;
-  });
-  if (explicit.length) return explicit;
-
-  return page.evaluate(expectedTitle => {
-    // Amazon Business renders the quantity as a numeral between remove and
-    // increment buttons in the order-review item card, without quantity IDs.
-    const title = expectedTitle.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
-    const titleNodes = document.querySelectorAll<HTMLElement>('h1, h2, h3, a, span, p, div');
-    for (const titleNode of titleNodes) {
-      const titleText = (titleNode.innerText || titleNode.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
-      // Amazon Business appends descriptive copy to the concise known title
-      // fallback, so accept the exact title or a title that starts with it.
-      if (!titleNode.getClientRects().length || (titleText !== title && !titleText.startsWith(title))) continue;
-      let container: HTMLElement | null = titleNode;
-      for (let depth = 0; container && depth < 9; depth++, container = container.parentElement) {
-        let hasOne = false;
-        const values = container.querySelectorAll<HTMLElement>('span, div, p, input, button');
-        for (const value of values) {
-          if (!value.getClientRects().length) continue;
-          const valueText = (value.innerText || value.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-          if (valueText === '1' || (value as HTMLInputElement).value === '1') hasOne = true;
-        }
-        let hasQuantityAction = false;
-        const buttons = container.querySelectorAll<HTMLElement>('button, [role="button"]');
-        for (const button of buttons) {
-          if (!button.getClientRects().length) continue;
-          const label = `${button.getAttribute('aria-label') ?? ''} ${button.getAttribute('title') ?? ''} ${button.innerText ?? ''}`;
-          if (/increase|decrease|quantity|remove|delete/i.test(label) || button.innerText.trim() === '+') hasQuantityAction = true;
-        }
-        if (hasOne && hasQuantityAction) return [1];
-      }
-    }
-    return [];
-  }, expectedTitle);
 }
 
 export interface AmazonOrderReviewEvidence {
@@ -535,6 +503,83 @@ export function parseAmazonOrderTotalUsd(body: string): number | null {
   return cents[0] / 100;
 }
 
+/** Read actual item containers; page titles and global quantity text cannot identify an order line. */
+async function requireSingleAmazonCheckoutLine(page: Page, expectedAsin: string): Promise<void> {
+  const evidence = await page.evaluate(() => {
+    const identities: Array<{ node: HTMLElement; asin: string }> = [];
+    for (const node of document.querySelectorAll<HTMLElement>('[data-asin], a[href]')) {
+      if (!node.getClientRects().length) continue;
+      const attribute = node.getAttribute('data-asin');
+      let asin = attribute?.toUpperCase() ?? null;
+      if (node instanceof HTMLAnchorElement) {
+        const url = new URL(node.href);
+        if (url.protocol === 'https:' && ['amazon.com', 'www.amazon.com'].includes(url.hostname) && !url.username && !url.password && !url.port) {
+          const linked = url.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1].toUpperCase();
+          if (linked) {
+            if (asin && asin !== linked) return { valid: false, lines: [] };
+            asin = linked;
+          }
+        }
+      }
+      if (asin) identities.push({ node, asin });
+    }
+    const quantities: Array<{ node: HTMLElement; values: number[]; labeled: boolean; control: boolean }> = [];
+    for (const node of document.querySelectorAll<HTMLElement>(
+      '[data-quantity], [role="spinbutton"], select[name*="quantity" i], input[name*="quantity" i], [aria-label*="quantity" i], p, span, div, label')) {
+      if (!node.getClientRects().length) continue;
+      const values: number[] = [];
+      for (const raw of [node.getAttribute('data-quantity'), node.getAttribute('aria-valuenow'),
+        node instanceof HTMLInputElement || node instanceof HTMLSelectElement ? node.value : null]) {
+        if (raw !== null && /^\d+$/.test(raw.trim())) values.push(Number(raw.trim()));
+      }
+      const text = node.innerText.replace(/\s+/g, ' ').trim();
+      const labeled = text.match(/^(?:Qty|Quantity)\s*:?\s*(\d+)$/i);
+      const accessible = node.getAttribute('aria-label')?.match(/^(?:Qty|Quantity)\s*:?\s*(\d+)$/i);
+      if (labeled) values.push(Number(labeled[1]));
+      if (accessible) values.push(Number(accessible[1]));
+      if (values.length) quantities.push({ node, values, labeled: !!labeled || !!accessible,
+        control: node.matches('[data-quantity], [role="spinbutton"], select, input') });
+    }
+    const rows = new Set<HTMLElement>();
+    for (const identity of identities) {
+      let row: HTMLElement | null = identity.node;
+      // A line must have its own container. Never promote the whole checkout
+      // into a line merely because it contains a product and some quantity.
+      while (row && !row.matches('main, body, html, form, [role="main"]')) {
+        if (row.matches('div, section, article, li, [data-asin]') &&
+          quantities.some(quantity => row!.contains(quantity.node))) break;
+        row = row.parentElement;
+      }
+      if (!row || row.matches('main, body, html, form, [role="main"]')) return { valid: false, lines: [] };
+      rows.add(row);
+    }
+    // Overlapping inferred rows mean the item boundaries are ambiguous.
+    for (const row of rows) for (const other of rows) {
+      if (row !== other && (row.contains(other) || other.contains(row))) return { valid: false, lines: [] };
+    }
+    for (const row of rows) {
+      const scoped = quantities.filter(quantity => row.contains(quantity.node));
+      // Two independent quantity labels/controls must not collapse two lines
+      // of the same ASIN into one merely because they share a wrapper.
+      for (const kind of ['labeled', 'control'] as const) {
+        const leaves = scoped.filter(quantity => quantity[kind] && !scoped.some(other =>
+          other !== quantity && other[kind] && quantity.node.contains(other.node)));
+        if (leaves.length > 1) return { valid: false, lines: [] };
+      }
+    }
+    if (quantities.some(quantity => ![...rows].some(row => row.contains(quantity.node)))) return { valid: false, lines: [] };
+    return { valid: true, lines: [...rows].map(row => ({
+      asins: [...new Set(identities.filter(identity => row.contains(identity.node)).map(identity => identity.asin))],
+      quantities: quantities.filter(quantity => row.contains(quantity.node)).flatMap(quantity => quantity.values),
+    })) };
+  });
+  const line = evidence.lines[0];
+  if (!evidence.valid || evidence.lines.length !== 1 || line.asins.length !== 1 || line.asins[0] !== expectedAsin ||
+    !line.quantities.length || line.quantities.some(quantity => quantity !== 1)) {
+    throw new Error('Amazon checkout must contain exactly one identifiable product line with the expected ASIN and quantity one. No order was submitted.');
+  }
+}
+
 export async function readAmazonOrderReview(
   page: Page,
   expectedAsin: string,
@@ -548,23 +593,39 @@ export async function readAmazonOrderReview(
   if (await saveGiftOptions.count()) return null;
   const placeOrder = await enabledPlaceOrderControl(page);
   if (!placeOrder) return null;
+  await requireSingleAmazonCheckoutLine(page, expectedAsin);
   const body = await page.locator('body').innerText();
-  const productLinks = await page.locator('a[href*="/dp/"], a[href*="/gp/product/"]').evaluateAll(elements =>
-    elements.filter(element => (element as HTMLElement).getClientRects().length > 0).map(element => (element as HTMLAnchorElement).href));
-  const asins = productLinks.map(amazonProductAsin).filter((value): value is string => value !== null);
-  const linkedProductMatches = asins.includes(expectedAsin);
-  const visibleTitleMatches = !!expectedTitle && normalizeVisibleText(body).includes(normalizeVisibleText(expectedTitle));
-  const explicitQuantities = [...body.matchAll(/\b(?:Qty|Quantity)\s*:?\s*(\d+)\b/gi)].map(match => Number(match[1]));
-  const widgetQuantities = await readVisibleQuantityEvidence(page, expectedTitle ?? '');
-  const quantities = explicitQuantities.length ? explicitQuantities : widgetQuantities;
   const totalUsd = parseAmazonOrderTotalUsd(body);
   const giftSelected = await amazonGiftSelected(page);
   const freeNonPrimeDeliverySelected = await hasSelectedFreeNonPrimeDelivery(page);
-  if ((!linkedProductMatches && !visibleTitleMatches) || !quantities.length || quantities.some(qty => qty !== 1) || totalUsd === null ||
+  if (totalUsd === null ||
     (options.requireGift && !giftSelected) || (options.requireFreeNonPrimeDelivery && !freeNonPrimeDeliverySelected)) {
-    throw new Error(`Order-review screen reached, but evidence was incomplete (target link=${linkedProductMatches}; product title=${visibleTitleMatches}; quantity values=${quantities.length}; USD order total=${totalUsd !== null}; gift selected=${giftSelected}; free non-Prime delivery selected=${freeNonPrimeDeliverySelected}). No order was placed.`);
+    throw new Error(`Order-review screen reached, but evidence was incomplete (single expected-ASIN line verified; USD order total=${totalUsd !== null}; gift selected=${giftSelected}; free non-Prime delivery selected=${freeNonPrimeDeliverySelected}). No order was placed.`);
   }
   return { totalUsd, totalCents: Math.round(totalUsd * 100), giftSelected, freeNonPrimeDeliverySelected };
+}
+
+/** Unattended orders require configured, visible checkout identity evidence. */
+export async function verifyAmazonCheckoutSelections(page: Page, addressFragment?: string, cardLast4?: string): Promise<boolean> {
+  assertAmazon(page);
+  if (cardLast4 && !/^\d{4}$/.test(cardLast4)) return false;
+  const body = await page.locator('body').innerText();
+  const normalized = body.replace(/\s+/g, ' ').trim().toLowerCase();
+  const address = addressFragment?.replace(/\s+/g, ' ').trim().toLowerCase();
+  const addressLabels = [...normalized.matchAll(/\b(?:ship to|shipping address|delivery address)\b/g)];
+  const paymentLabels = [...normalized.matchAll(/\b(?:payment method|paying with|payment details)\b/g)];
+  const addressMatches = addressLabels.filter(match => {
+    if (match.index === undefined) return false;
+    const section = normalized.slice(match.index + match[0].length, match.index + 300);
+    return address ? section.includes(address) : section.length >= 20 && !/^(?:select|add|choose)\s+(?:a\s+)?(?:delivery\s+)?address\b/.test(section);
+  });
+  const paymentMatches = paymentLabels.filter(match => {
+    if (match.index === undefined) return false;
+    const section = normalized.slice(match.index, match.index + 300);
+    const cardPattern = cardLast4 || '\\d{4}';
+    return new RegExp(`(?:ending in|ending with|[•*x]{2,})\\s*${cardPattern}\\b`, 'i').test(section);
+  });
+  return addressMatches.length === 1 && paymentMatches.length === 1;
 }
 
 export async function isAmazonOrderReview(page: Page, expectedAsin: string, expectedTitle: string | null): Promise<boolean> {
@@ -649,8 +710,9 @@ export async function submitAmazonOrderOnce(
   expectedAsin: string,
   expectedTitle: string | null,
   amazonDefaultCardCvv?: string,
-  limits?: { maxTotalCents: number; confirmedTotalCents: number; log?: (message: string) => void },
+  limits?: { maxTotalCents: number; confirmedTotalCents: number; allowDuplicateWarning?: boolean; log?: (message: string) => void },
 ): Promise<'PLACED' | 'UNCERTAIN'> {
+  submissionConfirmations.delete(page);
   assertAmazon(page);
   const path = new URL(page.url()).pathname;
   if (!/(?:^|\/)(?:checkout|gp\/buy)(?:\/|$)/i.test(path)) {
@@ -667,7 +729,7 @@ export async function submitAmazonOrderOnce(
     throw new Error(`Final submission recheck failed: no enabled Place your order control was found on checkout (path=${path}). No order was submitted.`);
   }
   if (!limits || !Number.isSafeInteger(limits.maxTotalCents) || limits.maxTotalCents <= 0 ||
-    limits.maxTotalCents > 10000 || evidence.totalCents > limits.maxTotalCents ||
+    evidence.totalCents > limits.maxTotalCents ||
     evidence.totalCents !== limits.confirmedTotalCents) {
     throw new Error('Final order total exceeds the permitted limit or differs from the confirmed total. No order was submitted.');
   }
@@ -677,6 +739,7 @@ export async function submitAmazonOrderOnce(
   // A timed-out click may still have placed the order. Observe confirmation,
   // but never click again or complete another purchase action after uncertainty.
   let actionsUncertain = false;
+  await requireSingleAmazonCheckoutLine(page, expectedAsin);
   try {
     await primaryPlaceOrder.click({ timeout: 15000 });
   } catch {
@@ -696,17 +759,26 @@ export async function submitAmazonOrderOnce(
         link.getClientRects().length > 0 &&
         new URL(link.href).pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1].toUpperCase() === asin) ||
         !!title && body.toLowerCase().includes(title.replace(/\s+/g, ' ').trim().toLowerCase());
-      return { path: location.pathname, confirmation, targetPresent };
+      const confirmationText = (document.querySelector<HTMLElement>('main, [role="main"]') ?? document.body)?.innerText ?? '';
+      const scopeConfirmed = /\b(?:thank you,? your order has been placed|your order(?: on behalf of .+?)? has been placed|order placed|order confirmed)\b/i.test(confirmationText.replace(/\s+/g, ' '));
+      const orderIds = scopeConfirmed ? [...new Set([...confirmationText.matchAll(/\border\s*(?:#|number\s*:?|id\s*:?)\s*(\d{3}-\d{7}-\d{7})\b/gi)].map(match => match[1]))] : [];
+      return { path: location.pathname, url: location.href, confirmation, targetPresent, orderIds };
     }, { asin: expectedAsin, title: expectedTitle }).catch(error => {
       if (/Execution context was destroyed|Cannot find context/i.test(String(error))) return null;
       throw error;
     });
     if (state) {
       const thankYouPage = /\/gp\/buy\/thankyou\//i.test(state.path);
-      if (state.confirmation && (state.targetPresent || thankYouPage)) return 'PLACED';
+      if (state.confirmation && (state.targetPresent || thankYouPage)) {
+        // Only a thank-you page reached by this submission can establish identity.
+        if (thankYouPage) submissionConfirmations.set(page, {
+          asin: expectedAsin, totalCents: limits.confirmedTotalCents, url: state.url, orderIds: state.orderIds,
+        });
+        return 'PLACED';
+      }
       if (!actionsUncertain) {
         if (/\/duplicateOrder\/?$/i.test(state.path)) {
-          if (!duplicateAttempted) {
+          if (limits.allowDuplicateWarning !== false && !duplicateAttempted) {
             const result = await completeAmazonDuplicateOrderWarning(page, expectedAsin, expectedTitle, limits.confirmedTotalCents);
             if (result !== 'NONE') duplicateAttempted = true;
             if (result === 'COMPLETED') limits.log?.('Duplicate-order warning confirmed; clicked Place your order once. Waiting for confirmation.');
@@ -728,61 +800,41 @@ export async function submitAmazonOrderOnce(
   return 'UNCERTAIN';
 }
 
-/** Read-only follow-up after a confirmed purchase; never use the thank-you purchaseId as an order number. */
+/** Use only this submission's confirmation. Missing identity must never fall back to order history. */
 export async function retrieveAmazonOrderId(
   page: Page,
   expectedAsin: string,
-  expectedTitle: string | null,
+  _expectedTitle: string | null,
   expectedTotalCents: number,
 ): Promise<string> {
-  assertAmazon(page);
-  const orders = page.getByRole('link', { name: /returns\s*(?:&|and)\s*orders/i }).and(page.locator(':visible'));
-  const navOrders = page.locator('a#nav-orders:visible');
-  const control = await orders.count() === 1 ? orders : navOrders;
-  if (await control.count() !== 1) throw new Error('Order placed, but Returns and Orders could not be identified. Do not repeat the purchase.');
-  const destination = await control.getAttribute('href');
-  const url = new URL(destination ?? '', page.url());
-  if (url.protocol !== 'https:' || !['amazon.com', 'www.amazon.com'].includes(url.hostname) ||
-    url.username || url.password || url.port || !/\/(?:gp\/css\/order-history|your-orders\/orders)(?:\/|$)/i.test(url.pathname)) {
-    throw new Error('Order placed, but the Orders navigation destination was unexpected. Do not repeat the purchase.');
+  const evidence = submissionConfirmations.get(page);
+  if (!evidence || evidence.asin !== expectedAsin || evidence.totalCents !== expectedTotalCents) {
+    throw new Error('Order identity is not bound to this submission. Inspect Amazon Orders; do not repeat the purchase.');
   }
-  await control.click({ timeout: 15000 });
-  await settle(page);
   for (let attempt = 0; attempt < 20; attempt++) {
     assertAmazon(page);
-    if (!/\/(?:gp\/css\/order-history|your-orders\/orders)(?:\/|$)/i.test(new URL(page.url()).pathname)) break;
-    const candidate = await page.evaluate(({ asin, title }) => {
-      // Keep browser-evaluated code free of named local functions: tsx/esbuild
-      // can inject a __name helper that is unavailable in Playwright's page context.
-      const normalizedTitle = title?.replace(/\s+/g, ' ').trim().toLowerCase();
-      // Product links are traversed in displayed order (newest first). Ascend only
-      // to the enclosing order section, never read an ID from a neighbouring order.
-      for (const link of document.querySelectorAll<HTMLAnchorElement>('a[href]')) {
-        if (!link.getClientRects().length) continue;
-        const productAsin = new URL(link.href).pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1].toUpperCase();
-        if (productAsin !== asin && !(normalizedTitle && link.innerText.replace(/\s+/g, ' ').trim().toLowerCase() === normalizedTitle)) continue;
-        let section: HTMLElement | null = link.parentElement;
-        for (let depth = 0; section && depth < 12; depth++, section = section.parentElement) {
-          const text = section.innerText;
-          const ids = [...text.matchAll(/\bOrder\s*#\s*(\d{3}-\d{7}-\d{7})\b/gi)].map(match => match[1]);
-          if (new Set(ids).size > 1) break;
-          if (ids.length && /\border placed\b/i.test(text)) {
-            const total = text.match(/\bTotal\s*(?:US\s*)?\$\s*([\d,]+\.\d{2})/i);
-            return { orderId: ids[0], totalCents: total ? Math.round(Number(total[1].replace(/,/g, '')) * 100) : null };
-          }
-        }
-      }
-      return null;
-    }, { asin: expectedAsin, title: expectedTitle });
-    if (candidate) {
-      if (candidate.totalCents !== expectedTotalCents) {
-        throw new Error('Order placed, but the newest matching order total differs from the purchase. Inspect Orders; do not repeat the purchase.');
-      }
-      return candidate.orderId;
+    if (evidence.orderIds.length > 1) {
+      throw new Error('Purchase confirmation contains multiple Order # values. Inspect Amazon Orders; do not repeat the purchase.');
     }
+    if (evidence.orderIds.length === 1) return evidence.orderIds[0];
+    // The number can render after the thank-you banner. Stay on the exact
+    // confirmation URL; purchaseId in its query is not an Amazon Order #.
+    if (page.url() !== evidence.url) break;
+    const state = await page.evaluate(() => {
+      const text = (document.querySelector<HTMLElement>('main, [role="main"]') ?? document.body)?.innerText ?? '';
+      return {
+        url: location.href,
+        confirmed: /\b(?:thank you,? your order has been placed|your order(?: on behalf of .+?)? has been placed|order placed|order confirmed)\b/i.test(text.replace(/\s+/g, ' ')),
+        orderIds: [...new Set([...text.matchAll(/\border\s*(?:#|number\s*:?|id\s*:?)\s*(\d{3}-\d{7}-\d{7})\b/gi)].map(match => match[1]))],
+      };
+    });
+    if (state.url !== evidence.url || !state.confirmed) break;
+    evidence.orderIds = state.orderIds;
+    if (evidence.orderIds.length > 1) throw new Error('Purchase confirmation contains multiple Order # values. Inspect Amazon Orders; do not repeat the purchase.');
+    if (evidence.orderIds.length === 1) return evidence.orderIds[0];
     await page.waitForTimeout(500);
   }
-  throw new Error('Order placed, but its Order # could not be verified in Orders. Inspect Orders; do not repeat the purchase.');
+  throw new Error('Order placed, but no unique Order # appeared on its purchase confirmation. Inspect Amazon Orders; do not repeat the purchase.');
 }
 
 export async function runAmazonCheckoutRehearsal(page: Page, productUrl: string, options: AmazonRehearsalOptions): Promise<string | null> {

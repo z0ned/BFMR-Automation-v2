@@ -39,6 +39,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <div role="status" className="bg-amber-950 text-amber-200 p-4">Demonstration mode — all displayed activity is simulated. Live service disconnected; operational status unknown.</div>
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -68,9 +69,9 @@ export function App() {
             <span>Authoritative Baseline: Solution Design Specification v1.5</span>
           </div>
           <div className="flex items-center space-x-4 font-mono">
-            <span>Playwright Headed Chromium</span>
+            <span>Live browser status unknown</span>
             <span>•</span>
-            <span>Local PostgreSQL</span>
+            <span>Demo data in browser memory</span>
             <span>•</span>
             <span>Port 3000</span>
           </div>

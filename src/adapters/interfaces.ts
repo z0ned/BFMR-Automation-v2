@@ -7,6 +7,8 @@ export interface GmailFetchMessage {
   subject: string;
   body: string;
   inboxAtFetch: boolean;
+  /** Unmodified headers from an authenticated Gmail API response. */
+  headers?: Array<{ name?: string | null; value?: string | null }>;
 }
 
 export interface IGmailAdapter {
@@ -40,6 +42,7 @@ export interface IMyTrackerAdapter {
 }
 
 export interface IBrowserAdapter {
+  close?(): Promise<void>;
   verifySession(accountId: string): Promise<'AUTHENTICATED' | 'AUTH_REQUIRED' | 'CHALLENGE' | 'UNKNOWN'>;
   readDeal(dealUrl: string): Promise<{
     dealId: string;

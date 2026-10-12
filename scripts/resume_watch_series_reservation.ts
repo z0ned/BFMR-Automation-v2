@@ -1,12 +1,12 @@
 import './loadEnv';
 import { createInterface } from 'node:readline/promises';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
-import { checkDealReservation } from '../src/services/bfmrTrackerApi';
+import { checkDealReservation, resolveBfmrDealId } from '../src/services/bfmrTrackerApi';
 import { automaticConfirmation } from '../src/services/automaticConfirmation';
 import { requireReservationAlerts, withReservationFailureAlert } from '../src/services/reservationAlerts';
 
 const dealUrl = 'https://bfmr.com/deals/d-bbsqg';
-const dealId = 'd-bbsqg';
+const emailDealId = 'd-bbsqg';
 
 async function promptFor(readline: ReturnType<typeof createInterface>, prompt: string, expected: string) {
   const answer = await readline.question(prompt);
@@ -38,6 +38,7 @@ async function main() {
       if (!visibleDealTitle) throw new Error('BFMR did not expose a visible deal title for the My Tracker check. No reservation was attempted.');
       console.log(`[Live BFMR resume] BFMR deal title: ${visibleDealTitle}`);
 
+      const dealId = await resolveBfmrDealId((await browser.init()).url());
       const before = await checkDealReservation(dealId, visibleDealTitle);
       if (before.status === 'UNKNOWN') throw new Error(`My Tracker preflight failed: ${before.error}. No reservation was attempted.`);
       if (before.status === 'CONFIRMED' || before.status === 'EXISTING') {
@@ -49,7 +50,7 @@ async function main() {
       if (submission.status === 'AUTH_REQUIRED' || submission.status === 'CLOSED_NO_SLOTS') {
         throw new Error(`The reservation form was not submitted: ${submission.errorDetail || submission.status}.`);
       }
-      const result = await automaticConfirmation(() => checkDealReservation(dealId, visibleDealTitle));
+      const result = await automaticConfirmation(() => checkDealReservation(dealId, visibleDealTitle, 'CONFIRMATION'));
       if (result.status !== 'CONFIRMED') {
         const detail = result.status === 'UNKNOWN'
           ? result.error

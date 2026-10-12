@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "test-amazon-purchase": "tsx scripts/test_amazon_purchase.ts",
     "test-bfmr-ipad-reservation": "tsx scripts/test_bfmr_ipad_reservation.ts",
     "test-amazon-checkout": "tsx scripts/test_amazon_checkout.ts",
@@ -16,11 +16,13 @@
     "wait-for-email": "tsx scripts/wait_for_email.ts",
     "test-real-email": "tsx scripts/test_real_email_e2e.ts",
     "test-real-email-e2e": "tsx scripts/test_real_email_e2e.ts",
+    "test-multi-deal-pdf": "node --import tsx scripts/test_multi_deal_pdf.ts",
     "resume-watch-series-reservation": "tsx scripts/resume_watch_series_reservation.ts",
     "auth-bfmr": "tsx scripts/auth_bfmr.ts",
     "debug-email": "tsx scripts/debug_gmail_intake.ts",
     "auth-gmail": "tsx scripts/auth_gmail_oauth.ts",
-    "preview": "vite preview --host 0.0.0.0 --port 3000"
+    "preview": "vite preview --host 0.0.0.0 --port 3000",
+    "typecheck:all": "tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --esModuleInterop --skipLibCheck scripts/*.ts tests/*.ts"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^6.2.0",
@@ -29,6 +31,7 @@
     "googleapis": "^185.0.0",
     "imapflow": "^2.3.0",
     "lucide-react": "^1.16.0",
+    "pg": "^8.23.1",
     "playwright": "^1.64.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -37,6 +40,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.9",
     "@types/node": "^22.13.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",

@@ -30,6 +30,45 @@ export async function sendReservationFailureAlert(context: string, request: type
   }
 }
 
+export async function sendTrackingFailureAlert(orderId: string, request: typeof fetch = fetch): Promise<void> {
+  const { token, chatId } = requireReservationAlerts();
+  try {
+    const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `Amazon tracking check needs review for order ${orderId}. Inspect Amazon Orders and the local order ledger. New-deal intake continues.`,
+        link_preview_options: { is_disabled: true },
+      }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(15000),
+    });
+    const payload = await response.json() as { ok?: boolean; result?: { message_id?: number } };
+    if (!response.ok || payload.ok !== true || !Number.isInteger(payload.result?.message_id)) throw new Error('Telegram rejected the alert.');
+  } catch {
+    throw new Error('Telegram tracking failure alert was not delivered; inspect the local order ledger.');
+  }
+}
+
+export async function sendBfmrStatusAlert(message: string, request: typeof fetch = fetch): Promise<void> {
+  const { token, chatId } = requireReservationAlerts();
+  try {
+    const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: message.slice(0, 3900),
+        link_preview_options: { is_disabled: true } }),
+      redirect: 'error',
+      signal: AbortSignal.timeout(15000),
+    });
+    const payload = await response.json() as { ok?: boolean; result?: { message_id?: number } };
+    if (!response.ok || payload.ok !== true || !Number.isInteger(payload.result?.message_id)) throw new Error('Telegram rejected the alert.');
+  } catch {
+    throw new Error('Telegram BFMR status alert was not delivered; the durable alert remains pending.');
+  }
+}
+
 export async function withReservationFailureAlert<T>(context: string, action: () => Promise<T>, notify = sendReservationFailureAlert): Promise<T> {
   try { return await action(); }
   catch (error) {

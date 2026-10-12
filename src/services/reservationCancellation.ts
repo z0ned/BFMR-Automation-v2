@@ -26,7 +26,7 @@ export interface CancellationDependencies {
 
 const defaults: CancellationDependencies = {
   readRows: readRecentReservedRows,
-  request: (...args) => fetch(...args),
+  request: (input, init) => fetch(input, init),
   wait: ms => new Promise(resolve => setTimeout(resolve, ms)),
 };
 
