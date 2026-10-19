@@ -1,5 +1,11 @@
 # Decision register
 
+## 19 October 2026 — v22 order–shipment cardinality (D22-01)
+
+The user's approved business rule is a one-to-one relationship between orders and shipments: an order may have zero or one shipment before shipping, and each stored shipment belongs to exactly one order. The target constraint is `SHIPMENTS.order_id NOT NULL UNIQUE` with a foreign key to `ORDERS.id`. This supersedes the earlier v20/v22 multiple-shipment target. See [v22 design specification](BFMR_Solution_Design_Specification_v22.md#3-approved-design-decisions-and-v22-amendments) and [v22 implementation reference](BFMR_Implementation_v22..md#13-current-v22-amendment--19-october-2026).
+
+This is a documentation/target-design change only. Existing package-array journals, application code, database migrations, and provider acceptance remain unchanged; migration must retain multiple-shipment observations as review exceptions rather than silently merge or discard them.
+
 ## Controlling decisions as of 12 October 2026
 
 This section controls when earlier entries below conflict. Full implementation and evidence details are in [Solution Design Specification v1.9](BFMR_Solution_Design_Specification_v1.9.md).

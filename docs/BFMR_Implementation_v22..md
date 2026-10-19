@@ -1,13 +1,13 @@
 # BFMR Automation v2 — Implementation Reference
 
-**VERSION 21 | Existing implementation, file responsibilities, operations, evidence, and remaining work**
+**VERSION 22 | Existing implementation, file responsibilities, operations, evidence, and remaining work**
 
 **Prepared:** 19 October 2026  
 **Project:** BFMR Automation v2  
 **Source baseline:** [Solution Design Specification v20](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md), compiled 16 October 2026  
-**Change type:** Documentation restructuring only; no application behavior, database schema, provider contract, or production acceptance changed.
+**Change type:** Documentation restructuring and 19 October 2026 order–shipment cardinality amendment; no application code, database migration, provider contract, or production acceptance changed.
 
-**Companion:** [Solution Design Specification v21](BFMR_Solution_Design_Specification_v21.md) owns the business and technical requirements, approved decisions, architecture, target 17-table model, reporting semantics, and unresolved design questions.
+**Companion:** [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) owns the business and technical requirements, approved decisions, architecture, target 17-table model, reporting semantics, and unresolved design questions.
 
 > **Implementation snapshot:** Unless explicitly identified as this document restructuring, implementation and evidence statements below are carried from v20's 16 October 2026 review and earlier dated records. This is not a fresh code audit or live validation. The new 17-table schema, expanded single-deal purchasing, and 14-day delivery cutoff are not implemented in that baseline. The dashboard is simulated and the runner is not an accepted unattended production service.
 
@@ -33,6 +33,10 @@ Use this document to locate the existing code, understand the current runtime an
 - Sections 7–8: provider evidence, operational blockers, delivery phases, and proposed regression scenarios.
 - Section 9 and Appendix A: provenance and original-to-split coverage map.
 
+### 1.3 Current v22 amendment — 19 October 2026
+
+The approved business relationship is one-to-one between orders and shipments: an order has zero or one shipment while awaiting shipment, and each shipment belongs to exactly one order. The target constraint is `SHIPMENTS.order_id NOT NULL UNIQUE` with a foreign key to `ORDERS.id`. This supersedes the earlier multiple-shipment target. The existing source snapshot and its package-array ledger are unchanged by this documentation update; migration and runtime integration remain pending. This amendment does not change the separate shipment-to-tracking-reference relationship.
+
 ## 2. Existing implementation and intended changes
 
 | Area | Existing source as reviewed | Intended change retained from v20 / outstanding gate |
@@ -40,7 +44,7 @@ Use this document to locate the existing code, understand the current runtime an
 | BFMR email intake | Authenticated Gmail API history polling, durable file-based cursor/queue, single- and supported multi-new-deal parsing | Both qualifying email types become eligible for the same Amazon purchase pipeline; new messages only. Validate real Gmail authentication headers. |
 | Reservations | Playwright BFMR website form, exact deal ID preflight, quantity-one confirmation, verified supplier evaluation and exact cancellation | Preserve safeguards; do not add reservation API POST fallback. |
 | Amazon purchases | Multi-deal email purchase path; separate fixed-item manual test; checkout verifications | Enable **single-deal purchase** under identical gates and **estimated-delivery cutoff**. Journal all side effects for either email type. Real Amazon DOM still unverified. |
-| Amazon order history | Private file ledger, exact Order #/ASIN/total matching and package tracking | Reconcile orders/shipments into proposed normalized tables; no guessing or unsafe retries. |
+| Amazon order history | Private file ledger, exact Order #/ASIN/total matching and package tracking | Reconcile orders and their single shipment into proposed normalized tables; preserve multiple-shipment observations as review exceptions, with no guessing or unsafe retries. |
 | BFMR Purchase/Shipment writes | Implemented API path with exact reservation association and authoritative readback | Verify actual provider contracts live only under separately approved tests. |
 | PostgreSQL | `bfmr_runtime_state(account_namespace, payload JSONB, updated_at)` with account lock and row-locked JSONB aggregate | **Proposed:** new 17-table relational/hybrid model, migration strategy, sync, history and evidence; none of it is yet installed. |
 | Private journals | Gmail queue, multi-deal journal, order ledger, BFMR status snapshot and post-reservation state are separate files | Plan transactional migration/recovery and durable container storage, without deleting or replaying uncertain records. |
@@ -91,7 +95,7 @@ Unpaid exposure currently uses actual BFMR provider fields: a unit payout amount
 
 The existing interactive runner checks known Amazon orders **once per Atlanta calendar day at or after 03:00**, using `America/New_York` for EST/EDT changes; new deal emails get priority before starting a status pass. There is no guarantee checks happen exactly at 03:00 if the runner is not running. Read Orders via the same authenticated Playwright context; match **exact Amazon Order #, ASIN and total**. Extract actual labeled tracking numbers and package details, preserve distinct packages and earlier evidence, and never match based only on product+price. Order absence, cancellation, inconsistent content or unknown layout requires review; do not silently fabricate tracking.
 
-The target multiple-shipment model remains proposed, as described in Section 8 of the design companion. It does not expand the current quantity-one automated purchasing scope.
+**Current target:** D22-01 in the v22 design companion specifies zero or one shipment per order and exactly one order per shipment, enforced by a non-null unique `SHIPMENTS.order_id` foreign key. The existing package-array ledger described above is an implementation fact, not permission to create multiple target shipment rows. During integration or migration, detect and retain multiple-shipment evidence for operator review; do not silently merge, overwrite, or discard it. The quantity-one automated purchasing scope is unchanged.
 
 ### 3.6 BFMR Purchase and Shipment API path
 
@@ -129,7 +133,7 @@ The React dashboard (`src/App.tsx` and `src/components/`) is explicitly simulate
 
 ### 4.4 Target migration boundary
 
-The future relational/hybrid model, authoritative sync/history, unified single-deal ordering, and delivery-cutoff policy require implementation, recovery design, and evidence. Do not delete or replay old JSONB/file records during migration, fabricate uncertain order/payment identities, or describe a proposed target table as an existing one. See the staged plan in Section 8.
+The future relational/hybrid model, the one-to-one order–shipment target, authoritative sync/history, unified single-deal ordering, and delivery-cutoff policy require implementation, recovery design, and evidence. Do not delete or replay old JSONB/file records during migration, fabricate uncertain order/payment identities, or describe a proposed target table as an existing one. See the staged plan in Section 8.
 
 ## 5. File and directory responsibilities
 
@@ -292,7 +296,7 @@ The runner is not a supervised unattended service. Existing PostgreSQL account o
 
 ### 7.3 Unimplemented design and unresolved business questions
 
-The approved single-deal purchase expansion, shared durable single-/multi-deal action state, 14-day latest-date cutoff, target 17-table schema, and normalized sync/history/evidence migration remain outstanding in this snapshot. Questions about account scope, reimbursement without an order, aggregate-only payment evidence, nullable/unique fields, one-order-per-reservation semantics, status/payment mapping, delivery time zones, and evidence constraints are preserved in [Solution Design Specification v21, Section 12](BFMR_Solution_Design_Specification_v21.md#12-unresolved-design-and-provider-contract-questions). They require resolution before corresponding DDL/import/recovery work.
+The approved single-deal purchase expansion, shared durable single-/multi-deal action state, 14-day latest-date cutoff, target 17-table schema, and normalized sync/history/evidence migration remain outstanding in this snapshot. Questions about account scope, reimbursement without an order, aggregate-only payment evidence, nullable/unique fields, one-order-per-reservation semantics, status/payment mapping, delivery time zones, and evidence constraints are preserved in [Solution Design Specification v22, Section 12](BFMR_Solution_Design_Specification_v22.md#12-unresolved-design-and-provider-contract-questions). They require resolution before corresponding DDL/import/recovery work.
 
 ## 8. Implementation sequencing and acceptance gates
 
@@ -303,8 +307,8 @@ The following is a **proposed work plan**, not authorization to execute it.
 | 0. Baseline safety | Inspect repository, preservation/backup plan, reconcile doc authority, update decision registers with user approval | No data discarded; written scope and code version captured |
 | 1. New requirement tests/design | Specify single-deal purchase, new-only invariant, 14-day latest-date policy, no-date/unknown edge cases, and intent/restart state machine | Pure synthetic cases approved; no live purchase |
 | 2. Email workflow refactor | Unified single/multi checkout path and durable per-message/per-reservation intent; multi-deal reserve-first preserved | One checkout at most, old Gmail IDs remain tombstoned, crash cases stop uncertain |
-| 3. Relational DDL review | 17-table DDL, field/null/check/FK/index strategy, privacy rules, verified identity scopes | No migration until DDL, backup/rollback and open cardinality questions approved |
-| 4. Data migration/reconciliation | Non-destructive import of existing JSONB aggregate, Gmail journal, BFMR status history, Amazon order ledger, exact identities and sync/evidence | Idempotent dry run, full backup/restore, no double-processing, verified row counts and reconciliation |
+| 3. Relational DDL review | 17-table DDL, field/null/check/FK/index strategy including `SHIPMENTS.order_id NOT NULL UNIQUE`, privacy rules, verified identity scopes | No migration until DDL, backup/rollback and open cardinality questions approved |
+| 4. Data migration/reconciliation | Non-destructive import of existing JSONB aggregate, Gmail journal, BFMR status history, Amazon order ledger, exact identities and sync/evidence | Idempotent dry run, full backup/restore, no double-processing, verified row counts and reconciliation; multiple-shipment legacy records retained as review exceptions |
 | 5. Provider-contract verification | Sanitized read-only BFMR/Gmail/Amazon fixtures; account and payout gates; order/delivery/tracking DOM contract | Real evidence rather than synthetic inference; no unreviewed write |
 | 6. Production semantics | Secure persistent state, account lock, supervised runner, durable alert/outbox and recovery controls | Restart/ownership loss/partial sync/uncertain external action all fail safely |
 | 7. Narrow acceptance | Tests and, if separately authorized, exact scoped BFMR/Amazon actions | Explicit live authorization, exact account/product/amount, recorded outcome and reconciliation |
@@ -320,7 +324,7 @@ The following is a **proposed work plan**, not authorization to execute it.
 - `$100` order total cap, BFMR payout >= total, `$200` exposure inequality, gift, free non-Prime, selected account/ASIN/quantity and no extra lines all pass or fail exactly.
 - Crash before/after reserve submit, after Amazon order click, before Order # journal, after BFMR Purchase/Shipment POST, and after notification persistence: no blind repeats; operator reconciliation required.
 - BFMR partial/incomplete sync cannot overwrite current state; complete sync updates current reservation + history atomically and preserves terminal/missing history.
-- Duplicate payment/sync records do not inflate reimbursement; multiple shipments and tracking IDs remain attached to exact retailer order.
+- Duplicate payment/sync records do not inflate reimbursement. An order can exist without a shipment; the first shipment must reference its exact order, and a second shipment for that order is rejected by the target unique constraint. Tracking references remain attached to the exact shipment/order. Legacy or provider evidence of multiple distinct shipments is preserved as a review exception.
 - PostgreSQL lock loss, rolled-back transaction, second account worker, stale backups and file restoration remain safe. Never point integration tests at production.
 
 ### 8.2 Evidence-based acceptance language
@@ -329,7 +333,7 @@ Use precise statements such as: **"Code implemented and unit-tested with synthet
 
 ## 9. Sources, versioning, and evidence limitations
 
-This document and [Solution Design Specification v21](BFMR_Solution_Design_Specification_v21.md) split the original [v20 handoff](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md). Source file blob SHA: `890a8c79c9e1f3e1afcefeeb5a528261dd259080`. The source document's implementation review is dated 16 October 2026; prior software test evidence belongs to its recorded October 11–12 scope. This split adds no new software test, typecheck, build, live provider check, or production acceptance claim.
+This document and [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) split the original [v20 handoff](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md). Source file blob SHA: `890a8c79c9e1f3e1afcefeeb5a528261dd259080`. The 19 October 2026 v22 amendment records D22-01, the user's one-to-one order–shipment business rule. It changes the intended target and regression/migration requirements, not the existing application implementation. The source document's implementation review is dated 16 October 2026; prior software test evidence belongs to its recorded October 11–12 scope. This split adds no new software test, typecheck, build, live provider check, or production acceptance claim.
 
 - **Primary existing baseline:** [`docs/BFMR_Solution_Design_Specification_v1.9.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v1.9.md), compiled 12 October 2026.
 - **Repository safety and product authority:** [`AGENTS.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/AGENTS.md).
@@ -375,4 +379,4 @@ Preserve all older versioned specifications and PDFs. v21 is a document version,
 | 16 sources and historical versioning note | 14 | 9 |
 | Appendix A 17-table Mermaid ERD / PDF-sheet references | Appendix A Mermaid source and explicit Markdown/PDF boundary | 9 cross-reference |
 
-**Editorial changes:** Added a plain-language business purpose, logical architecture overview, document-ownership guidance, cross-links, an expanded primary-file catalog, and this coverage map. Reworded mixed passages to distinguish requirements from existing behavior. Replaced session-relative language and PDF-only layout promises with dated provenance and accurate Markdown scope. These changes do not add purchase authority, alter business limits, adopt new tables, or assert new implementation/evidence. The source's 17 tables, D20-01 through D20-15, delivery examples, money semantics, SQL caveats, safety rules, unresolved questions, and implementation/test limitations are retained across the pair.
+**Editorial changes:** Added a plain-language business purpose, logical architecture overview, document-ownership guidance, cross-links, an expanded primary-file catalog, and this coverage map. Reworded mixed passages to distinguish requirements from existing behavior. Replaced session-relative language and PDF-only layout promises with dated provenance and accurate Markdown scope. The original split did not add purchase authority, alter business limits, adopt new tables, or assert new implementation/evidence. The subsequent D22-01 amendment changes only order–shipment cardinality; original one-to-many wording is historical and superseded. The source's 17 tables, D20-01 through D20-15, delivery examples, money semantics, SQL caveats, safety rules, unresolved questions, and implementation/test limitations are retained across the pair.
