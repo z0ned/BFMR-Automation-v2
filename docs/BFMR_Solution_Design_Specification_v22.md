@@ -1,6 +1,6 @@
 # BFMR Automation v2 — Solution Design Specification
 
-**VERSION 21 | Business requirements, technical requirements, decisions, and target architecture**
+**VERSION 22 | Business requirements, technical requirements, decisions, and target architecture**
 
 **Prepared:** 19 October 2026  
 **Project:** BFMR Automation v2  
@@ -8,6 +8,23 @@
 **Change type:** Documentation restructuring only; no application behavior, database schema, provider contract, or production acceptance changed.
 
 **Companion:** [BFMR Implementation v21](BFMR_Implementation_v21.md) documents the existing implementation, file responsibilities, configuration, historical evidence, implementation gaps, and delivery plan.
+
+## Executive summary
+
+**BFMR Automation v2 aims to automate the work of buying products through a buying club, while keeping purchases controlled and money easy to track.**
+
+A buying club coordinates purchases made by individual participants on its behalf. In the arrangement described here, BFMR announces offers for specific products. A participant reserves an offer, pays a retailer such as Amazon upfront, follows the purchasing and shipping requirements, and expects reimbursement from BFMR. This creates an administrative challenge: every offer, reservation, retailer order, shipment, and payment must stay correctly connected.
+
+The proposed system would manage that process from beginning to end:
+
+- Monitor BFMR emails for new offers and reserve eligible deals.
+- Purchase qualifying items from Amazon after checking the product, price, expected reimbursement, delivery terms, and spending limits.
+- Track orders and shipments and report purchase and shipping details to BFMR.
+- Maintain records showing what was spent, what reimbursement is expected, what has been paid, and which transactions need attention.
+
+**The business goal is to reduce repetitive work and costly mistakes while providing a clear picture of outstanding commitments and reimbursements.** Safeguards are central to the design: prevent duplicate purchases, verify the correct accounts and products, and pause for review when an outcome is uncertain.
+
+This specification describes an intended future system built on existing components. Major capabilities still require implementation and verification before it can operate reliably without supervision.
 
 > **Design status:** This document reorganizes the requirements and approved intended design recorded in v20. The 17-table relational model, unified single-/multi-deal purchasing, and 14-day delivery cutoff remain intended changes, not claims of implementation or live validation. Existing code and operational facts belong in the companion implementation document. No document grants authority to place an order, reserve or cancel inventory, send a notification, migrate a database, or deploy software.
 
