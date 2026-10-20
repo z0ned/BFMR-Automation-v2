@@ -6,6 +6,14 @@ The user's decision is that `RESERVATION_HISTORY` is not needed. Expected payout
 
 This supersedes the dedicated table and payout-evolution requirements inherited from D20-13; the active v22 target now has 15 tables. D22-02's 16-table count below describes that earlier decision point. Existing JSON/status journals and provider/workflow evidence remain implementation facts and are not removed. See [v22 design](BFMR_Solution_Design_Specification_v22.md#3-approved-design-decisions-and-v22-amendments) and [implementation amendment](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03). Database enforcement is pending because the existing generated payout formula does not lock writable inputs. This records a user decision only; no code, migration, software test, provider action or production acceptance changed.
 
+## 20 October 2026 — reservation payout guard source (D22-03 follow-up)
+
+Schema change: [BFMR_DB_Schema draft PR #1](https://github.com/z0ned/BFMR_DB_Schema/pull/1), source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`.
+
+Guard source has been added to `BFMR_DB_Schema/schema.sql` and `BFMR_DB_Schema/migrations/20261020_reservation_payout_immutability.sql`. `public.reject_reservation_payout_change()` checks final `NEW` versus `OLD` `quantity` and `payout_per_item` with `IS DISTINCT FROM` in an `AFTER UPDATE` row trigger enabled `ALWAYS`; a change raises SQLSTATE `23514`. Updates retaining both inputs remain allowed, and the generated expected-payout expression is unchanged.
+
+Evidence class: source implementation only, superseding the pending-guard source status above. No software tests were added or run; the SQL has not been applied or tested, and no database, provider, or deployed runtime changed. Authoritative creation-term ingestion, provider-conflict review, and legacy creation-evidence reconciliation remain pending; retained observations and workflow evidence must not be discarded.
+
 ## 20 October 2026 — one shipment and tracking number per order (D22-02)
 
 The user's approved assumption is one shipment and one tracking number per order. An order may have zero or one shipment before shipping; every recorded shipment belongs to exactly one order and has one required `tracking_number` and `shipping_company`. Store both directly on `SHIPMENTS`, with `SHIPMENTS.order_id NOT NULL UNIQUE` referencing `ORDERS.id`. Tracking numbers are not globally unique. The separate `ORDER_TRACKING` table and its one-to-many tracking-reference relationship are retired from the v22 target model, which now has 16 tables.

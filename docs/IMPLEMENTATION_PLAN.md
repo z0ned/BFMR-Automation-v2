@@ -21,6 +21,14 @@ Dedicated `RESERVATION_HISTORY` is no longer required; the active v22 target has
 
 Evidence class: user decision/documentation only; no source change, migration, software test, provider invocation or acceptance result. Historical progress entries below remain evidence for their original code paths and dates, including existing file-backed status history.
 
+## 20 October 2026 source progress — reservation payout guard
+
+Schema change: [BFMR_DB_Schema draft PR #1](https://github.com/z0ned/BFMR_DB_Schema/pull/1), source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`.
+
+Guard source is present in `BFMR_DB_Schema/schema.sql` and `BFMR_DB_Schema/migrations/20261020_reservation_payout_immutability.sql`. `public.reject_reservation_payout_change()` is an `AFTER UPDATE` row guard comparing final `NEW`/`OLD` `quantity` and `payout_per_item` with `IS DISTINCT FROM`, raising SQLSTATE `23514` on a change. Its trigger is enabled `ALWAYS`; ordinary updates retaining those inputs remain allowed, and the generated expected-payout expression is unchanged.
+
+Evidence class: source implementation only, updating the preceding pending-guard status. The SQL has not been applied or tested. No software tests were added or run, and no database change, provider action, or deployment occurred. Keep runtime creation-term capture, conflicting-payout evidence/review, legacy creation-evidence reconciliation, and database validation/application pending; source presence does not establish installed enforcement or production acceptance.
+
 ## Next work, in order
 
 1. **Close identity and provenance release blockers:** collect sanitized Gmail API auth headers and sanitized BFMR account/My Tracker DOM. Implement/test only observed selectors and account association. Provide an empty-account proof mechanism before permitting writes when no known common reservation exists. Confirm no sensitive account content enters fixtures.

@@ -12,6 +12,14 @@ The later user decision removes dedicated `RESERVATION_HISTORY` from the v22 tar
 
 This is a documentation-only decision, not a new source audit, migration or runtime implementation. The separate schema's generated `quantity * payout_per_item` formula still permits input updates; protecting the locked total and integrating conflict handling remain pending. Earlier reservation-history wording below records existing JSON/status journals and historical code evidence, which remain intact; it does not require a dedicated relational history table.
 
+## 20 October 2026 source update — reservation payout guard
+
+Schema change: [BFMR_DB_Schema draft PR #1](https://github.com/z0ned/BFMR_DB_Schema/pull/1), source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`.
+
+The separate schema repository now includes guard source in `BFMR_DB_Schema/schema.sql` and `BFMR_DB_Schema/migrations/20261020_reservation_payout_immutability.sql`. `public.reject_reservation_payout_change()` runs as an `AFTER UPDATE` row guard on `public.reservations`, compares final `NEW` and `OLD` `quantity` and `payout_per_item` using `IS DISTINCT FROM`, and rejects changes with SQLSTATE `23514`. The trigger is enabled `ALWAYS`; ordinary updates retaining both inputs remain permitted. The generated `expected_payout = quantity * payout_per_item` expression is unchanged.
+
+This updates the preceding pending-guard status at the source level only. The guard has not been applied or tested; no software tests were added or run, no database was changed, and no provider action or deployment occurred. Runtime ingestion of authoritative creation terms, payout-conflict review, and reconciliation of legacy creation evidence remain pending. Missing historical terms must not be guessed or replaced with the current deal rate.
+
 ## 1. Purpose and safe reading order
 
 This document is a continuation handoff for another engineer or LLM. It records what the repository implements, what the user authorized, how the implemented workflows behave, what evidence exists, and what remains unverified. Read this first, then `AGENTS.md`, `docs/DECISIONS.md`, `docs/IMPLEMENTATION_PLAN.md`, `docs/OPEN_ISSUES.md`, and the relevant source files. Check `git status` and preserve all pre-existing changes. The working tree has not been committed or deployed as part of this documentation update.
