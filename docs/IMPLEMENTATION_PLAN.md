@@ -15,6 +15,12 @@
 
 Do not mark a milestone complete until the relevant offline and live evidence gates in v1.5 are matched to current requirements and documented. The UI is not evidence. The repository currently has uncommitted changes from ongoing work; preserve them.
 
+## 20 October 2026 target-design amendment — D22-03
+
+Dedicated `RESERVATION_HISTORY` is no longer required; the active v22 target has 15 tables. Expected payout is fixed at reservation creation, and deal payout changes apply only to subsequently created reservations. Preserve existing JSON/status journals and provider/workflow evidence; do not delete or replay historical state. The current generated `quantity * payout_per_item` formula in the separate schema does not prevent input updates, so a reviewed guard/migration protecting the locked total and runtime integration of creation-term capture and provider-conflict review remain pending. Do not mark these complete from this documentation change. See [v22 implementation amendment](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03) and [OPEN_ISSUES.md](OPEN_ISSUES.md#impl-006-creation-locked-reservation-payout-d22-03).
+
+Evidence class: user decision/documentation only; no source change, migration, software test, provider invocation or acceptance result. Historical progress entries below remain evidence for their original code paths and dates, including existing file-backed status history.
+
 ## Next work, in order
 
 1. **Close identity and provenance release blockers:** collect sanitized Gmail API auth headers and sanitized BFMR account/My Tracker DOM. Implement/test only observed selectors and account association. Provide an empty-account proof mechanism before permitting writes when no known common reservation exists. Confirm no sensitive account content enters fixtures.
@@ -220,3 +226,4 @@ Following the browser evaluation fix, the user reported that the complete purcha
 ## 12 October 2026 review corrections
 
 Implemented review items 1–6 and 9–12 with offline regression coverage: exact reservation identity and lifecycle matching, Gmail provenance/mode, account-evidence gate, durable Gmail queue/cursor, shared unpaid exposure rules, reservation history/discrepancies, uncertain outcomes, incident-specific blocks, isolated test transactions plus durable PostgreSQL/account locking, and honest dashboard evidence. Standard and extended TypeScript checks and build pass. Offline suite: 118 pass, zero fail; PostgreSQL integration runs separately against a disposable cluster. Live account selectors/auth-header fixtures remain a release gate, not completed integration evidence. Detailed setup and limits: `REVIEW_FIXES_2026-10-12.md`.
+

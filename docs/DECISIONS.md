@@ -1,5 +1,11 @@
 # Decision register
 
+## 20 October 2026 — fixed reservation payout; no dedicated history table (D22-03)
+
+The user's decision is that `RESERVATION_HISTORY` is not needed. Expected payout is fixed when a reservation is created and never changes for that reservation. Payout changes belong to the deal and apply only to future reservations: a deal change from $80 to $95 leaves an existing one-unit reservation at $80 and gives a subsequently created one-unit reservation $95. Preserve the creation-time financial snapshot; with the current generated quantity-times-rate formula, protect its inputs against edits that recalculate the locked total. Retain conflicting provider observations for review rather than silently updating the reservation.
+
+This supersedes the dedicated table and payout-evolution requirements inherited from D20-13; the active v22 target now has 15 tables. D22-02's 16-table count below describes that earlier decision point. Existing JSON/status journals and provider/workflow evidence remain implementation facts and are not removed. See [v22 design](BFMR_Solution_Design_Specification_v22.md#3-approved-design-decisions-and-v22-amendments) and [implementation amendment](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03). Database enforcement is pending because the existing generated payout formula does not lock writable inputs. This records a user decision only; no code, migration, software test, provider action or production acceptance changed.
+
 ## 20 October 2026 — one shipment and tracking number per order (D22-02)
 
 The user's approved assumption is one shipment and one tracking number per order. An order may have zero or one shipment before shipping; every recorded shipment belongs to exactly one order and has one required `tracking_number` and `shipping_company`. Store both directly on `SHIPMENTS`, with `SHIPMENTS.order_id NOT NULL UNIQUE` referencing `ORDERS.id`. Tracking numbers are not globally unique. The separate `ORDER_TRACKING` table and its one-to-many tracking-reference relationship are retired from the v22 target model, which now has 16 tables.
@@ -62,3 +68,4 @@ Fresh implementation; BFMR reservation creation through normal website form; My 
 ### Superseded financial discussion
 
 Earlier proposed evaluation/cancellation rules were at one point withdrawn, then later explicitly restored in the scoped multiple-deal Amazon workflow. Do not treat the broad historic discussion as additional criteria: only the exact cap, payout comparison, $200 exposure basis and cancellation rule in the controlling section apply. The unsettled contract details remain release gates.
+

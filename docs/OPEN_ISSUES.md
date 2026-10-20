@@ -38,6 +38,14 @@ First-ever setup can use `BFMR_INITIALIZE_GMAIL_QUEUE=YES`, then remove it. Rest
 
 The runner currently uses Gmail history polling and a single interactive process. Production service supervision, watch renewal/StreamingPull, durable notification delivery gates, browser desktop access after reboot, log retention, monitoring, Telegram outage behavior and restart recovery need an integrated runbook and acceptance.
 
+## 20 October 2026 design decision and focused implementation gap
+
+### IMPL-006 Creation-locked reservation payout (D22-03)
+
+The user decided that dedicated `RESERVATION_HISTORY` is not needed; its absence is no longer a design gap. A reservation's expected payout never changes after creation. Deal payout changes affect future reservations only. The active v22 target therefore has 15 tables; existing JSON/status journals and provider/workflow evidence remain preserved.
+
+**Pending enforcement:** the separate schema's stored generated `expected_payout = quantity * payout_per_item` still recalculates if either writable input changes. Design and review a guard and upgrade migration that protect the creation financial snapshot and locked total without blocking ordinary status updates; integrate authoritative capture of creation terms and mismatch review into ingestion/reconciliation. Retain later conflicting provider observations, block their authoritative promotion and never replace creation payout with the current deal rate. Do not guess missing legacy creation terms. This documentation decision implements no guard, migration or runtime change. See [v22 design](BFMR_Solution_Design_Specification_v22.md#9-approved-authoritative-reconciliation-design) and [implementation amendment](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03).
+
 ## Code completion versus acceptance
 
 - PostgreSQL transaction and advisory lock code exists and passed a disposable synthetic PostgreSQL integration. This is not production DB migration or backup acceptance.
@@ -49,3 +57,4 @@ The runner currently uses Gmail history polling and a single interactive process
 ## Resolved source-review findings (12 October 2026)
 
 The source review findings are fixed in code and have offline regression coverage: wrong-deal title fallback and open-status duplicates; unauthenticated sender/hardcoded auth pass; reminder-only browser account check; memory-only Gmail cursor/work; incompatible lifecycle status sets; daily history loss; fabricated reservation IDs; all-block incident clearing; process-local default orchestration persistence/locking; dashboard fabricated acceptance status; and the previously reported checkout single-line/order identity issues. See `REVIEW_FIXES_2026-10-12.md` and v1.9 Sections 4-11. Do not confuse “code fixed” with the live provider evidence listed above.
+

@@ -6,6 +6,12 @@
 **Timezone for retailer status schedule:** `America/New_York` (Atlanta local time)  
 **Authority:** This version supersedes v1.8 for current behavior. v1.5-v1.8 remain historical records and are not additional active instructions.
 
+## 20 October 2026 target-design addendum — D22-03
+
+The later user decision removes dedicated `RESERVATION_HISTORY` from the v22 target and fixes a reservation's expected payout at creation. Deal payout changes affect future reservations only; a deal moving from $80 to $95 leaves an existing one-unit reservation at $80 and a subsequently created one-unit reservation at $95. Preserve the creation financial snapshot and conflicting provider observations for review. The active target now has 15 tables; see [v22 design](BFMR_Solution_Design_Specification_v22.md) and [implementation reference](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03).
+
+This is a documentation-only decision, not a new source audit, migration or runtime implementation. The separate schema's generated `quantity * payout_per_item` formula still permits input updates; protecting the locked total and integrating conflict handling remain pending. Earlier reservation-history wording below records existing JSON/status journals and historical code evidence, which remain intact; it does not require a dedicated relational history table.
+
 ## 1. Purpose and safe reading order
 
 This document is a continuation handoff for another engineer or LLM. It records what the repository implements, what the user authorized, how the implemented workflows behave, what evidence exists, and what remains unverified. Read this first, then `AGENTS.md`, `docs/DECISIONS.md`, `docs/IMPLEMENTATION_PLAN.md`, `docs/OPEN_ISSUES.md`, and the relevant source files. Check `git status` and preserve all pre-existing changes. The working tree has not been committed or deployed as part of this documentation update.
@@ -279,3 +285,4 @@ Gmail history expiry remains an unresolved boundary. The saved cursor, explicit 
 ## Appendix B. Prior design records
 
 `BFMR_Solution_Design_Specification_v1.5.pdf` is the baseline requirements document; v1.6 and v1.7 record subsequent designs and decisions; v1.8 is the previous LLM handoff. Keep all prior PDFs and the v1.6 addendum unchanged for traceability. Use v1.9 and the current project registers for active behavior. Where a historical document conflicts with this record, apply v1.9 and the latest explicit user instruction.
+
