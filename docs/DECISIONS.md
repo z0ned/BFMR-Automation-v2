@@ -1,5 +1,11 @@
 # Decision register
 
+## 20 October 2026 — one shipment and tracking number per order (D22-02)
+
+The user's approved assumption is one shipment and one tracking number per order. An order may have zero or one shipment before shipping; every recorded shipment belongs to exactly one order and has one required `tracking_number` and `shipping_company`. Store both directly on `SHIPMENTS`, with `SHIPMENTS.order_id NOT NULL UNIQUE` referencing `ORDERS.id`. Tracking numbers are not globally unique. The separate `ORDER_TRACKING` table and its one-to-many tracking-reference relationship are retired from the v22 target model, which now has 16 tables.
+
+D22-02 extends D22-01. Multiple distinct provider shipments or tracking numbers must be preserved as review evidence rather than silently selected, merged, overwritten, or discarded. Existing package-array code and journals are implementation facts; this documentation amendment does not change code, run a migration, or authorize a provider action.
+
 ## 19 October 2026 — v22 order–shipment cardinality (D22-01)
 
 The user's approved business rule is a one-to-one relationship between orders and shipments: an order may have zero or one shipment before shipping, and each stored shipment belongs to exactly one order. The target constraint is `SHIPMENTS.order_id NOT NULL UNIQUE` with a foreign key to `ORDERS.id`. This supersedes the earlier v20/v22 multiple-shipment target. See [v22 design specification](BFMR_Solution_Design_Specification_v22.md#3-approved-design-decisions-and-v22-amendments) and [v22 implementation reference](BFMR_Implementation_v22..md#13-current-v22-amendment--19-october-2026).

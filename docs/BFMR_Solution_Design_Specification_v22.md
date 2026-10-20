@@ -5,7 +5,7 @@
 **Prepared:** 19 October 2026  
 **Project:** BFMR Automation v2  
 **Source baseline:** [Solution Design Specification v20](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md), compiled 16 October 2026  
-**Change type:** Documentation restructuring and 19 October 2026 order–shipment cardinality amendment; no application code, database migration, provider contract, or production acceptance changed.
+**Change type:** Documentation updates through 20 October 2026; no application code, database migration, provider contract, or production acceptance changed.
 
 **Companion:** [BFMR Implementation v22](BFMR_Implementation_v22..md) documents the existing implementation, file responsibilities, configuration, historical evidence, implementation gaps, and delivery plan.
 
@@ -26,7 +26,7 @@ The proposed system would manage that process from beginning to end:
 
 This specification describes an intended future system built on existing components. Major capabilities still require implementation and verification before it can operate reliably without supervision.
 
-> **Design status:** This document reorganizes the requirements and approved intended design recorded in v20. The 17-table relational model, unified single-/multi-deal purchasing, and 14-day delivery cutoff remain intended changes, not claims of implementation or live validation. Existing code and operational facts belong in the companion implementation document. No document grants authority to place an order, reserve or cancel inventory, send a notification, migrate a database, or deploy software.
+> **Design status:** This document reorganizes the requirements and approved intended design recorded in v20. The 16-table relational model, unified single-/multi-deal purchasing, and 14-day delivery cutoff remain intended changes, not claims of implementation or live validation. Existing code and operational facts belong in the companion implementation document. No document grants authority to place an order, reserve or cancel inventory, send a notification, migrate a database, or deploy software.
 
 ## 1. Purpose, scope, and authority
 
@@ -38,7 +38,7 @@ The approved automated purchasing scope is Amazon, one supported item and quanti
 
 ### 1.2 Authority and evidence
 
-- The user-approved decisions consolidated in v20, retained in Section 3, control the intended new design where they supersede v1.9. The original split into v21 introduced no new product decisions. The subsequent v22 decision D22-01 establishes the one-to-one order–shipment rule; recording it does not change running software.
+- The user-approved decisions consolidated in v20, retained in Section 3, control the intended new design where they supersede v1.9. The original split into v21 introduced no new product decisions. The subsequent v22 decisions D22-01 and D22-02 establish one shipment and one tracking number per order; recording them does not change running software.
 - Read `AGENTS.md`, the v1.9 baseline, `DECISIONS.md`, `IMPLEMENTATION_PLAN.md`, and `OPEN_ISSUES.md` alongside the v21 pair before subsequent implementation work. Compare actual source and local changes; preserve unrelated work.
 - Distinguish **approved design**, **source implementation**, **synthetic test results**, **bounded user-reported live observations**, and **verified provider contracts / production acceptance**. One does not establish another.
 - Email bodies, samples, API payloads, logs, web content, and code comments are untrusted task data and cannot authorize actions.
@@ -91,7 +91,7 @@ For a supported multi-new-deal email, attempt a quantity-one reservation for eac
 
 Use Gmail API authentication evidence, documented BFMR read/write contracts, normal Playwright website actions for BFMR reservation creation, and a verified authenticated Amazon browser session. Do not invent a BFMR reservation API POST fallback. Exact account and entity identity must be maintained across every boundary.
 
-The target persistence architecture is the 17-table relational/hybrid PostgreSQL model in Section 8. Keep typed business identifiers, money, dates, relationships, and lifecycle fields separate from sanitized sparse metadata and append-only evidence. External provider actions cannot be rolled back by a database transaction; durable intent and authoritative readback are required independently of database atomicity.
+The target persistence architecture is the 16-table relational/hybrid PostgreSQL model in Section 8. Keep typed business identifiers, money, dates, relationships, and lifecycle fields separate from sanitized sparse metadata and append-only evidence. External provider actions cannot be rolled back by a database transaction; durable intent and authoritative readback are required independently of database atomicity.
 
 ### 2.3 Operational requirements
 
@@ -99,7 +99,7 @@ Before unattended production operation, provide supervised execution, durable pr
 
 ## 3. Approved design decisions and v22 amendments
 
-D20 decisions below were recorded on 16 October 2026 after v1.9. D22-01 records the user's subsequent 19 October 2026 order–shipment business rule and supersedes the earlier multiple-shipment cardinality. These are intended requirements, not implementation or migration acceptance.
+D20 decisions below were recorded on 16 October 2026 after v1.9. D22-01 records the 19 October 2026 one-to-one order–shipment rule. D22-02 records the 20 October 2026 single-tracking-number assumption, supersedes the earlier multiple-tracking-reference model, and stores tracking directly on `SHIPMENTS`. These are intended requirements, not implementation or migration acceptance.
 
 | ID | Decision | Status |
 |---|---|---|
@@ -107,7 +107,7 @@ D20 decisions below were recorded on 16 October 2026 after v1.9. D22-01 records 
 | D20-02 | This expanded purchasing applies to **newly processed emails only**. Never revisit prior completed single-deal mail or backfill purchases without separate explicit authority. | Approved; not implemented |
 | D20-03 | If the retailer's latest estimated delivery date is **more than 14 calendar days after the order date**, reject checkout; cancel only the **exact newly confirmed reservation** with validated release readback. Exactly 14 days is allowed. | Approved; not implemented |
 | D20-04 | For a retailer delivery **date range**, compare the **latest** date to the 14-day cutoff. If **no estimate is provided**, proceed subject to all other guards. If date evidence is contradictory/ambiguous/unreadable, stop for review, not speculative cancellation. | Approved; not implemented |
-| D20-05 | Adopt a **relational/hybrid PostgreSQL target design**, superseding a plan to rely only on the JSONB account aggregate for business reporting. The agreed target is **17 named tables** (Section 8). | Approved design; no migration |
+| D20-05 | Adopt a **relational/hybrid PostgreSQL target design**, superseding a plan to rely only on the JSONB account aggregate for business reporting. The agreed target is **17 named tables** in the original v20 design. | Original table count superseded by the 16-table target under D22-02; no migration |
 | D20-06 | `RETAILERS` includes `homepage_url`; `DEALS` includes its BFMR `slug` separate from authoritative `bfmr_deal_id`. | Approved design |
 | D20-07 | `EMAILS` is retained; `EMAIL_DEALS` maps each email to all referenced deals, including update messages. `RESERVATIONS.source_email_id` optionally identifies the actual triggering email. Update/additional-slot emails **do not authorize reservations**. | Approved design |
 | D20-08 | Lookup tables `RESERVATION_STATUS`, `ORDER_STATUS`, and later `SHIPMENT_STATUS` classify system-specific states. `RESERVATION_STATUS.is_open` is a convenience classification, **not a reimbursement indicator**. | Approved design |
@@ -119,6 +119,7 @@ D20 decisions below were recorded on 16 October 2026 after v1.9. D22-01 records 
 | D20-14 | Use a **single retailer order per reservation** in the first target ERD (`ORDERS.reservation_id` unique); one order has at most one shipment under D22-01. BFMR reservation IDs are treated as unique for this single-account design **without claiming provider global uniqueness**. | Current design assumption; validate |
 | D20-15 | Continue to distinguish BFMR expected payout from Amazon purchase cost and individual BFMR reimbursements. The design must enable useful SQL for open/unreimbursed orders without sacrificing payment provenance. | Approved objective |
 | D22-01 | **One-to-one order–shipment business relationship:** each order may have zero or one shipment while awaiting shipment; each shipment belongs to exactly one order. Enforce `SHIPMENTS.order_id NOT NULL`, a foreign key to `ORDERS.id`, and `UNIQUE (order_id)`. | Approved 19 October 2026; project application integration/migration not performed |
+| D22-02 | **One shipment and one tracking number per order.** An order has zero or one shipment before shipping; each recorded shipment has one required `tracking_number` and `shipping_company`. Store these directly on `SHIPMENTS`; retire the separate `ORDER_TRACKING` table from the target model. Tracking numbers are not globally unique identifiers. | Assumption approved 20 October 2026; application integration/migration not performed |
 
 **Not approved merely by this design:** purchases from arbitrary retailers or multi-unit email checkout; running live tests; enabling BFMR exposure contract flags; resetting Gmail history; removing fail-closed account guards; using the new schema as if already deployed.
 
@@ -212,9 +213,9 @@ Apply the existing-unpaid-exposure plus proposed-order inequality in Section 5.1
 
 ### 6.3 Daily Amazon tracking and the single-shipment relationship
 
-Check known retailer orders once per `America/New_York` calendar day at or after 03:00, yielding to newly arriving deal emails before starting a status pass. Match the exact Amazon Order #, ASIN, and total in the same authenticated browser context. Preserve actual labeled tracking evidence and earlier observations. The business model allows only one shipment per order. If provider evidence indicates multiple distinct shipments for an order, preserve that evidence and flag it for review; do not create a second shipment row or silently discard or merge packages. Missing orders, cancellation, conflicting content, or unknown layouts also require review.
+Check known retailer orders once per `America/New_York` calendar day at or after 03:00, yielding to newly arriving deal emails before starting a status pass. Match the exact Amazon Order #, ASIN, and total in the same authenticated browser context. Preserve actual labeled tracking evidence and earlier observations. The business model allows only one shipment per order. If provider evidence indicates multiple distinct shipments or tracking numbers for an order, preserve that evidence and flag it for review; do not create a second shipment/tracking record or silently discard or merge packages. Missing orders, cancellation, conflicting content, or unknown layouts also require review.
 
-Model the order's single shipment through `ORDERS` → `SHIPMENTS` → `ORDER_TRACKING`, with shipment-level status, quantity, dates, and tracking references. An order can exist before its shipment is recorded; an existing shipment must reference exactly one order, and a second shipment for that order is prohibited. Evidence for a different order ID must fail validation. This amendment changes order–shipment cardinality only; it does not change the separately documented shipment-to-tracking-reference relationship or the quantity-one automated checkout scope.
+Model the order's single shipment through `ORDERS` → `SHIPMENTS`. Each stored shipment has exactly one `tracking_number` and one `shipping_company`, stored directly on `SHIPMENTS` as required text fields. An order can exist before its shipment is recorded; an existing shipment must reference exactly one order, and a second shipment or tracking-number record for that order is prohibited. Tracking numbers are not globally unique and must be interpreted with carrier and exact order identity. Evidence for a different order ID must fail validation. Multiple distinct shipments or tracking numbers are preserved as provider evidence and flagged for review rather than selected, merged, or discarded automatically. The quantity-one automated checkout scope is unchanged.
 
 ### 6.4 BFMR Purchase / Shipment updates and official reconciliation
 
@@ -239,11 +240,11 @@ After the daily retailer checks, compare a complete official BFMR tracker view w
 
 The presence of a row marked `READY`, a JSON field marked `PASSED`, a demo dashboard success indicator, or a notification does **not** authorize checkout, reprocessing or a retry. All external actions must independently pass current provider evidence and exact user-approved scope. Avoid generic retry middleware around non-idempotent provider actions.
 
-## 8. Approved target hybrid PostgreSQL model — 17 tables
+## 8. Approved target hybrid PostgreSQL model — 16 tables
 
-**Status: accepted logical design, not implemented.** These 17 named entities and their relationships consolidate the user's design decisions. The column list is the proposed contract retained from v20; technical constraints such as key scopes, `NOT NULL` behavior and import/migration details require a reviewed DDL design before execution. A business ERD shows only relevant PK/FK/UK relationships and proposed fields; it does not establish provider uniqueness guarantees by itself. The conceptual Mermaid ERD is in Appendix A.
+**Status: accepted logical design, not implemented.** These 16 named entities and their relationships consolidate the user's design decisions. The column list is the proposed v20 contract amended by D22-01 and D22-02; technical constraints such as key scopes, `NOT NULL` behavior and import/migration details require a reviewed DDL design before execution. A business ERD shows only relevant PK/FK/UK relationships and proposed fields; it does not establish provider uniqueness guarantees by itself. The conceptual Mermaid ERD is in Appendix A.
 
-### 8.1 Business and transactional tables (13)
+### 8.1 Business and transactional tables (12)
 
 | # | Table | Principal columns (types abbreviated) | Business meaning |
 |---|---|---|---|
@@ -256,10 +257,9 @@ The presence of a row marked `READY`, a JSON field marked `PASSED`, a demo dashb
 | 7 | **ORDERS** | `id` PK; `reservation_id` FK unique; `retailer_account_id` FK; `order_status_id` FK; `retailer_order_number` text; `quantity` integer; `order_total` numeric(12,2); `estimated_delivery_date` date nullable; `metadata` jsonb | One current retailer order per BFMR reservation; paid retailer total includes tax/shipping. No `amount_reimbursed`. |
 | 8 | **REIMBURSEMENTS** | `id` PK; `order_id` FK; `amount` numeric(12,2); `paid_at` timestamptz; `payment_reference` text; `recorded_at` timestamptz; `metadata` jsonb | Each verified BFMR payment or signed adjustment, with independent provenance. |
 | 9 | **SHIPMENT_STATUS** | `id` PK; `name` text unique | Shipment lifecycle, separate from order/BFMR status. |
-| 10 | **SHIPMENTS** | `id` PK; `order_id` FK **NOT NULL UNIQUE** → `ORDERS.id`; `shipment_status_id` FK; `quantity` integer; `estimated_delivery_date` date; `shipped_at` timestamptz; `delivered_at` timestamptz; `metadata` jsonb | Each shipment belongs to exactly one order. An order has zero or one shipment; no shipment row is required before shipping. |
-| 11 | **ORDER_TRACKING** | `id` PK; `shipment_id` FK; `tracking_number` text; `carrier` text | Tracking references attach to the order's single shipment; this separate reference relationship is not changed by D22-01. |
-| 12 | **EMAILS** | `id` PK; `gmail_message_id` text unique*; `subject` text; `email_type` text; `received_at` timestamptz; `metadata` jsonb | Authenticated inbound BFMR email identity, classification and metadata. Includes update and additional-slot messages. |
-| 13 | **EMAIL_DEALS** | `(email_id, deal_id)` composite PK/FKs; `reference_type` text | Many-to-many association between an email and every BFMR deal mentioned, without duplicate DEALS rows. |
+| 10 | **SHIPMENTS** | `id` PK; `order_id` FK **NOT NULL UNIQUE** → `ORDERS.id`; `tracking_number` text **NOT NULL**; `shipping_company` text **NOT NULL**; `shipment_status_id` FK; `quantity` integer; `estimated_delivery_date` date; `shipped_at` timestamptz; `delivered_at` timestamptz; `metadata` jsonb | Each shipment belongs to exactly one order and has one tracking number/carrier. An order has zero or one shipment; no shipment row is required before shipping. Tracking numbers are not globally unique. |
+| 11 | **EMAILS** | `id` PK; `gmail_message_id` text unique*; `subject` text; `email_type` text; `received_at` timestamptz; `metadata` jsonb | Authenticated inbound BFMR email identity, classification and metadata. Includes update and additional-slot messages. |
+| 12 | **EMAIL_DEALS** | `(email_id, deal_id)` composite PK/FKs; `reference_type` text | Many-to-many association between an email and every BFMR deal mentioned, without duplicate DEALS rows. |
 
 * Provider identifier uniqueness scope needs empirical verification. For a single BFMR account, a unique `bfmr_reservation_id` is the agreed initial assumption; global cross-account uniqueness was **not stated in the available API docs**. Similarly, Gmail message IDs may need mailbox scope if more mailboxes are ever supported. Consider account-scoped keys without silently changing the user's accepted logical model.
 
@@ -267,10 +267,10 @@ The presence of a row marked `READY`, a JSON field marked `PASSED`, a demo dashb
 
 | # | Table | Principal columns | Business meaning |
 |---|---|---|---|
-| 14 | **PROVIDER_OBSERVATIONS** | `id` PK; optional `email_id`, `deal_id`, `reservation_id`, `order_id`, `shipment_id`, `reimbursement_id` FKs; `sync_run_id` FK nullable; `provider`, `resource_type`, `observed_at`, `is_complete`, `response_data` JSONB | Minimal validated snapshots/provenance from Gmail, BFMR, Amazon and other approved providers; preserve history. |
-| 15 | **WORKFLOW_EVIDENCE** | `id` PK; optional `email_id`, `reservation_id`, `order_id` FKs; `correlation_id` UUID; `action_type`, `phase`, `outcome`, `evidence` JSONB, `recorded_at` | Append-only decision/side-effect evidence and incident correlation. Must support intent-before-action and exact outcome/readback. |
-| 16 | **SYNC_RUNS** | `id` PK; `provider` text; `started_at`, `completed_at`; `status` text; `records_received` integer; `is_complete` bool; `error_message` text nullable | Audit every provider sync attempt. Incomplete response never updates authoritative current state as if complete. |
-| 17 | **RESERVATION_HISTORY** | `id` PK; `reservation_id` FK; `sync_run_id` FK; `reservation_status_id` FK; `expected_payout` numeric(12,2); `observed_at` timestamptz | Immutable chronological BFMR reservation status and expected-payout observations. |
+| 13 | **PROVIDER_OBSERVATIONS** | `id` PK; optional `email_id`, `deal_id`, `reservation_id`, `order_id`, `shipment_id`, `reimbursement_id` FKs; `sync_run_id` FK nullable; `provider`, `resource_type`, `observed_at`, `is_complete`, `response_data` JSONB | Minimal validated snapshots/provenance from Gmail, BFMR, Amazon and other approved providers; preserve history. |
+| 14 | **WORKFLOW_EVIDENCE** | `id` PK; optional `email_id`, `reservation_id`, `order_id` FKs; `correlation_id` UUID; `action_type`, `phase`, `outcome`, `evidence` JSONB, `recorded_at` | Append-only decision/side-effect evidence and incident correlation. Must support intent-before-action and exact outcome/readback. |
+| 15 | **SYNC_RUNS** | `id` PK; `provider` text; `started_at`, `completed_at`; `status` text; `records_received` integer; `is_complete` bool; `error_message` text nullable | Audit every provider sync attempt. Incomplete response never updates authoritative current state as if complete. |
+| 16 | **RESERVATION_HISTORY** | `id` PK; `reservation_id` FK; `sync_run_id` FK; `reservation_status_id` FK; `expected_payout` numeric(12,2); `observed_at` timestamptz | Immutable chronological BFMR reservation status and expected-payout observations. |
 
 ### 8.3 Cardinalities and intentional separation
 
@@ -278,8 +278,8 @@ The presence of a row marked `READY`, a JSON field marked `PASSED`, a demo dashb
 - `DEALS M:N EMAILS` through `EMAIL_DEALS`; a deal is not an email, and a slug is not an email identifier.
 - `DEALS 1:N RESERVATIONS`; `EMAILS 0:N RESERVATIONS` via optional `source_email_id`. The email–deal association is informational; authorization requires qualifying classification, validation and duplicate checks.
 - `RESERVATION_STATUS 1:N RESERVATIONS`; `ORDER_STATUS 1:N ORDERS`; `SHIPMENT_STATUS 1:N SHIPMENTS`.
-- `RESERVATIONS 1:0..1 ORDERS` in the accepted initial model; `ORDERS 1:N REIMBURSEMENTS`, `ORDERS 1:0..1 SHIPMENTS`, `SHIPMENTS 1:N ORDER_TRACKING` (zero related records allowed before reimbursement/shipping).
-- **Order–shipment enforcement:** `SHIPMENTS.order_id` is a non-null foreign key to `ORDERS.id` and is unique. Zero shipments is permitted before shipment; every stored shipment has exactly one parent order.
+- `RESERVATIONS 1:0..1 ORDERS` in the accepted initial model; `ORDERS 1:N REIMBURSEMENTS`, `ORDERS 1:0..1 SHIPMENTS`; one tracking number and carrier are stored directly on each shipment (zero related records allowed before reimbursement/shipping).
+- **Order–shipment/tracking enforcement:** `SHIPMENTS.order_id` is a non-null unique foreign key to `ORDERS.id`. `tracking_number` and `shipping_company` are non-null text fields on that single shipment. Zero shipments is permitted before shipment; every stored shipment has exactly one parent order and one tracking number. No separate tracking table or global tracking-number uniqueness constraint is required.
 - `RESERVATIONS 1:N RESERVATION_HISTORY`; `SYNC_RUNS 1:N RESERVATION_HISTORY` and `SYNC_RUNS 0:N PROVIDER_OBSERVATIONS`.
 - `PROVIDER_OBSERVATIONS` references the relevant business entity through optional FKs; `WORKFLOW_EVIDENCE` likewise references relevant email, reservation or order. Exact association and allowed combinations must be specified in DDL and tested.
 
@@ -292,7 +292,7 @@ The presence of a row marked `READY`, a JSON field marked `PASSED`, a demo dashb
 - At the retailer, `ORDERS.order_total` means the **entire final charge**; never equate it with BFMR payout or amount reimbursed. If the charge is not yet known, represent unknown deliberately and forbid unsafe actions.
 - `REIMBURSEMENTS.amount` represents a **single payment/adjustment**. Total reimbursed is `SUM(amount)` for verified records, not another persisted amount on `ORDERS`. If an API reports cumulative paid amount without individual payment detail, preserve that cumulative figure as an observed fact and flag the incomplete payment ledger rather than invent transactions.
 - A `NULL` expected payout, unknown reimbursement coverage or unavailable provider contract is **unknown**, not equal to zero. Reports must label completeness and not assert all liabilities are fully enumerated if BFMR synchronization is partial.
-- A shipment quantity may reflect partial fulfillment without permitting a second shipment row for the order. Preserve shipment identity and prevent duplicate/order-crossing tracking. Multiple distinct provider shipments are review exceptions under D22-01. The separate semantics of 1:many tracking references per shipment remain a provider evidence question.
+- A shipment quantity may reflect partial fulfillment without permitting a second shipment row for the order. Preserve shipment identity and prevent duplicate/order-crossing tracking. Multiple distinct provider shipments or tracking numbers are review exceptions under D22-01/D22-02. The target permits one tracking number per order; carrier reuse or overlap means tracking numbers must not be treated as globally unique.
 
 ### 8.5 JSONB usage policy
 
@@ -380,11 +380,10 @@ JOIN deals AS d ON d.id = ed.deal_id
 WHERE d.bfmr_deal_id = 'D101'
 ORDER BY e.received_at;
 
--- Every tracking reference for one retailer order
-SELECT t.tracking_number, t.carrier,
+-- The single shipment and tracking number for one retailer order
+SELECT sh.tracking_number, sh.shipping_company,
        sh.quantity, sh.shipped_at, sh.delivered_at
-FROM order_tracking AS t
-JOIN shipments AS sh ON sh.id = t.shipment_id
+FROM shipments AS sh
 WHERE sh.order_id = 101;
 ```
 
@@ -403,7 +402,7 @@ WHERE sh.order_id = 101;
 ### 11.2 Recommended constraints beyond the ERD drawing
 
 - Prefer `NOT NULL` on required business keys; optionally nullable fields need explicit meaning (`NULL` = unknown/not yet available, **not** zero/no change). Enforce `CHECK (quantity > 0)` and positive monetary totals where appropriate; signed payment adjustments need a deliberately different check.
-- `ORDERS.reservation_id UNIQUE` permits at most one retailer order per reservation. `SHIPMENTS.order_id NOT NULL UNIQUE` with a foreign key to `ORDERS.id` permits at most one shipment per order and requires exactly one order per shipment. The separate `SHIPMENTS` → `ORDER_TRACKING` relationship remains one-to-many in this document. A failed/uncertain checkout should be represented in workflow evidence, not a fake `ORDERS` row with an invented Amazon order number.
+- `ORDERS.reservation_id UNIQUE` permits at most one retailer order per reservation. `SHIPMENTS.order_id NOT NULL UNIQUE` with a foreign key to `ORDERS.id` permits at most one shipment per order and requires exactly one order per shipment. Each stored shipment requires one `tracking_number` and one `shipping_company`; both are non-null text columns. The former `ORDER_TRACKING` table is retired under D22-02. Application validation must establish one actual provider tracking number, not a concatenated list. A failed/uncertain checkout should be represented in workflow evidence, not a fake `ORDERS` row with an invented Amazon order number.
 - Use account-aware uniqueness for retailer order numbers if the retailer guarantees uniqueness only within its account. Do not assert BFMR `reserve_id` global uniqueness without supplier confirmation. Provider payment reference can be nullable; dedupe only when its identity contract is known.
 - Scope `EMAILS.gmail_message_id` uniqueness appropriately if multi-mailbox support is introduced; no need to materialize raw Gmail MIME into public relational columns.
 - `RESERVATION_HISTORY` is append-only, with stable source `sync_run_id`, valid status FK, observation timestamp, payout; preserve terminal history. It is not a generic mutable snapshot table.
@@ -442,6 +441,8 @@ The implementation companion retains the staged delivery plan, proposed regressi
 
 ## 14. Sources, versioning, and traceability
 
+**20 October 2026 amendment:** D22-02 assumes one shipment and one tracking number per order, stores `tracking_number` and `shipping_company` directly on `SHIPMENTS` to match the shipment storage in `BFMR_DB_Schema/schema.sql`, and retires `ORDER_TRACKING`. The active target in this document now has 16 tables. This change does not adopt every other difference in the separate schema repository and does not migrate project data or code.
+
 **19 October 2026 amendment:** D22-01 replaces the earlier order-to-many-shipments assumption with a one-to-one business relationship, optional on the order side until its shipment is recorded. The field dictionary, cardinalities, constraints, tracking requirements, ERD, and implementation companion are updated consistently. This is documentation only; no project code or database migration was performed. Historical source descriptions are read in light of this explicit superseding decision.
 
 The original [v20 document](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md) is retained unchanged. The v21 pair reorganized that material; v22 carries the subsequent executive summary and D22-01 order–shipment amendment. These are document versions rather than application releases. Compilation on 19 October 2026 does not refresh the 16 October design/implementation evidence snapshot.
@@ -459,7 +460,7 @@ The source implementation, environment, historical results, proposed delivery ph
 
 ## Appendix A. Target entity relationship diagram
 
-The following renderable Mermaid source expresses the accepted conceptual relationships for the 17-table target design. The field dictionary is in Section 8. Optional evidence links are intentionally broad; final DDL, constraints, and provider uniqueness scopes remain subject to review. This Markdown document does not include the large-format PDF sheets referenced by v20.
+The following renderable Mermaid source expresses the accepted conceptual relationships for the 16-table target design. The field dictionary is in Section 8. Optional evidence links are intentionally broad; final DDL, constraints, and provider uniqueness scopes remain subject to review. This Markdown document does not include the large-format PDF sheets referenced by v20.
 
 ```mermaid
  erDiagram
@@ -475,7 +476,6 @@ The following renderable Mermaid source expresses the accepted conceptual relati
      ORDERS ||--o{ REIMBURSEMENTS : receives
      ORDERS ||--o| SHIPMENTS : contains
      SHIPMENT_STATUS ||--o{ SHIPMENTS : classifies
-     SHIPMENTS ||--o{ ORDER_TRACKING : tracked_by
      EMAILS o|--o{ PROVIDER_OBSERVATIONS : evidence
      DEALS o|--o{ PROVIDER_OBSERVATIONS : evidence
      RESERVATIONS o|--o{ PROVIDER_OBSERVATIONS : evidence
@@ -524,4 +524,4 @@ The following renderable Mermaid source expresses the accepted conceptual relati
 | 16 sources and historical versioning note | 14 | 9 |
 | Appendix A 17-table Mermaid ERD / PDF-sheet references | Appendix A Mermaid source and explicit Markdown/PDF boundary | 9 cross-reference |
 
-**Editorial changes:** Added a plain-language business purpose, logical architecture overview, document-ownership guidance, cross-links, an expanded primary-file catalog, and this coverage map. Reworded mixed passages to distinguish requirements from existing behavior. Replaced session-relative language and PDF-only layout promises with dated provenance and accurate Markdown scope. The original split did not add purchase authority, alter business limits, adopt new tables, or assert new implementation/evidence. The subsequent D22-01 amendment changes only order–shipment cardinality; original one-to-many wording is historical and superseded. The source's 17 tables, D20-01 through D20-15, delivery examples, money semantics, SQL caveats, safety rules, unresolved questions, and implementation/test limitations are retained across the pair.
+**Editorial changes:** Added a plain-language business purpose, logical architecture overview, document-ownership guidance, cross-links, an expanded primary-file catalog, and this coverage map. Reworded mixed passages to distinguish requirements from existing behavior. Replaced session-relative language and PDF-only layout promises with dated provenance and accurate Markdown scope. The original split did not add purchase authority, alter business limits, adopt new tables, or assert new implementation/evidence. The D22-01 and D22-02 amendments replace the original multiple-shipment/multiple-tracking-reference target with one shipment and one tracking number per order; conflicting original wording is historical and superseded. The source's original 17-table model is historical. D22-02 retires `ORDER_TRACKING` from the active 16-table target. Other inherited decisions, delivery examples, financial semantics, safety rules, and implementation/evidence limitations remain subject to their explicitly recorded amendments.
