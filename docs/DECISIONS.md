@@ -1,5 +1,9 @@
 # Decision register
 
+## 21 October 2026 — dependency and specification artifacts
+
+Use npm with `package-lock.json` as the sole maintained dependency lock. The user authorized deleting `bun.lock` and the v1.6–v1.8 generated specification PDFs in `output/pdf/`. Maintain the v22 Markdown design/implementation pair; historical specifications and generated PDFs remain accessible through Git history. Parser email/PDF samples are retained. Earlier PDF-generation evidence below describes its original checkpoint, not an artifact maintained in the current tree.
+
 ## 21 October 2026 — command-line application scope
 
 The maintained application consists of Node.js/TypeScript automation entrypoints, backend services, PostgreSQL repositories and offline regression tooling. Operate through the documented scripts with their exact account/financial/provider gates. npm and `package-lock.json` define dependencies. The shared intake parser and its message types remain available to the backend; synthetic adapter implementations remain confined to testing. This scope update changes no provider authority or installed database.

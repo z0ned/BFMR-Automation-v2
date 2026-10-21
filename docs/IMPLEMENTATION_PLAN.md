@@ -2,6 +2,10 @@
 
 **Current baseline:** [v22 solution design](BFMR_Solution_Design_Specification_v22.md) and [v22 implementation reference](BFMR_Implementation_v22..md). [OPEN_ISSUES.md](OPEN_ISSUES.md) lists only unfinished work; this plan retains dated implementation/evidence history. Mark code completion separately from provider acceptance and production deployment. A passing synthetic fixture does not prove live BFMR/Amazon behavior.
 
+## 21 October 2026 — artifact housekeeping
+
+Removed the redundant Bun lockfile and the three obsolete v1.6–v1.8 specification PDFs at the user’s request. npm/`package-lock.json` and the v22 Markdown pair are the maintained dependency/documentation sources; historical artifacts remain available through Git history. No dependency versions or runtime behavior changed. Documentation and whitespace checks apply to this change; earlier test/PDF evidence retains its original scope.
+
 ## 21 October 2026 — command-line runtime and tooling
 
 The maintained entrypoints are the automation scripts documented in the v22 implementation reference. Dependency/configuration and source-reference checks cover the backend-only TypeScript project and canonical npm lockfile. Shared intake parsing, business repositories, account ownership, operational journals and their backend regressions remain in scope. Current verification is recorded in the implementation reference; earlier dated test counts retain their original scope.

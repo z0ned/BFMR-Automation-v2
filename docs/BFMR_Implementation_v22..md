@@ -4,7 +4,7 @@
 
 **Prepared:** 19 October 2026  
 **Project:** BFMR Automation v2  
-**Source baseline:** [Solution Design Specification v20](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md), compiled 16 October 2026  
+**Source baseline:** [Solution Design Specification v20](https://github.com/z0ned/BFMR-Automation-v2/blob/21ef194/docs/BFMR_Solution_Design_Specification_v20.md), compiled 16 October 2026
 **Updated:** 21 October 2026
 
 **Change type:** Current relational source integration, offline validation, configuration and controlled-cutover reference. No actual schema installation, legacy cutover, provider action or deployment was performed.
@@ -13,9 +13,13 @@
 
 > **Implementation snapshot — 21 October 2026:** Relational business repositories and runner integration are implemented against the bundled `database/schema.sql`, including the immutable-payout guard. Reservations, orders, shipments, actual payments and retained evidence use SQL; operational Gmail/recovery/status/notification stores remain separate. Across offline runs, 141 tests passed, zero failed and one native PostgreSQL case was skipped; the final relational suite passed 23/23 with disposable PGlite. TypeScript checks passed. Native mini-PC PostgreSQL, installed guard/roles, real cutover and provider/production acceptance remain pending. Single-deal automatic ordering and the 14-day delivery cutoff remain unimplemented.
 
+## 21 October 2026 — artifact cleanup
+
+Removed `bun.lock` and the obsolete v1.6, v1.7 and v1.8 specification PDFs from `output/pdf/`. Use `npm ci` with the unchanged `package-lock.json`; no dependency versions changed. The v22 Markdown pair is authoritative, with earlier specification artifacts accessible through Git history. Email/PDF parser fixtures remain intact. This change is documentation/artifact housekeeping only; no software tests, provider actions, database migrations, cutover or deployment were performed for it.
+
 ## 21 October 2026 — maintained runtime and checks
 
-The application is operated through the Node.js/TypeScript command-line entrypoints listed below. Install dependencies with `npm ci`; use `npm run typecheck`, `npm run typecheck:all` and the documented offline regression commands. `package-lock.json` is the canonical dependency lockfile. The shared email parser uses `src/types/intakeEmail.ts`; live services continue to use their existing persistence and ownership interfaces. The retained `scripts/wait_for_real_email.ts` helper is limited to email parsing diagnostics; BFMR/retailer actions remain in the maintained runner with its identity and persistence gates. This source cleanup changes no live action scope, provider contract, installed schema or cutover state.
+The application is operated through the Node.js/TypeScript command-line entrypoints listed below. Install dependencies with `npm ci`; use `npm run typecheck`, `npm run typecheck:all` and the documented offline regression commands. npm is the sole maintained package manager and `package-lock.json` is its dependency lockfile; no Bun lockfile is required. The shared email parser uses `src/types/intakeEmail.ts`; live services continue to use their existing persistence and ownership interfaces. The retained `scripts/wait_for_real_email.ts` helper is limited to email parsing diagnostics; BFMR/retailer actions remain in the maintained runner with its identity and persistence gates. This source cleanup changes no live action scope, provider contract, installed schema or cutover state.
 
 
 Verification for the maintained sources: **56/56 selected offline regressions passed**, zero failed/skipped: nine review/queue/identity cases, six email-link cases, three sample-classification cases, four URL cases, eleven orchestration cases and twenty-three relational cases. `npm run typecheck` and `npm run typecheck:all` passed. `npm ls --depth=0` and lockfile checks confirm the declared dependencies are installed and retained package versions are unchanged. Earlier broader results describe their original source snapshots; they were not rerun or counted again for this cleanup. No provider action, installed database change or deployment was performed.
@@ -261,15 +265,15 @@ This catalog expands the source map retained from v20. It describes the primary 
 | File | Responsibility |
 |---|---|
 | `AGENTS.md` | Repository operating, authority, safety, and evidence instructions. |
-| `docs/BFMR_Solution_Design_Specification_v1.9.md` | Existing implementation baseline and historical active requirements referenced by the project registers. |
-| `docs/BFMR_Solution_Design_Specification_v20.md` | Unchanged combined handoff from which the v21 pair is derived. |
+| v1.9 specification (Git history) | Historical implementation baseline referenced by the project registers; not a current checkout requirement. |
+| v20 specification (Git history) | Historical combined handoff from which the v21 pair is derived. |
 | `docs/BFMR_Solution_Design_Specification_v22.md` | Current business/technical requirements and adopted schema; v21 remains historical. |
 | `docs/BFMR_Implementation_v22..md` | This current implementation reference (double dot is intentional). |
 | `docs/DECISIONS.md` | Decision register, with controlling versus historical decisions. |
 | `docs/IMPLEMENTATION_PLAN.md` | Milestone status and dated implementation/verification history. |
 | `docs/OPEN_ISSUES.md` | Provider evidence requests, environment setup, and production blockers. |
 
-Older specifications/PDFs are preserved history. This documentation split does not mark their implementation milestones complete or change application behavior.
+Older specifications/PDFs are available in Git history. This documentation split does not mark their implementation milestones complete or change application behavior.
 
 ## 6. Environment and developer operations
 
@@ -325,7 +329,7 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 | `node --import tsx scripts/test_multi_deal_pdf.ts [path]` | Local PDF parser exercise only. Do not confuse fixtures with authenticated Gmail. |
 | `node --import tsx --test tests/postgres_database.test.ts` | Needs explicitly disposable `BFMR_TEST_DATABASE_URL`; never production. |
 
-**No live provider or production database was invoked for this integration or documentation update.** Offline results are recorded in Section 2.1. Markdown/schema/link checks and refreshed design-PDF text/render checks are documentation QA; they do not establish software or provider acceptance.
+**No live provider or production database was invoked for this integration or documentation update.** Offline results are recorded in Section 2.1. Markdown/schema/link checks are documentation QA; earlier PDF text/render checks are historical evidence. Neither establishes software or provider acceptance.
 
 ## 7. Unresolved contracts and release blockers
 
@@ -390,9 +394,9 @@ Use precise statements such as: **"Code implemented and unit-tested with synthet
 
 **21 October 2026 revision:** This reference now describes current relational source paths and the actual 16-table schema, superseding old pending-integration statements from the v20/v21 snapshot. The guarded SQL source originated at schema PR #1 commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`, subsequently merged and now bundled as documented above; source merging/consolidation does not establish installed enforcement. Section 2.1 and `RELATIONAL_INTEGRATION.md` own the new offline results and boundaries. Historical provenance below remains dated to its original task.
 
-This document and [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) split the original [v20 handoff](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md). Source file blob SHA: `890a8c79c9e1f3e1afcefeeb5a528261dd259080`. The 19 October 2026 v22 amendment records D22-01, the user's one-to-one order–shipment business rule. D22-02 and D22-03, dated 20 October 2026, add one tracking number per order and creation-locked reservation payout with no dedicated reservation-history table. It changes the intended target and regression/migration requirements, not the existing application implementation. The source document's implementation review is dated 16 October 2026; prior software test evidence belongs to its recorded October 11–12 scope. This split adds no new software test, typecheck, live provider check, or production acceptance claim.
+This document and [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) split the original [v20 handoff](https://github.com/z0ned/BFMR-Automation-v2/blob/21ef194/docs/BFMR_Solution_Design_Specification_v20.md). Source file blob SHA: `890a8c79c9e1f3e1afcefeeb5a528261dd259080`. The 19 October 2026 v22 amendment records D22-01, the user's one-to-one order–shipment business rule. D22-02 and D22-03, dated 20 October 2026, add one tracking number per order and creation-locked reservation payout with no dedicated reservation-history table. It changes the intended target and regression/migration requirements, not the existing application implementation. The source document's implementation review is dated 16 October 2026; prior software test evidence belongs to its recorded October 11–12 scope. This split adds no new software test, typecheck, live provider check, or production acceptance claim.
 
-- **Primary existing baseline:** [`docs/BFMR_Solution_Design_Specification_v1.9.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v1.9.md), compiled 12 October 2026.
+- **Historical baseline:** [`docs/BFMR_Solution_Design_Specification_v1.9.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/21ef194/docs/BFMR_Solution_Design_Specification_v1.9.md), compiled 12 October 2026.
 - **Repository safety and product authority:** [`AGENTS.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/AGENTS.md).
 - **Controlling historical decisions:** [`docs/DECISIONS.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/DECISIONS.md).
 - **Evidence and milestone boundaries:** [`docs/IMPLEMENTATION_PLAN.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/IMPLEMENTATION_PLAN.md) and [`docs/OPEN_ISSUES.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/OPEN_ISSUES.md).
@@ -400,7 +404,7 @@ This document and [Solution Design Specification v22](BFMR_Solution_Design_Speci
 - **Confirmed current single-deal code boundary:** [`scripts/test_real_email_e2e.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/scripts/test_real_email_e2e.ts).
 - **New decisions:** user's explicit design-session instructions/approvals on 16 October 2026, consolidated in Section 3 of the design companion. Their implementation status remains as recorded in v20; this documentation split does not implement them.
 
-Preserve all older versioned specifications and PDFs. v21 is a document version, not an application release. Markdown splitting does not recreate the large-format PDF ERD sheets referenced by v20; the current 16-table field dictionary, reporting SQL and Mermaid relationship source are in the design companion.
+The v22 Markdown pair is the maintained documentation source; older versioned specifications and generated PDFs remain available in Git history, rather than being retained in the current tree. v21 is a document version, not an application release. Markdown splitting does not recreate the large-format PDF ERD sheets referenced by v20; the current 16-table field dictionary, reporting SQL and Mermaid relationship source are in the design companion.
 
 ## Appendix A. Historical v20-to-v21 content coverage
 
