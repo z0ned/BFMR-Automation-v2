@@ -1,4 +1,4 @@
-import { privateJsonStore } from './privateJsonStore';
+import { privateJsonStore, type PrivateStateStore } from './privateJsonStore';
 import type { MailHeader } from './emailProvenance';
 
 export interface QueuedEmail {
@@ -8,7 +8,12 @@ export interface GmailQueueState {
   mailbox: string; cursor: string; gap: boolean;
   work: Array<{ id: string; state: 'PENDING' | 'PROCESSING' | 'DONE'; email?: QueuedEmail }>;
 }
-export function gmailIntakeQueue(file: string) {
+export interface GmailIntakeStore extends PrivateStateStore<GmailQueueState> {
+  initialize(mailbox: string, initialCursor: string, allowInitialize?: boolean): Promise<GmailQueueState>;
+  ingest(expectedCursor: string, nextCursor: string, emails: QueuedEmail[]): Promise<void>;
+  mark(id: string, next: 'PROCESSING' | 'DONE'): Promise<void>;
+}
+export function gmailIntakeQueue(file: string): GmailIntakeStore {
   const store = privateJsonStore<GmailQueueState>(file, (value) => {
     const state = value as GmailQueueState;
     if (!state || typeof state.mailbox !== 'string' || !/^\d+$/.test(state.cursor) || typeof state.gap !== 'boolean' ||

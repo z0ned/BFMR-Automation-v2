@@ -1,4 +1,9 @@
-import { PostgresDatabase } from '../src/db/postgresDatabase';
+import { randomUUID } from 'node:crypto';
+import { openRelationalRuntime, type RelationalRuntime } from '../src/services/relationalRuntime';
+import { prepareRelationalReservation, captureRelationalReservation, recordVerifiedAmazonSupplier,
+  recordConfirmedCancellation, readLockedPurchaseEvidence, readTrackerWithFailureEvidence } from '../src/services/relationalReservations';
+import { readRelationalExposureCents } from '../src/services/relationalExposure';
+import { relationalStartupHooks } from '../src/services/relationalStartup';
 import { gmailIntakeQueue } from '../src/services/gmailIntakeQueue';
 import { authenticateGmailSender, intakeMode, type MailHeader } from '../src/services/emailProvenance';
 import './loadEnv';
@@ -15,12 +20,10 @@ import { runLiveTestStartup } from './live_test_startup';
 import { automaticConfirmation } from '../src/services/automaticConfirmation';
 import { requireReservationAlerts, sendBfmrStatusAlert, sendTrackingFailureAlert, withReservationFailureAlert } from '../src/services/reservationAlerts';
 import { finishLiveReservation } from './post_reservation';
-import { readAmazonPurchaseEvidence, type ReservationReference } from '../src/services/amazonEvaluation';
+import type { ReservationReference } from '../src/services/amazonEvaluation';
 import { purchaseReservedDeal } from './purchase_reserved_deal';
 import { multiDealJournal, type MultiDealProgress } from '../src/services/multiDealJournal';
 import { cancelConfirmedReservation } from '../src/services/reservationCancellation';
-import { readOpenBfmrExposureCents } from '../src/services/bfmrOpenExposure';
-import { amazonOrderLedger } from '../src/services/amazonOrderLedger';
 import { runDueAmazonTracking } from '../src/services/nightlyAmazonTracking';
 import { ensureBfmrPurchase, ensureBfmrTracking } from '../src/services/bfmrTrackingSubmission';
 import { bfmrStatusStore, runDueBfmrStatusCheck } from '../src/services/bfmrDailyStatus';
@@ -28,7 +31,6 @@ import { bfmrStatusStore, runDueBfmrStatusCheck } from '../src/services/bfmrDail
 const POLL_INTERVAL_MS = 15_000;
 const intakeQueue = gmailIntakeQueue(process.env.BFMR_GMAIL_QUEUE_PATH || path.join(os.homedir(), '.local/state/bfmr/gmail-intake.json'));
 const batchJournal = multiDealJournal(process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/multi-deal.json'));
-const orderLedger = amazonOrderLedger(process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(os.homedir(), '.local/state/bfmr/amazon-orders.json'));
 const statusStore = bfmrStatusStore(process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(os.homedir(), '.local/state/bfmr/bfmr-status.json'));
 
 interface ReceivedEmail {
@@ -39,6 +41,7 @@ interface ReceivedEmail {
   receivedAt: string;
   headers?: MailHeader[];
   inboxAtFetch?: boolean;
+  source?: 'GMAIL' | 'LOCAL_PDF_TEST';
 }
 
 function decodeBase64Url(value: string): string {
@@ -146,6 +149,9 @@ async function* qualifyingEmails(
 async function reserveEmailDeal(
   browser: PlaywrightBfmrBrowser,
   deal: { canonicalDealId: string; dealUrl: string; dealTitle?: string },
+  runtime: RelationalRuntime,
+  email: (ReceivedEmail & { emailType: string }) | undefined,
+  correlationId: string,
 ): Promise<ReservationReference | null> {
   const dealUrl = deal.dealUrl;
   console.log(`\n[Live BFMR E2E] Reserving one BFMR offer: ${dealUrl}`);
@@ -192,6 +198,10 @@ async function reserveEmailDeal(
     return null;
   }
 
+  const prepared = await prepareRelationalReservation(runtime, {
+    dealUrl: (await browser.init()).url(), dealId, title: visibleDealTitle, email, correlationId,
+  });
+  await runtime.ownership.verifyOwnership();
   console.log('[Live BFMR E2E] Submitting one unit through the deal page.');
   const submission = await browser.submitReservation(dealUrl, dealId);
   if (submission.status === 'CLOSED_NO_SLOTS') {
@@ -215,10 +225,25 @@ async function reserveEmailDeal(
 
   console.log(`[Live BFMR E2E] PASS: My Tracker API confirmed quantity one for ${dealId}.`);
   if (!result.reference) throw new Error('My Tracker confirmed quantity one but omitted the exact reservation ID; review before evaluating or ordering.');
+  await captureRelationalReservation(runtime, result.reference, prepared);
   return result.reference;
 }
 
-export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmrBrowser) {
+export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmrBrowser, runtime: RelationalRuntime) {
+  if (!runtime) throw new Error('Relational persistence must be initialized before processing live work.');
+  const localPdf = email.source === 'LOCAL_PDF_TEST';
+  if (localPdf ? !/^pdf-[a-f0-9]{64}$/.test(email.id) :
+    (!email.inboxAtFetch || !authenticateGmailSender(email.sender, email.headers ?? [], intakeMode(process.env.BFMR_INTAKE_MODE)))) {
+    throw new Error('The processing boundary requires authenticated Gmail provenance or the separately invoked local PDF test.');
+  }
+  await runtime.ownership.verifyOwnership();
+  const reconciliation = await runtime.sync.reconcile(await readTrackerWithFailureEvidence(runtime), {
+    complete: true, accountValidated: true,
+    financialContractValidated: process.env.BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED === 'YES',
+  });
+  if (!reconciliation.promoted) throw new Error('Relational reconciliation requires review before new reservation work.');
+  const orderLedger = runtime.ledger;
+  const correlationId = randomUUID();
   const parsed = parseIncomingEmail({ ...email, messageId: email.id });
   if (!parsed.isSingleDeal && !parsed.isMultiDealAnnouncement) {
     throw new Error('The received email no longer parses as a supported new-deal announcement with complete trusted deal links.');
@@ -236,7 +261,8 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
   let reservationError: unknown;
   for (const deal of parsed.deals) {
     try {
-      const reference = await reserveEmailDeal(browser, deal);
+      const reference = await reserveEmailDeal(browser, deal, runtime,
+        localPdf ? undefined : { ...email, emailType: parsed.isMultiDealAnnouncement ? 'MULTI_DEAL' : 'SINGLE_DEAL' }, correlationId);
       if (reference) {
         confirmed.push(reference);
         if (progress) {
@@ -249,21 +275,26 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
       break;
     }
   }
+  // An uncertain reservation/capture or lost database ownership stops the batch
+  // before supplier evaluation, cancellation, or checkout of earlier members.
+  if (reservationError) throw reservationError;
   // Finish the first pass before any supplier evaluation or Amazon cart action.
   if (progress) { progress.stage = 'EVALUATING'; await batchJournal.save(progress); }
   const kept: ReservationReference[] = [];
   for (const reference of confirmed) {
     const outcome = await finishLiveReservation(reference, 'EMAIL');
-    if (outcome === 'KEPT') kept.push(reference);
+    if (outcome === 'KEPT') {
+      await recordVerifiedAmazonSupplier(runtime, reference);
+      kept.push(reference);
+    } else await recordConfirmedCancellation(runtime, reference);
     if (progress) { progress.evaluated.push(reference.reserveId); await batchJournal.save(progress); }
   }
-  if (reservationError) throw reservationError;
   if (!parsed.isMultiDealAnnouncement) return;
   // Every confirmed reservation has now been evaluated before the first order.
   if (progress) { progress.stage = 'ORDERING'; await batchJournal.save(progress); }
   const missingPurchaseEvidence: string[] = [];
   for (const reference of kept) {
-    const evidence = await readAmazonPurchaseEvidence(reference);
+    const evidence = await readLockedPurchaseEvidence(runtime, reference);
     if (!evidence) {
       missingPurchaseEvidence.push(reference.reserveId);
       console.error(`[Live BFMR E2E] Amazon product link or exact payout is missing or ambiguous for reservation ${reference.reserveId}; reservation retained for review.`);
@@ -271,11 +302,29 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
     }
     if (progress) { progress.orderStarted.push(reference.reserveId); await batchJournal.save(progress); }
     const purchase = await purchaseReservedDeal(browser, reference, evidence.productUrl, evidence.payoutCents,
-      () => readOpenBfmrExposureCents(reference));
+      async () => {
+        const readback = await runtime.sync.reconcile(await readTrackerWithFailureEvidence(runtime), {
+          complete: true, accountValidated: true,
+          financialContractValidated: process.env.BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED === 'YES',
+        });
+        if (!readback.promoted) throw new Error('Latest reservation/payment reconciliation requires review; no order was submitted.');
+        return readRelationalExposureCents(runtime.db, reference);
+      }, { readPurchaseEvidence: ref => readLockedPurchaseEvidence(runtime, ref),
+        beforeSubmit: async () => {
+          await runtime.db.withTransaction(async tx => {
+            const reservation = await tx.reservations.findByBfmrId(reference.reserveId);
+            if (!reservation) throw new Error('Checkout reservation disappeared from the database.');
+            await tx.evidence.appendWorkflow({ reservationId: reservation.id, correlationId,
+              actionType: 'AMAZON_CHECKOUT', phase: 'INTENT', outcome: null,
+              evidence: { bfmr_reservation_id: reference.reserveId, bfmr_deal_id: reference.dealId } });
+          });
+          await runtime.ownership.verifyOwnership();
+        } });
     if (purchase.status === 'INELIGIBLE') {
       if (progress) { progress.orderFinished.push(reference.reserveId); await batchJournal.save(progress); }
       if (progress) { progress.cancelStarted.push(reference.reserveId); await batchJournal.save(progress); }
       await cancelConfirmedReservation(reference);
+      await recordConfirmedCancellation(runtime, reference);
       if (progress) { progress.cancelFinished.push(reference.reserveId); await batchJournal.save(progress); }
       console.log(`[Live BFMR E2E] Checkout limits rejected reservation ${reference.reserveId}; My Tracker confirmed cancellation.`);
       if (!purchase.cartCleared) throw new Error('The rejected Amazon cart item could not be confirmed removed; stop before processing another order.');
@@ -299,11 +348,8 @@ async function main() {
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();
   if (!account || !process.env.DATABASE_URL) throw new Error('BFMR_EXPECTED_ACCOUNT and DATABASE_URL are required for durable account ownership.');
   const gmail = makeGmailClient();
-  const ownership = new PostgresDatabase(process.env.DATABASE_URL, account);
-  try {
-    await ownership.initialize();
-    if (!await ownership.claimAccount(`bfmr_worker_lock_${account}`)) throw new Error('Another worker owns this BFMR account.');
-  } catch (error) { await ownership.close(); throw error; }
+  const runtime = await openRelationalRuntime();
+  const { ownership, ledger: orderLedger } = runtime;
   const browser = new PlaywrightBfmrBrowser({ headless: false });
   ownership.onOwnershipLost(() => { void browser.close(); });
   const readline = process.stdin.isTTY && process.stdout.isTTY
@@ -315,7 +361,7 @@ async function main() {
     stopping = true;
     readline?.close();
     await browser.close();
-    await ownership.close();
+    await runtime.close();
     process.exit(0);
   };
   const onSignal = () => { void shutdown(); };
@@ -350,6 +396,9 @@ async function main() {
       }
       try {
         await runDueBfmrStatusCheck({ store: statusStore, ledger: orderLedger, hasIncomingMail,
+          readRows: () => readTrackerWithFailureEvidence(runtime),
+          reconcile: async rows => runtime.sync.reconcile(rows, { complete: true, accountValidated: true,
+            financialContractValidated: process.env.BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED === 'YES' }),
           notify: sendBfmrStatusAlert });
       } catch (error) {
         const today = new Date().toISOString().slice(0, 10);
@@ -363,7 +412,7 @@ async function main() {
     }), async (email) => {
       await ownership.verifyOwnership();
       const alertDeal = parseIncomingEmail({ ...email, messageId: email.id });
-      await withReservationFailureAlert(`Email-triggered reservation processing stopped.\nDeal: ${alertDeal.dealUrl || alertDeal.deals.map(deal => deal.canonicalDealId).join(', ') || 'identity unavailable'}`, () => processEmail(email, browser));
+      await withReservationFailureAlert(`Email-triggered reservation processing stopped.\nDeal: ${alertDeal.dealUrl || alertDeal.deals.map(deal => deal.canonicalDealId).join(', ') || 'identity unavailable'}`, () => processEmail(email, browser, runtime));
       console.log('[Live BFMR E2E] Ready for the next qualifying email in the same browser.');
     }, async (error) => {
       console.error(`[Live BFMR E2E] PAUSED: ${error instanceof Error ? error.message : String(error)}`);
@@ -384,14 +433,14 @@ async function main() {
       const savedIntake = await intakeQueue.initialize(profile.data.emailAddress, profile.data.historyId, process.env.BFMR_INITIALIZE_GMAIL_QUEUE === 'YES');
       startupHistoryId = savedIntake.cursor;
       if (!startupHistoryId) throw new Error('Gmail did not provide a pre-startup history cursor.');
-      await runLiveTestStartup(browser);
+      await runLiveTestStartup(browser, relationalStartupHooks(runtime));
     });
   } finally {
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
     readline?.close();
     await browser.close();
-    await ownership.close();
+    await runtime.close();
   }
 }
 

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ReservationReference } from './amazonEvaluation';
+import type { PrivateStateStore } from './privateJsonStore';
 
 export interface MultiDealProgress {
   messageId: string;
@@ -15,7 +16,8 @@ export interface MultiDealProgress {
 }
 
 /** Local live-run guard; an incomplete batch requires manual reconciliation on restart. */
-export function multiDealJournal(file: string) {
+export type MultiDealStore = PrivateStateStore<MultiDealProgress>;
+export function multiDealJournal(file: string): MultiDealStore {
   return {
     async load(): Promise<MultiDealProgress | null> {
       let contents: string;

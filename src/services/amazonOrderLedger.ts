@@ -41,7 +41,16 @@ export interface AmazonOrderRecord {
   };
 }
 
-function validateRecord(value: unknown): AmazonOrderRecord {
+/** Business persistence boundary; file and relational implementations share it. */
+export type LedgerUpdateSource = 'AMAZON' | 'BFMR' | 'OPERATIONAL';
+export interface AmazonOrderLedger {
+  load(): Promise<AmazonOrderRecord[]>;
+  add(record: AmazonOrderRecord): Promise<void>;
+  update(record: AmazonOrderRecord, source?: LedgerUpdateSource): Promise<void>;
+  recordReview?(orderId: string, reason: string, evidence?: Record<string, unknown>): Promise<void>;
+}
+
+export function validateAmazonOrderRecord(value: unknown): AmazonOrderRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid Amazon order ledger record.');
   const item = value as Record<string, unknown>;
   if (typeof item.orderId !== 'string' || !AMAZON_ORDER_ID.test(item.orderId) ||
@@ -101,14 +110,14 @@ export function amazonOrderLedger(file: string) {
       catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
       const parsed: unknown = JSON.parse(raw);
       if (!Array.isArray(parsed)) throw new Error('Invalid Amazon order ledger; review before continuing.');
-      const records = parsed.map(validateRecord);
+      const records = parsed.map(validateAmazonOrderRecord);
       if (new Set(records.map((record) => record.orderId)).size !== records.length) {
         throw new Error('Duplicate Amazon order IDs in ledger; review before continuing.');
       }
       return records;
     },
     async save(records: AmazonOrderRecord[]): Promise<void> {
-      records.forEach(validateRecord);
+      records.forEach(validateAmazonOrderRecord);
       if (new Set(records.map((record) => record.orderId)).size !== records.length) {
         throw new Error('Duplicate Amazon order IDs in ledger; no changes saved.');
       }
@@ -123,7 +132,7 @@ export function amazonOrderLedger(file: string) {
       try { await parent.sync(); } finally { await parent.close(); }
     },
     async add(record: AmazonOrderRecord): Promise<void> {
-      validateRecord(record);
+      validateAmazonOrderRecord(record);
       await withLock(async () => {
         const records = await this.load();
         const existing = records.find((item) => item.orderId === record.orderId);
@@ -139,8 +148,8 @@ export function amazonOrderLedger(file: string) {
         await this.save([...records, record]);
       });
     },
-    async update(record: AmazonOrderRecord): Promise<void> {
-      validateRecord(record);
+    async update(record: AmazonOrderRecord, _source?: LedgerUpdateSource): Promise<void> {
+      validateAmazonOrderRecord(record);
       await withLock(async () => {
         const records = await this.load();
         const index = records.findIndex((item) => item.orderId === record.orderId);

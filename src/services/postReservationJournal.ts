@@ -2,9 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { PostReservationTask } from './postReservation';
+import type { PrivateStateStore } from './privateJsonStore';
 
 /** Local test recovery only. No credentials or raw provider payloads are stored. */
-export function postReservationJournal(file: string) {
+export type PostReservationStore = PrivateStateStore<PostReservationTask>;
+export function postReservationJournal(file: string): PostReservationStore {
   return {
     async load(): Promise<PostReservationTask | null> {
       let text: string;

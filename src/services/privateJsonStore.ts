@@ -2,8 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+export interface PrivateStateStore<T> {
+  load(): Promise<T | null>;
+  save(value: T): Promise<void>;
+}
+
 /** One account owner writes this private, atomically replaced and fsynced state. */
-export function privateJsonStore<T>(file: string, validate: (value: unknown) => T) {
+export function privateJsonStore<T>(file: string, validate: (value: unknown) => T): PrivateStateStore<T> {
   return {
     async load(): Promise<T | null> {
       try { return validate(JSON.parse(await fs.readFile(file, 'utf8'))); }

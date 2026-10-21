@@ -1,7 +1,8 @@
 import { Pool, type PoolClient } from 'pg';
 import { TransactionalDatabase, TransactionContext, type DatabaseState } from './database';
 
-/** Durable aggregate storage. All business tables commit together under one locked account row.
+/** Legacy engine operational aggregate (commands, attempts, cursor and incidents).
+ * RelationalDatabase is authoritative for live reservation/order/payment records.
  * The dedicated advisory-lock connection is never returned to the pool while ownership is held.
  */
 export class PostgresDatabase extends TransactionalDatabase {
@@ -121,4 +122,19 @@ export class PostgresDatabase extends TransactionalDatabase {
     this.closed = true;
     try { await this.relinquishAccount(); } finally { await this.pool.end(); }
   }
+}
+
+/** Account ownership without creating or loading the legacy runtime-state table.
+ * Live relational startup deliberately exposes no aggregate or initialize API.
+ */
+export class PostgresAccountOwnership {
+  private readonly lock: PostgresDatabase;
+  constructor(connectionString: string, namespace: string) {
+    this.lock = new PostgresDatabase(connectionString, namespace);
+  }
+  claimAccount(key: string): Promise<boolean> { return this.lock.claimAccount(key); }
+  verifyOwnership(): Promise<void> { return this.lock.verifyOwnership(); }
+  onOwnershipLost(handler: () => void): void { this.lock.onOwnershipLost(handler); }
+  relinquishAccount(): Promise<void> { return this.lock.relinquishAccount(); }
+  close(): Promise<void> { return this.lock.close(); }
 }
