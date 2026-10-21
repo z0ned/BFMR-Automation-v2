@@ -6,6 +6,13 @@
 **Timezone for retailer status schedule:** `America/New_York` (Atlanta local time)  
 **Authority:** This version supersedes v1.8 for current behavior. v1.5-v1.8 remain historical records and are not additional active instructions.
 
+## 21 October 2026 — consolidate database source with the application
+
+The authoritative schema is now `database/schema.sql`, with upgrade scripts in `database/migrations/` and preserved rationale in `database/DESIGN_DECISIONS.md`. Read [database/README.md](../database/README.md) for provenance and fresh-install/upgrade boundaries. These files were imported unchanged from the former schema repository's merged main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`. The relational tests now default to the bundled file; no external checkout or required schema-path setting remains. Historical separate-repository links below are provenance only. No installed database or runtime behavior is changed by moving the sources.
+
+
+Verification: bundled-schema regressions passed 23/23 with `BFMR_SCHEMA_SQL_PATH` unset, and strict TypeScript checks passed. Original schema/migration/design-note bytes match the merged source; see `RELATIONAL_INTEGRATION.md` for the focused scope. Prior broader evidence retains its original dates and limits.
+
 ## 21 October 2026 — current v22 schema and implementation handoff
 
 The current [v22 design](BFMR_Solution_Design_Specification_v22.md) and [implementation reference](BFMR_Implementation_v22..md) now describe the adopted **16-table** schema contract and completed relational source integration. Their field dictionary, cardinalities, reporting SQL and ERD supersede the earlier 15-entity conceptual illustrations. The source/offline evidence and remaining native PostgreSQL, provider-contract, cutover and production gates are recorded in `RELATIONAL_INTEGRATION.md`; no new software test or live acceptance is claimed by this documentation revision. The current design PDF is refreshed; historical versions remain intact.
@@ -179,7 +186,7 @@ Incident-owned deal blocks have `incident_id`. Resolving an incident clears only
 
 `src/db/postgresDatabase.ts` implements a durable account-scoped JSONB aggregate in `bfmr_runtime_state`. Each transaction loads the state row `FOR UPDATE`, mutates an isolated in-memory transaction context, and atomically commits the aggregate. A dedicated PostgreSQL session holds `pg_try_advisory_lock(hashtextextended(accountKey,0))` for cross-process account ownership. Database connection loss marks ownership lost, stops transaction work, and invokes browser shutdown. Production engine mode rejects the in-memory database; the memory implementation is serialized and isolated for tests only.
 
-Migration source for that separate engine is `src/db/migrations/002_runtime_state.sql`; its initialization also creates the aggregate table idempotently. The older normalized migration 001 is not its active store. The live email runner instead uses `RelationalDatabase` and the separate `BFMR_DB_Schema` contract for business records, with read-only schema validation and a dedicated advisory-lock wrapper that performs no initialization DDL. Gmail, multi-deal progress, recovery, daily status and notification journals remain explicit private operational stores behind interfaces. Do not describe these stores or provider actions as one database transaction.
+Migration source for that separate engine is `src/db/migrations/002_runtime_state.sql`; its initialization also creates the aggregate table idempotently. The older normalized migration 001 is not its active store. The live email runner instead uses `RelationalDatabase` and the canonical `database/schema.sql` contract for business records, with read-only schema validation and a dedicated advisory-lock wrapper that performs no initialization DDL. Gmail, multi-deal progress, recovery, daily status and notification journals remain explicit private operational stores behind interfaces. Do not describe these stores or provider actions as one database transaction.
 
 A disposable PostgreSQL 18 integration test passed commit/restart persistence, rollback, an independently spawned Node process failing to acquire the account lock, and ownership connection loss preventing further database callbacks. No production database has been initialized or migrated. Configure a dedicated PostgreSQL database and backup policy before deployment.
 

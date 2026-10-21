@@ -1,5 +1,10 @@
 # Decision register
 
+## 21 October 2026 — maintain schema and application in one repository
+
+The user requested moving the schema, migrations and design notes into `BFMR-Automation-v2`. `database/` is now the authoritative location, preserving the four SQL/design files byte for byte from `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`. The database guide records original hashes and upgrade boundaries. Tests default to the local module-relative schema and retain the reviewed hash check; no second checkout is needed. Historical engine migrations remain distinct. The former repository is retained for history; this request does not archive/delete it or apply SQL to an installed database.
+
+
 ## 21 October 2026 — align v22 documentation with the adopted schema and integration
 
 The v22 design and implementation references now describe the existing **16-table** `BFMR_DB_Schema/schema.sql` contract plus the reviewed immutable-payout guard, matching the user's integration request. Actual columns, `deal_retailers`, reservation/payment-email reimbursements, single-record cardinalities, lookup mappings, evidence boundaries, SQL examples and ERD supersede the earlier 15-entity conceptual illustrations. This changes documentation to reflect already authorized/source-implemented choices; it adds no purchase scope, schema migration or provider authority. Source paths, 23/23 focused relational regressions and the aggregate 141-pass/one-native-PostgreSQL-skip evidence retain their recorded offline limits. The current v22 design PDF is refreshed from the Markdown; older versions remain unchanged.

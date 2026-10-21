@@ -2,6 +2,13 @@
 
 Current status is controlled by [Solution Design Specification v1.9](BFMR_Solution_Design_Specification_v1.9.md). These items distinguish unresolved user decisions, external provider evidence, environment setup and unimplemented operational work. Code coverage alone does not close provider evidence.
 
+## 21 October 2026 — external schema checkout dependency removed
+
+The schema, upgrade migrations and preserved rationale now live under `database/` in this repository. Original SQL/design contents and reviewed schema hash are preserved; the relational fixture resolves the bundled schema without a required environment override. This resolves the split-repository source dependency, not installed schema/guard/role acceptance or actual database migration/cutover. The former repository remains available for history and has not been archived or deleted.
+
+
+Verification: bundled-schema regressions passed 23/23 with `BFMR_SCHEMA_SQL_PATH` unset, and strict TypeScript checks passed. Original schema/migration/design-note bytes match the merged source; see `RELATIONAL_INTEGRATION.md` for the focused scope. Prior broader evidence retains its original dates and limits.
+
 ## 21 October 2026 — documentation/schema alignment
 
 The current v22 pair now matches the adopted 16-table schema names and relationships, including direct reservation/payment-email reimbursements and `deal_retailers`. Earlier 15-entity conceptual fields, multiple order-linked payments and generic metadata-column examples are superseded. This resolves the documentation mismatch, not native PostgreSQL installation, actual guard/role/cutover acceptance, verified provider/payment contracts or production recovery. Existing offline evidence and the single-deal/14-day gaps remain as recorded below.

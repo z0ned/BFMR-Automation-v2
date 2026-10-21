@@ -28,7 +28,7 @@ The proposed system would manage that process from beginning to end:
 
 The source now integrates relational business persistence, creation-locked payouts, reconciliation, orders/shipments, verified-payment recording and controlled cutover. Unified single-/multi-deal purchasing, the 14-day delivery cutoff and production operations still require work. Source completion and offline regression results do not establish live provider contracts or unattended readiness.
 
-> **Design status — 21 October 2026:** The adopted database contract is the 16-table `BFMR_DB_Schema/schema.sql` with the reviewed immutable-payout guard. This supersedes the earlier 15-entity conceptual dictionary, order-linked multiple-payment illustrations and generic metadata-column proposal. Application integration is implemented and tested offline; native PostgreSQL installation, real cutover and provider/production acceptance remain pending. Single-deal automatic purchasing and the 14-day delivery cutoff remain unimplemented. This document grants no live action authority.
+> **Design status — 21 October 2026:** The adopted database contract is the 16-table `database/schema.sql` in this repository, including the immutable-payout guard. This supersedes the earlier 15-entity conceptual dictionary, order-linked multiple-payment illustrations and generic metadata-column proposal. Application integration is implemented and tested offline; native PostgreSQL installation, real cutover and provider/production acceptance remain pending. Single-deal automatic purchasing and the 14-day delivery cutoff remain unimplemented. This document grants no live action authority.
 
 ## 1. Purpose, scope, and authority
 
@@ -245,7 +245,7 @@ The presence of a row marked `READY`, a JSON field marked `PASSED`, a demo dashb
 
 ## 8. Adopted PostgreSQL business schema — 16 tables
 
-**Source contract:** `z0ned/BFMR_DB_Schema/schema.sql`, including the immutable-payout guard in schema draft PR #1, source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`. Reviewed SQL SHA-256: `f7849f7cad80c26f1c46d38369e2c58ed3a17d263d71f0696753b21397e8bab3`. Main schema/design-notes baseline is `fc5d503a82833fcbf4c5651bbfb1d8dcf96eb871`; the guard is a separate source change, not a claim that it is merged or installed. PostgreSQL 15+ will run locally on the mini-PC.
+**Source contract:** [database/schema.sql](../database/schema.sql) in `BFMR-Automation-v2`, with [database/migrations/](../database/migrations/), [database/DESIGN_DECISIONS.md](../database/DESIGN_DECISIONS.md) and the [database guide](../database/README.md). Consolidated on 21 October 2026 from `z0ned/BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`, after the immutable-payout branch was merged there. The schema, both migrations and design notes were imported without SQL/content changes; provenance hashes are recorded in the guide. Reviewed SQL SHA-256 remains `f7849f7cad80c26f1c46d38369e2c58ed3a17d263d71f0696753b21397e8bab3`. No separate schema repository checkout is required. PostgreSQL 15+ will run locally on the mini-PC; source consolidation is not installation or migration acceptance.
 
 The user's integration request adopts these existing names and relationships rather than renaming the schema to the earlier v20/v22 illustrations. There are 13 business/evidence/association tables and three status lookups. `deal_retailers` accounts for the difference from the earlier 15-entity conceptual target. No dedicated `reservation_history` or `order_tracking` table is required. Startup validates this contract and performs no DDL or automatic historical import.
 
@@ -437,6 +437,8 @@ A long Gmail outage can outlive the provider's history retention. This design pr
 The implementation companion retains the staged delivery plan, proposed regression scenarios, and precise evidence-language rules from v20.
 
 ## 14. Sources, versioning, and traceability
+
+**21 October 2026 source consolidation:** The canonical schema, migrations and design notes now live under `database/` in this repository. The guarded schema is byte-identical to the former schema repository's merged main commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`. Offline relational fixtures resolve the bundled file by module-relative path, retaining its reviewed hash; a second checkout or required schema-path environment variable is eliminated. The former repository remains intact for history. No actual database, provider or deployment action is part of this move.
 
 **21 October 2026 integration revision:** The application now adopts the existing 16-table schema contract and guarded creation payout, with relational repositories and workflow integration. Sections 8 and 10 and Appendix A replace the older conceptual columns, order-linked multiple-payment SQL and ERD. The companion and `RELATIONAL_INTEGRATION.md` record source paths, exact offline evidence (141 passed, one skipped; 23/23 focused relational cases), configuration, cutover and release gates. No live provider action, actual installation/cutover or deployment was performed. The dated amendments below describe their original decision points, not the current implementation status.
 

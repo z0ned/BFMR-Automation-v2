@@ -2,6 +2,13 @@
 
 **Current baseline:** `BFMR_Solution_Design_Specification_v1.9.md` and its PDF. Older entries below v1.8 are historical. Mark code completion separately from provider acceptance and production deployment. A passing synthetic fixture does not prove live BFMR/Amazon behavior.
 
+## 21 October 2026 — database source consolidation
+
+Moved the authoritative business schema, both upgrades and preserved database design notes into `database/`, with an application-specific guide and original source hashes. The imported source matches the former schema repository's merged main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`. Updated current handoff/design/runbook references and the relational fixture default so one application checkout is sufficient. The SQL itself is unchanged. Native PostgreSQL installation, real upgrades/cutover, role/backup/service acceptance and any archival of the former repository remain separate work.
+
+
+Verification: bundled-schema regressions passed 23/23 with `BFMR_SCHEMA_SQL_PATH` unset, and strict TypeScript checks passed. Original schema/migration/design-note bytes match the merged source; see `RELATIONAL_INTEGRATION.md` for the focused scope. Prior broader evidence retains its original dates and limits.
+
 ## 21 October 2026 — v22 integration handoff documentation
 
 Updated `BFMR_Solution_Design_Specification_v22.md` and `BFMR_Implementation_v22..md` to the adopted 16-table schema, actual runtime/store boundaries, immutable creation terms, atomic reconciliation, payments/exposure, controlled cutover and exact existing offline evidence. Replaced obsolete order-linked payment SQL and conceptual columns/ERD; refreshed the current design PDF with text/render QA. This is documentation completion, not new software validation, native PostgreSQL acceptance, live provider work, actual cutover or deployment. Single-deal ordering and the 14-day delivery cutoff remain implementation gaps.

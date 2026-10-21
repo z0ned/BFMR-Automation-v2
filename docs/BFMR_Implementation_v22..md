@@ -11,7 +11,7 @@
 
 **Companion:** [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) owns the business and technical requirements, approved decisions, architecture, adopted 16-table schema, reporting semantics, and unresolved design questions.
 
-> **Implementation snapshot — 21 October 2026:** Relational business repositories and runner integration are implemented against the existing `BFMR_DB_Schema/schema.sql` plus the immutable-payout guard. Reservations, orders, shipments, actual payments and retained evidence use SQL; operational Gmail/recovery/status/notification stores remain separate. Across offline runs, 141 tests passed, zero failed and one native PostgreSQL case was skipped; the final relational suite passed 23/23 with disposable PGlite. TypeScript checks and build passed. Native mini-PC PostgreSQL, installed guard/roles, real cutover and provider/production acceptance remain pending. Single-deal automatic ordering and the 14-day delivery cutoff remain unimplemented; the dashboard remains simulated.
+> **Implementation snapshot — 21 October 2026:** Relational business repositories and runner integration are implemented against the bundled `database/schema.sql`, including the immutable-payout guard. Reservations, orders, shipments, actual payments and retained evidence use SQL; operational Gmail/recovery/status/notification stores remain separate. Across offline runs, 141 tests passed, zero failed and one native PostgreSQL case was skipped; the final relational suite passed 23/23 with disposable PGlite. TypeScript checks and build passed. Native mini-PC PostgreSQL, installed guard/roles, real cutover and provider/production acceptance remain pending. Single-deal automatic ordering and the 14-day delivery cutoff remain unimplemented; the dashboard remains simulated.
 
 ## 1. How to use this implementation reference
 
@@ -37,7 +37,7 @@ Use this document to locate the existing code, understand the current runtime an
 
 ### 1.3 Schema adoption and cardinalities — 21 October 2026
 
-The application's business contract is the existing **16-table** schema in `z0ned/BFMR_DB_Schema`, including `deal_retailers`, plus the immutable-payout guard from draft PR #1, commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`. The exact source SHA-256 and inventory are in the design companion Section 8 and `RELATIONAL_INTEGRATION.md`. This supersedes the earlier 15-entity conceptual dictionary and renamed SQL examples; it does not install the schema or claim the guard has merged.
+The application's business contract is the **16-table** [database/schema.sql](../database/schema.sql), including `deal_retailers` and immutable creation payout. The schema, both upgrade migrations and design notes are now maintained under `database/` in this repository, copied without SQL/content changes from `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`. That source includes the merged guard. The exact hashes and installation/upgrade boundaries are in [database/README.md](../database/README.md); no external schema checkout is required. This supersedes the earlier 15-entity dictionary and renamed examples, but does not install or migrate a database.
 
 At most one order per reservation, one shipment/tracking number per order, and one reimbursement per reservation are enforced by unique foreign keys. Reimbursements link directly to reservations and their payment email, so an order is not required. Multiple orders for the same retailer account/deal are allowed across different reservations regardless of previous order status. Multiple provider shipments/tracking values are retained as review exceptions, not collapsed or overwritten.
 
@@ -45,7 +45,7 @@ At most one order per reservation, one shipment/tracking number per order, and o
 
 A reservation's expected payout is fixed at creation. Deal payout changes affect future reservations only; no dedicated `reservation_history` table is needed. `expected_payout` remains stored/generated as `quantity * payout_per_item`. The reviewed `AFTER UPDATE` row guard, enabled `ALWAYS`, compares both final inputs with `IS DISTINCT FROM` and raises SQLSTATE `23514` on any change, including compensating edits preserving the product. Ordinary status updates remain allowed.
 
-The guard source and upgrade migration exist in the schema repository's draft change. The source was exercised with the canonical schema in disposable PGlite; native PostgreSQL installation and runtime role/grant acceptance are still pending. Runtime capture stores actual confirmed creation terms once, retains provider conflicts without promotion, preserves a deal's newer rate during duplicate capture, and never automatically retries immutable-input rejection. Missing legacy terms require real evidence rather than today's payout.
+The guard source is in `database/schema.sql`, with its upgrade in `database/migrations/20261020_reservation_payout_immutability.sql`. It was imported from the former schema repository's merged main. The source was exercised with the canonical schema in disposable PGlite; native PostgreSQL installation and runtime role/grant acceptance are still pending. Runtime capture stores actual confirmed creation terms once, retains provider conflicts without promotion, preserves a deal's newer rate during duplicate capture, and never automatically retries immutable-input rejection. Missing legacy terms require real evidence rather than today's payout.
 
 ## 2. Existing implementation and remaining gates
 
@@ -229,6 +229,7 @@ This catalog expands the source map retained from v20. It describes the primary 
 
 | File | Responsibility |
 |---|---|
+| `database/schema.sql`, `database/migrations/`, `database/DESIGN_DECISIONS.md`, `database/README.md` | Canonical relational DDL, reviewed upgrades, preserved rationale and consolidation provenance; maintained with the application |
 | `src/db/relationalTypes.ts`, `relationalRepositories.ts`, `relationalDatabase.ts` | Actual schema types, parameterized repositories, contract validation and serializable transactions |
 | `src/services/relationalRuntime.ts`, `relationalStartup.ts` | Account/schema/cutover gates and startup/recovery persistence hooks |
 | `src/services/relationalDealTerms.ts`, `relationalTrackerTerms.ts`, `relationalReservations.ts` | Current deal terms, strict tracker normalization, durable intent and exact creation capture/cancellation/supplier evidence |
@@ -288,6 +289,7 @@ Older specifications/PDFs are preserved history. This documentation split does n
 |---|---|
 | `BFMR_EXPECTED_ACCOUNT`, `DATABASE_URL` | Exact BFMR account, relational business store and dedicated ownership; local mini-PC PostgreSQL. Never print DB URL. |
 | `BFMR_RETAILER_ACCOUNT_ID`, `BFMR_RETAILER_ACCOUNT_EMAIL` | Existing approved Amazon database account and exact expected stored email; no inferred selection. |
+| `BFMR_SCHEMA_SQL_PATH` | Optional test-only override for an identical reviewed schema file; defaults to the bundled schema using module-relative resolution. Not needed for normal tests or runtime. |
 | `BFMR_CREATION_TERMS_CONTRACT_VALIDATED` | Leave unset until canonical deal/new-reservation financial fields are verified; only `YES` enables capture adapter. |
 | `BFMR_ACCOUNT_IDENTITY_SELECTOR`, `BFMR_TRACKER_BROWSER_URL` | Actual **validated** BFMR browser identity/tracker selectors and same-origin URL; absent/unknown blocks live reservation writes. |
 | `BFMR_ACCOUNT_PROOF_RESERVE_ID`, `BFMR_ACCOUNT_RESERVATION_SELECTOR` | Known common browser/API reservation proof. Row currently expects `data-reserve-id` and `data-deal-id`. |
@@ -314,7 +316,7 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 |---|---|
 | `npm run typecheck`, `npm run typecheck:all` | Static checks; recorded current results are in Section 2.1. |
 | `npm test` | Inspect environment first; never target a real DB. Current evidence uses direct per-file execution to expose individual cases. |
-| `BFMR_SCHEMA_SQL_PATH=<reviewed schema.sql> npm run test:relational` | Disposable PGlite regression suite pinned to the reviewed schema hash; no private DB URL. |
+| `npm run test:relational` | Disposable PGlite regression suite using bundled `database/schema.sql`, pinned to its reviewed hash; no private DB URL or external checkout. |
 | `npx tsx scripts/reconcile_relational_cutover.ts ...` | Default read-only report; actual apply is a separately authorized reviewed-hash/account database write. |
 | `npx tsx scripts/record_reimbursement.ts ...` | Default payment-manifest report; explicit reviewed-hash apply after accepted cutover. No provider actions. |
 | `npm run build`, `npm run dev` | Build/demo UI; not deployment acceptance. |
@@ -386,7 +388,9 @@ Use precise statements such as: **"Code implemented and unit-tested with synthet
 
 ## 9. Sources, versioning, and evidence limitations
 
-**21 October 2026 revision:** This reference now describes current relational source paths and the actual 16-table schema, superseding old pending-integration statements from the v20/v21 snapshot. The guarded SQL source is pinned to schema draft PR #1 commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`; it is not a claim of merged or installed enforcement. Section 2.1 and `RELATIONAL_INTEGRATION.md` own the new offline results and boundaries. Historical provenance below remains dated to its original task.
+**21 October 2026 consolidation:** `database/` now owns schema/migrations/design notes in the application repository. The reviewed SQL and original migration bytes remain unchanged. `tests/helpers/relationalPglite.ts` defaults to the bundled schema independently of the shell working directory; relational cases no longer skip for an absent external schema-path setting. Historical source references below describe their original dates. This move neither installs SQL nor archives/deletes the former repository.
+
+**21 October 2026 revision:** This reference now describes current relational source paths and the actual 16-table schema, superseding old pending-integration statements from the v20/v21 snapshot. The guarded SQL source originated at schema PR #1 commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`, subsequently merged and now bundled as documented above; source merging/consolidation does not establish installed enforcement. Section 2.1 and `RELATIONAL_INTEGRATION.md` own the new offline results and boundaries. Historical provenance below remains dated to its original task.
 
 This document and [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) split the original [v20 handoff](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/BFMR_Solution_Design_Specification_v20.md). Source file blob SHA: `890a8c79c9e1f3e1afcefeeb5a528261dd259080`. The 19 October 2026 v22 amendment records D22-01, the user's one-to-one order–shipment business rule. D22-02 and D22-03, dated 20 October 2026, add one tracking number per order and creation-locked reservation payout with no dedicated reservation-history table. It changes the intended target and regression/migration requirements, not the existing application implementation. The source document's implementation review is dated 16 October 2026; prior software test evidence belongs to its recorded October 11–12 scope. This split adds no new software test, typecheck, build, live provider check, or production acceptance claim.
 

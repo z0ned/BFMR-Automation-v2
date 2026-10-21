@@ -4,7 +4,7 @@ Fresh TypeScript implementation for BFMR email reservations and the separately a
 
 ## Current authoritative handoff
 
-Read [Solution Design Specification v1.9](docs/BFMR_Solution_Design_Specification_v1.9.pdf) for the current requirements, implemented behavior, assumptions, evidence, setup, source map, and open work. The editable companion is [v1.9 Markdown](docs/BFMR_Solution_Design_Specification_v1.9.md). Then read [AGENTS.md](AGENTS.md), [DECISIONS.md](docs/DECISIONS.md), [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md), and [OPEN_ISSUES.md](docs/OPEN_ISSUES.md). v1.5-v1.8 are historical versions; they are retained for traceability and do not override v1.9.
+Read the current [v22 design](docs/BFMR_Solution_Design_Specification_v22.md), [implementation reference](docs/BFMR_Implementation_v22..md), [relational integration runbook](docs/RELATIONAL_INTEGRATION.md) and [database guide](database/README.md). The [v1.9 Markdown handoff](docs/BFMR_Solution_Design_Specification_v1.9.md), [AGENTS.md](AGENTS.md), [DECISIONS.md](docs/DECISIONS.md), [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) and [OPEN_ISSUES.md](docs/OPEN_ISSUES.md) preserve the operating rules, current evidence and historical context. Older versioned documents and PDFs retain their dated scope.
 
 Later explicit user decisions supersede conflicting historical documents. Email and PDF examples, code comments, test output, and the presence of a live script do not authorize external actions. Preserve the existing dirty working tree and private runtime state.
 
@@ -14,12 +14,17 @@ The interactive email runner accepts authenticated BFMR new-deal mail and, in ex
 
 A separate daily process in the active runner checks Amazon Order History after 03:00 Atlanta time and reconciles official BFMR status, with Telegram discrepancy alerts. BFMR order/tracking writes are bound to exact reservations and require readback. These retailer selectors and BFMR write contracts have not been validated live as a complete workflow.
 
-PostgreSQL-backed transactions and cross-process advisory ownership exist in `src/db/postgresDatabase.ts`; the live runner uses PostgreSQL ownership but its Gmail queue and order/status journals remain separate private files. The React dashboard is demonstration-only. Account selectors, Gmail auth-header arrangements, provider field contracts, backup/restore and supervised production deployment remain open. Do not call the project production-ready.
+The live runner uses relational PostgreSQL business repositories with dedicated account ownership; Gmail, recovery, daily status and notification journals remain explicit durable private stores. The older JSONB engine remains a separate compatibility/model path. The React dashboard is demonstration-only. Account selectors, Gmail auth-header arrangements, provider field contracts, native PostgreSQL/schema/cutover acceptance, backup/restore and supervised deployment remain open. Do not call the project production-ready.
+
+## Database source
+
+The authoritative 16-table schema is [database/schema.sql](database/schema.sql), with [upgrade migrations](database/migrations/) and [design notes](database/DESIGN_DECISIONS.md) in this repository. It includes immutable reservation creation terms, one order per reservation, one shipment/tracking number per order and one reimbursement per reservation. No separate schema checkout is needed. See [database/README.md](database/README.md) for source provenance, fresh-install versus upgrade boundaries and offline checks. Startup never applies SQL automatically.
 
 ## Commands
 
 ```bash
 npm test
+npm run test:relational
 npm run typecheck
 npm run typecheck:all
 npm run build
@@ -35,6 +40,7 @@ npm run dev
 - `node --import tsx scripts/test_multi_deal_pdf.ts [path]`: local PDF parsing exercise only.
 
 The dedicated PostgreSQL integration test requires a disposable `BFMR_TEST_DATABASE_URL`; never use production state for a test.
+`npm run test:relational` instead uses the bundled schema and disposable PGlite, with no database URL or external schema path required.
 
 ## Configuration and private data
 
