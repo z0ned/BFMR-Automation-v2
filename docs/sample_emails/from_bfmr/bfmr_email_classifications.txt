@@ -1,0 +1,42 @@
+1. Order & Shipment Activity (Personal / Transactional)
+Emails tracking individual packages and shipments sent to BFMR:
+Tracking Submitted / Noted: Confirmations that you submitted a retailer tracking number (e.g., TBA..., 1Z...) to the BFMR dashboard.
+Deal Subscriptions: Notifications confirming you claimed or reserved a specific item to buy.
+Package Status Updates: Notices regarding the intake status of your shipments (e.g., "Package Received", "Set Aside").
+
+2. Payments & Financials (Personal / Transactional)
+Direct financial records for completed transactions:
+Payment Sent (ACH / Bank): Notifications detailing itemized payouts, payment amounts, and tracking numbers sent to your bank account.
+Crypto / Instant Payouts: Notices confirming payment transfers in Bitcoin, USDC, or other stablecoins.
+
+3. Customer Support & Inquiry Tickets (Interactive)
+Correspondence regarding issues with specific shipments, deals, or account queries:
+Support Ticket Created / Acknowledged: Automated receipts when an inquiry is submitted (e.g., Ticket #150844, #126998).
+Direct Support Conversations: Back-and-forth dialogue regarding order discrepancies, return labels, duplicate deal listings, or missing unit numbers.
+Ticket Resolution & Feedback Requests: Surveys confirming a ticket has been closed (e.g., "Resolved. How did we do?").
+
+4. Deal Alerts & Payout Broadcasts (Marketing / Buyer Alerts)
+General alerts regarding buying opportunities posted by BFMR:
+New Deals / In-Stock Alerts: Announcements of new items eligible for purchase (e.g., PlayStation 5, Apple Watch Series 11, RTX 5080, Fire TV Sticks).
+Payout Increases: Notifications that BFMR has increased its buying price ("Above Retail" payout increases).
+Deal Deadlines & Closings: Warnings that a deal is shutting down or final cut-off deadlines for drop-offs/deliveries (e.g., "CLOSING - Apple iPhone 18 Pro Max").
+Major Shopping Events: Event-specific guides and deal floods (e.g., Amazon Prime Big Deal Days, Fall Deals).
+
+5. Account Security, Authentication & Dev Operations
+Technical, administrative, and security-related emails:
+2FA & Logins: One-time passcodes and recovery code alerts ("2SV Recovery Code", "Logged In With Recovery Code").
+Identity Verification (KYC): Mandatory compliance notices (e.g., Persona account verification announcements).
+Developer / Bot Setup: Telegram Bot Father tokens (BFMR_auto_bot) and GitHub SSH key alerts for automated buying scripts (bfmr-automation).
+
+6. Operations, Platform Updates & Policies
+Broad operational notices affecting how you do business with BFMR:
+Platform Changelogs & New Features: Website feature rollouts, bug fixes, and API upgrades ("✨SITE IMPROVEMENTS✨").
+Logistics & Holiday Schedules: Banking cutoffs, extended warehouse drop-off hours, and holiday payment schedules.
+Service & Policy Changes: Requirements for physical receipts, updates to BFMR package insurance coverage, and drop-off facility rules.
+Referral Promotions: Announcements regarding referral bonuses (e.g., "Double Referral Bonus: $500").
+Optional Metadata Tags for Enhanced Filtering
+
+If you are planning to feed these into a spreadsheet or database, you could also assign secondary tags:
+Retailer: Amazon, Walmart, Best Buy, Apple, Target, Costco, etc.
+Product Category: Apple/iPhones, Gaming Consoles, Laptops/Computers, Smart Home/Wearables.
+Urgency/Action Required: High (2FA codes, closing deadlines, receipt requests) vs. Low/Informational (general newsletter, payout increase).
