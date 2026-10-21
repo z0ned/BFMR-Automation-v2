@@ -8,7 +8,8 @@ import { readRecentReservedRows, type TrackerReservationRow } from './bfmrTracke
  */
 export async function verifyBfmrAccountIdentity(page: Page, expectedAccount: string | undefined,
   readRows: () => Promise<TrackerReservationRow[]> = readRecentReservedRows,
-  config = process.env): Promise<boolean> {
+  config = process.env,
+  prepareProofPage?: (proofPage: Page) => Promise<void>): Promise<boolean> {
   const identitySelector = config.BFMR_ACCOUNT_IDENTITY_SELECTOR;
   const trackerUrl = config.BFMR_TRACKER_BROWSER_URL;
   const reserveId = config.BFMR_ACCOUNT_PROOF_RESERVE_ID;
@@ -21,6 +22,7 @@ export async function verifyBfmrAccountIdentity(page: Page, expectedAccount: str
     if (target.protocol !== 'https:' || target.username || target.password || target.port ||
         !isTrustedBfmrHost(target.hostname) || target.origin !== current.origin) return false;
     proofPage = await page.context().newPage();
+    await prepareProofPage?.(proofPage);
     await proofPage.goto(target.href, { waitUntil: 'domcontentloaded', timeout: 30000 });
     if (new URL(proofPage.url()).origin !== target.origin) return false;
     const identity = proofPage.locator(identitySelector);

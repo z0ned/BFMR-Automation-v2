@@ -2,6 +2,12 @@
 
 **Current baseline:** [v22 solution design](BFMR_Solution_Design_Specification_v22.md) and [v22 implementation reference](BFMR_Implementation_v22..md). [OPEN_ISSUES.md](OPEN_ISSUES.md) lists only unfinished work; this plan retains dated implementation/evidence history. Mark code completion separately from provider acceptance and production deployment. A passing synthetic fixture does not prove live BFMR/Amazon behavior.
 
+## 21 October 2026 — EV-001 diagnostic prepared; live proof pending
+
+Added the standalone `inspect-bfmr-identity` command, an awaited proof-tab guard hook and injectable complete-read transport. It attaches only to an exact existing Chromium PID, uses a separate guarded tracker tab and emits sanitized checks; it has no live startup, reservation/order, database or notification path. The operator's authenticated BFMR session/configuration is on the local mini-PC/Ubuntu container. Cloud preflight found missing BFMR configuration and no permitted BFMR network destination, so no live account proof was collected and EV-001 remains open.
+
+Focused offline verification: 12/12 synthetic cases passed, including the existing identity browser fixture on system Chromium; standard and targeted strict TypeScript checks passed, and help/missing-configuration behavior was exercised. The broader `typecheck:all` was blocked by a missing PGlite dependency in this workspace. Full details and evidence limits are in the v22 implementation reference. These cases are not added to the previous distinct-case aggregate. Next: run the diagnostic on the configured local session and review real selector/common-reservation evidence; do not enable writes or invent an empty-account proof.
+
 ## 21 October 2026 — artifact housekeeping
 
 Removed the redundant Bun lockfile and the three obsolete v1.6–v1.8 specification PDFs at the user’s request. npm/`package-lock.json` and the v22 Markdown pair are the maintained dependency/documentation sources; historical artifacts remain available through Git history. No dependency versions or runtime behavior changed. Documentation and whitespace checks apply to this change; earlier test/PDF evidence retains its original scope.

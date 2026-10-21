@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { trackerApiTestHelpers } from '../src/services/bfmrTrackerApi';
+import { readRecentReservedRows, trackerApiTestHelpers } from '../src/services/bfmrTrackerApi';
 
 describe('BFMR My Tracker reservation matching', () => {
   const dealId = 'apple-ipad-air-8-11-2026-m4-256gb-wifi-3';
@@ -142,5 +142,47 @@ describe('BFMR My Tracker reservation matching', () => {
     });
     assert.deepEqual(shape.paging, { total: 'number', totalValue: 0 });
     assert.equal(JSON.stringify(shape).includes('No records found'), false);
+  });
+
+  it('uses the injected transport for every page and rejects incomplete reads', async (t) => {
+    const names = ['BFMR_API_KEY', 'BFMR_API_SECRET', 'BFMR_TRACKER_URL'] as const;
+    const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
+    t.after(() => {
+      for (const name of names) {
+        if (previous[name] === undefined) delete process.env[name];
+        else process.env[name] = previous[name];
+      }
+    });
+    process.env.BFMR_API_KEY = 'synthetic-key';
+    process.env.BFMR_API_SECRET = 'synthetic-secret';
+    process.env.BFMR_TRACKER_URL = 'https://api.bfmr.com/synthetic/my-tracker';
+    t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected uninjected request'); });
+    const requestedPages: number[] = [];
+    let inconsistent = false;
+    const request: typeof fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      assert.equal(url.origin, 'https://api.bfmr.com');
+      assert.ok(init);
+      assert.equal(init.method, 'GET');
+      assert.ok(init.signal instanceof AbortSignal);
+      const headers = new Headers(init.headers);
+      assert.equal(headers.get('API-KEY'), 'synthetic-key');
+      assert.equal(headers.get('API-SECRET'), 'synthetic-secret');
+      assert.equal(url.searchParams.has('search'), false);
+      assert.equal(url.searchParams.has('status'), false);
+      const page = Number(url.searchParams.get('page_no'));
+      requestedPages.push(page);
+      return Response.json({
+        my_tracker: [{ reserve_id: `R${page}`, deal_id: `D${page}` }],
+        paging: { page, pages: 2, total: inconsistent && page === 2 ? 3 : 2 },
+      });
+    };
+    assert.deepEqual(await readRecentReservedRows(request), [
+      { reserve_id: 'R1', deal_id: 'D1' }, { reserve_id: 'R2', deal_id: 'D2' },
+    ]);
+    assert.deepEqual(requestedPages, [1, 2]);
+    inconsistent = true;
+    await assert.rejects(readRecentReservedRows(request), /pagination changed.*incomplete/);
+    assert.deepEqual(requestedPages, [1, 2, 1, 2]);
   });
 });

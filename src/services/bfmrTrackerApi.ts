@@ -84,10 +84,10 @@ function networkFailureDetails(error: unknown): { code?: string; message: string
   return { code, message };
 }
 
-async function fetchTrackerPage(url: URL, headers: Record<string, string>): Promise<Response> {
+async function fetchTrackerPage(url: URL, headers: Record<string, string>, request: typeof fetch = fetch): Promise<Response> {
   for (let attempt = 1; attempt <= MAX_TRANSIENT_FETCH_ATTEMPTS; attempt += 1) {
     try {
-      return await fetch(url, {
+      return await request(url, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(15000),
@@ -276,7 +276,7 @@ export async function inspectTrackerApiResponseShape(): Promise<Array<{
   return results;
 }
 
-export async function readRecentReservedRows(): Promise<TrackerReservationRow[]> {
+export async function readRecentReservedRows(request: typeof fetch = fetch): Promise<TrackerReservationRow[]> {
   const apiKey = process.env.BFMR_API_KEY;
   const apiSecret = process.env.BFMR_API_SECRET;
   if (!apiKey || !apiSecret) throw new Error('BFMR_API_KEY and BFMR_API_SECRET are required for API confirmation.');
@@ -295,7 +295,7 @@ export async function readRecentReservedRows(): Promise<TrackerReservationRow[]>
       'API-KEY': apiKey,
       'API-SECRET': apiSecret,
       accept: 'application/json',
-    });
+    }, request);
     if (!response.ok) throw new Error(`My Tracker API returned HTTP ${response.status}.`);
 
     const payload: unknown = await response.json();

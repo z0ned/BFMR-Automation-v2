@@ -12,6 +12,8 @@ Remove an item when its stated completion evidence is recorded in the implementa
 
 Verify current account/tracker markup and the configured `BFMR_ACCOUNT_IDENTITY_SELECTOR`, `BFMR_TRACKER_BROWSER_URL`, `BFMR_ACCOUNT_RESERVATION_SELECTOR`, `data-reserve-id` and `data-deal-id`. Establish that the browser and complete API read refer to the exact same account and reservation. Define a verified account-proof alternative for an account without a common known reservation. Missing identity evidence must continue to block writes.
 
+Next evidence collection is on the operator's local mini-PC/Ubuntu container, where the signed-in browser/private API configuration resides. Use `npm run inspect-bfmr-identity -- --browser-pid <existing Chromium PID>` from that checkout after applying the diagnostic source. The cloud workspace lacks BFMR configuration/access; no live proof has been collected. Review the sanitized report and actual selector semantics locally. The tool does not close this issue or enable writes automatically; see the implementation reference's dated diagnostic evidence.
+
 ### EV-002 Gmail provenance and message templates
 
 Validate sanitized Gmail API authentication headers for direct BFMR mail and the explicitly supported testing forward. Confirm Google routing, DMARC, DKIM/SPF and real single-/multi-deal template behavior, including bundles, duplicates, updates and additional-slot notices. Printed samples and sender display names cannot establish authentication.
