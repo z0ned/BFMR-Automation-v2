@@ -38,4 +38,4 @@
 
 ## Secrets and hygiene
 
-Keep credentials, OAuth material, authenticated browser profiles, raw account pages, private database dumps, runtime state and real personal/order data out of Git, logs, fixtures, PDFs and chat. Commit only synthetic/sanitized fixture content after checking it. Preserve the versioned v1.5-v1.8 PDFs as historical documents.
+Keep credentials, OAuth material, authenticated browser profiles, raw account pages, private database dumps, runtime state and real personal/order data out of Git, logs, fixtures, PDFs and chat. Commit only synthetic/sanitized fixture content after checking it. Historical revisions remain available through Git history.

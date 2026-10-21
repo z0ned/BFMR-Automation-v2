@@ -98,12 +98,12 @@ Review the report and its exact `manifestSha256`. An authorized application addi
 
 ## Offline validation — 21 October 2026
 
-Evidence class: synthetic offline regression and compiler/build checks. Across the validation runs, the latest result for each distinct case totals **142 tests: 141 passed, zero failed, one skipped**. Reruns are counted once. The final source corrections were followed by the focused suite and compiler/build checks; the unchanged existing suite was not repeated afterward.
+Evidence class: synthetic offline regression and compiler checks. Across the validation runs, the latest result for each distinct case totals **142 tests: 141 passed, zero failed, one skipped**. Reruns are counted once. The final source corrections were followed by the focused suite and compiler checks; the unchanged existing suite was not repeated afterward.
 
 - `npm run test:relational`: **23/23 passed** in the integration validation (originally invoked with an explicit path to the reviewed source, now bundled by default), using disposable `@electric-sql/pglite` 0.5.10 and canonical schema source at `a67a0715ef040b0dd65de17ce63a0a5e34898699`, SHA-256 `f7849f7cad80c26f1c46d38369e2c58ed3a17d263d71f0696753b21397e8bab3`. The helper never consults a private `DATABASE_URL`.
 - Existing tests were executed directly per file with `node --import tsx tests/<name>.test.ts`: **118 passed**, with the native PostgreSQL integration intentionally skipped because `BFMR_TEST_DATABASE_URL` was unset. Direct execution exposed individual cases rather than relying on this environment's whole-file `--test` summaries.
 - The **40 browser fixture cases passed** across reruns with installed Chromium **154.0.8037.57**, selected through a temporary test-only launch preload (`NODE_OPTIONS='--import=<temporary preload>'`). Playwright's bundled headless-shell download was unavailable (HTTP 403). This verifies synthetic fixture behavior on system Chromium 154, not bundled Chromium 156 or authenticated provider layouts. The MFA fixture now uses a routed HTML sign-in transition so intercepted HTTP redirects cannot escape routing; its login/MFA/resumption assertions remain unchanged.
-- `npm run typecheck`, `npm run typecheck:all`, `npm run build`, and `git diff --check` passed.
+- `npm run typecheck`, `npm run typecheck:all`, and `git diff --check` passed.
 
 The focused cases cover immutable/generated payout enforcement, compensation attempts, permitted status updates, exact capture idempotency without reverting newer deal rates, atomic full-read reconciliation and association conflicts, unknown legacy records, ownership rollback, actual payment identity/idempotency, fresh complete exposure, single-order/shipment constraints, multiple same-account/deal orders, retained historical exclusions, JSONB idempotency, startup recovery guards, and report-first/idempotent/failed cutover. Final cases verify consistent cutover/runtime scope and rejection of inconsistent order/shipment states before acceptance.
 
@@ -114,7 +114,7 @@ These results do not verify a native mini-PC PostgreSQL installation, real provi
 - Real creation/deal payout fields, full tracker retention/completeness, payment evidence, account alignment and current retailer/BFMR DOM/API contracts remain release gates. Keep contract flags unset until their meanings are verified.
 - Installing the schema/guard, accepting an actual legacy import, runtime role provisioning, mini-PC startup/reboot supervision, backup/restore and production recovery have not been performed by this work.
 - Single-new-deal automatic purchasing still has its existing early-return boundary, and the separate 14-day latest-delivery cutoff remains unimplemented. Neither behavior is broadened by persistence integration.
-- Gmail watch/StreamingPull, an integrated operational queue/outbox migration, and a live dashboard/service remain separate work. No deployment or new live invocation is authorized by source presence.
+- Gmail watch/StreamingPull, an integrated operational queue/outbox migration, and a supervised service remain separate work. No deployment or new live invocation is authorized by source presence.
 
 ## Documentation QA — 21 October 2026
 

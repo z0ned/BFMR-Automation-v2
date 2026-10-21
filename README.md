@@ -1,10 +1,10 @@
 # BFMR Automation v2
 
-Fresh TypeScript implementation for BFMR email reservations and the separately authorized Amazon workflows. The repository contains active live scripts, offline tests, an incomplete orchestration engine, and a simulated dashboard. It is not a deployed unattended production service.
+Fresh TypeScript implementation for BFMR email reservations and the separately authorized Amazon workflows. The repository contains active live scripts, offline tests, and an incomplete orchestration engine. It is not a deployed unattended production service.
 
 ## Current authoritative handoff
 
-Read the current [v22 design](docs/BFMR_Solution_Design_Specification_v22.md), [implementation reference](docs/BFMR_Implementation_v22..md), [relational integration runbook](docs/RELATIONAL_INTEGRATION.md) and [database guide](database/README.md). [AGENTS.md](AGENTS.md), [DECISIONS.md](docs/DECISIONS.md), [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) and [OPEN_ISSUES.md](docs/OPEN_ISSUES.md) preserve the operating rules, current evidence and historical context. Older versioned documents and PDFs retain their dated scope.
+Read the current [v22 design](docs/BFMR_Solution_Design_Specification_v22.md), [implementation reference](docs/BFMR_Implementation_v22..md), [relational integration runbook](docs/RELATIONAL_INTEGRATION.md) and [database guide](database/README.md). [AGENTS.md](AGENTS.md), [DECISIONS.md](docs/DECISIONS.md), [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) and [OPEN_ISSUES.md](docs/OPEN_ISSUES.md) preserve the operating rules, current evidence and historical context. Dated evidence retains its original scope; Git history preserves earlier revisions.
 
 Later explicit user decisions supersede conflicting historical documents. Email and PDF examples, code comments, test output, and the presence of a live script do not authorize external actions. Preserve the existing dirty working tree and private runtime state.
 
@@ -14,7 +14,7 @@ The interactive email runner accepts authenticated BFMR new-deal mail and, in ex
 
 A separate daily process in the active runner checks Amazon Order History after 03:00 Atlanta time and reconciles official BFMR status, with Telegram discrepancy alerts. BFMR order/tracking writes are bound to exact reservations and require readback. These retailer selectors and BFMR write contracts have not been validated live as a complete workflow.
 
-The live runner uses relational PostgreSQL business repositories with dedicated account ownership; Gmail, recovery, daily status and notification journals remain explicit durable private stores. The older JSONB engine remains a separate compatibility/model path. The React dashboard is demonstration-only. Account selectors, Gmail auth-header arrangements, provider field contracts, native PostgreSQL/schema/cutover acceptance, backup/restore and supervised deployment remain open. Do not call the project production-ready.
+The live runner uses relational PostgreSQL business repositories with dedicated account ownership; Gmail, recovery, daily status and notification journals remain explicit durable private stores. The older JSONB engine remains a separate compatibility/model path. Account selectors, Gmail auth-header arrangements, provider field contracts, native PostgreSQL/schema/cutover acceptance, backup/restore and supervised deployment remain open. Do not call the project production-ready.
 
 ## Database source
 
@@ -27,11 +27,9 @@ npm test
 npm run test:relational
 npm run typecheck
 npm run typecheck:all
-npm run build
-npm run dev
 ```
 
-`npm test` and build are software checks; do not run them unless the user requests testing or verification. Commands below have real external effects and require the exact gates and setup in the current v22 implementation reference:
+Run software tests only when the user requests testing or verification. Commands below have real external effects and require the exact gates and setup in the current v22 implementation reference:
 
 - `npm run test-real-email` / `npm run test-real-email-e2e`: real BFMR intake/reservations and potentially Amazon purchases.
 - `npm run test-bfmr-ipad-reservation`: live BFMR test reservation/startup workflow.

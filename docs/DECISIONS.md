@@ -1,5 +1,10 @@
 # Decision register
 
+## 21 October 2026 — command-line application scope
+
+The maintained application consists of Node.js/TypeScript automation entrypoints, backend services, PostgreSQL repositories and offline regression tooling. Operate through the documented scripts with their exact account/financial/provider gates. npm and `package-lock.json` define dependencies. The shared intake parser and its message types remain available to the backend; synthetic adapter implementations remain confined to testing. This scope update changes no provider authority or installed database.
+
+
 ## 21 October 2026 — maintain schema and application in one repository
 
 The user requested moving the schema, migrations and design notes into `BFMR-Automation-v2`. `database/` is now the authoritative location, preserving the four SQL/design files byte for byte from `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`. The database guide records original hashes and upgrade boundaries. Tests default to the local module-relative schema and retain the reviewed hash check; no second checkout is needed. Historical engine migrations remain distinct. The former repository is retained for history; this request does not archive/delete it or apply SQL to an installed database.
@@ -16,7 +21,7 @@ The user authorized using the existing `BFMR_DB_Schema/schema.sql` fields/relati
 
 Account ownership, startup schema/guard and retailer-account validation, a matching cutover marker/source hash, independent deal-rate evidence, and conflict retention remain required. Operational cursor/work/retry/alert stores and the legacy JSONB engine compatibility path remain explicit separate stores. Unknown legacy creation terms are never filled from today's deal payout, and import never replays provider effects.
 
-Evidence class: source implementation and user-authorized offline validation, recorded 21 October 2026: 141 passed, zero failed, one native PostgreSQL case skipped across 142 distinct tests; final focused relational cases passed 23/23 using disposable PGlite and canonical guarded schema. TypeScript checks, build and whitespace checks passed. System Chromium 154 browser fixtures do not prove live or bundled-browser behavior. Exact commands, schema hash and boundaries are in `RELATIONAL_INTEGRATION.md`. Final review aligned import/runtime automation scope and blocks inconsistent supported order/shipment states before cutover acceptance. No live provider or production database was invoked and no actual migration/cutover/deployment was performed. The current request changes persistence, not live authority, single-deal purchase scope or the independent 14-day delivery-cutoff gap. Earlier decision/evidence entries below retain their original dates and limitations; their untested-guard/source-only status is superseded only by this bounded offline evidence.
+Evidence class: source implementation and user-authorized offline validation, recorded 21 October 2026: 141 passed, zero failed, one native PostgreSQL case skipped across 142 distinct tests; final focused relational cases passed 23/23 using disposable PGlite and canonical guarded schema. TypeScript and whitespace checks passed. System Chromium 154 browser fixtures do not prove live or bundled-browser behavior. Exact commands, schema hash and boundaries are in `RELATIONAL_INTEGRATION.md`. Final review aligned import/runtime automation scope and blocks inconsistent supported order/shipment states before cutover acceptance. No live provider or production database was invoked and no actual migration/cutover/deployment was performed. The current request changes persistence, not live authority, single-deal purchase scope or the independent 14-day delivery-cutoff gap. Earlier decision/evidence entries below retain their original dates and limitations; their untested-guard/source-only status is superseded only by this bounded offline evidence.
 
 ## 20 October 2026 — fixed reservation payout; no dedicated history table (D22-03)
 
@@ -46,7 +51,7 @@ This is a documentation/target-design change only. Existing package-array journa
 
 ## Controlling decisions as of 12 October 2026
 
-This section controls when earlier entries below conflict. Full implementation and evidence details are in [Solution Design Specification v1.9](BFMR_Solution_Design_Specification_v1.9.md).
+This section controls when earlier entries below conflict. Current implementation and evidence details are in the [v22 implementation reference](BFMR_Implementation_v22..md), alongside the [v22 solution design](BFMR_Solution_Design_Specification_v22.md).
 
 - **Multiple new deals:** accept an unambiguous body-announced multi-deal email with distinct trusted deal links. Reserve quantity one once for every deal before checking eligibility. Bundles remain one BFMR offer. Additional-slot notices and unsupported roundups remain excluded.
 - **Sender provenance:** direct BFMR sender in production. `matt.ward@live.com` only in explicit `BFMR_INTAKE_MODE=testing`. Both require trusted Gmail authentication evidence.
@@ -56,12 +61,10 @@ This section controls when earlier entries below conflict. Full implementation a
 - **Separate fixed-item Amazon purchase:** exact `B0GTMJF7PV` test command, interactive cap <= $100 and explicit Y/N approval. The user reported one successful purchase-to-Order-# flow. This is not authority for another item or automatic email linkage. `B09JQMJHXY` remains a no-submit rehearsal product.
 - **Order identity/tracking:** use Order # from the thank-you page caused by the current submission. No history-first-match fallback. Daily Amazon Orders check after 03:00 `America/New_York`; BFMR tracking updates use exact reservation and verified Purchase/Shipment readback.
 - **Durable operations:** PostgreSQL aggregate transactions and account-scoped session advisory lock exist. Live queue, batch, Amazon ledger and BFMR status journals are private JSON and remain separate. First queue creation is explicit; lost cursors/uncertain effects are not reset or blindly replayed.
-- **Dashboard/evidence:** simulated UI only; no green status without recorded evidence; no live operational claim.
 - **No challenge bypass:** login/MFA/CAPTCHA remains manual. Keep secrets and private account material out of logs and Git.
 
 ## 12 October 2026 - review hardening details
 
-Tracker matching uses exact IDs and shared lifecycle classification. Sender authentication uses trusted Gmail API headers. Browser/API account alignment requires configured account identity plus a known common reservation; current selectors are not live-validated and missing proof blocks writes. Gmail cursor/work commit atomically. Reconciliation keeps reservation history and persistent discrepancies. Unconfirmed engine submissions stay UNCERTAIN/REVIEW; incident resolution is scoped by incident ID. The in-memory DB is test-only; PostgreSQL is the engine store. See v1.9 Sections 4-12 and `REVIEW_FIXES_2026-10-12.md`.
 
 ## Historical decisions (retained for traceability)
 

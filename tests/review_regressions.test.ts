@@ -12,7 +12,6 @@ import { amazonOrderLedger } from '../src/services/amazonOrderLedger';
 import { TransactionalDatabase } from '../src/db/database';
 import { BfmrOrchestrationEngine } from '../src/orchestrator/engine';
 import { FakeGmailAdapter, FakeMyTrackerAdapter, FakeBrowserAdapter, FakeTelegramAdapter } from '../src/adapters/fakes';
-import { INITIAL_TESTS, MILESTONES, runAcceptanceTest } from '../src/services/acceptanceTests';
 
 const sender = 'deals@buyformeretail.com';
 const auth = (address = sender): MailHeader[] => [{ name: 'From', value: address },
@@ -157,9 +156,4 @@ test('resolving one incident leaves other deal blocks intact', async () => {
   const blocks = context.db.getDealBlocks();
   assert.ok(blocks.find(row => row.incident_id === incidents[0].id)!.resolved_at);
   assert.equal(blocks.find(row => row.incident_id === incidents[1].id)!.resolved_at, null);
-});
-test('dashboard starts without passing evidence and cannot simulate an acceptance pass', async () => {
-  assert.ok(INITIAL_TESTS.every(row => row.status === 'PENDING' && !row.lastRun));
-  assert.ok(MILESTONES.every(row => row.status !== 'COMPLETED'));
-  assert.equal((await runAcceptanceTest('AT-05')).status, 'PENDING');
 });

@@ -62,7 +62,6 @@ This specification owns business behavior, technical constraints, architecture, 
 | Amazon integration | Validate product/account/quantity and checkout policy, submit at most once, obtain the causal Order #, and track exact orders and packages. |
 | Persistence and reconciliation | Retain current business state, payment provenance, provider observations, workflow evidence, and sync completeness. No dedicated reservation-history table is required under D22-03. |
 | Notifications and operator recovery | Surface discrepancies and uncertain outcomes, preserve durable notification state, and support reviewed recovery. |
-| Reporting / future operations UI | Expose evidence-backed financial and operational information through secured integration; a demonstration UI is not operational evidence. |
 
 These are logical responsibilities rather than separately deployed services. The current implementation and the boundaries between its stores are described in BFMR Implementation v22.
 
@@ -241,7 +240,7 @@ After the daily retailer checks, compare a complete official BFMR tracker view w
 
 ### 7.3 Status and evidence are not permission
 
-The presence of a row marked `READY`, a JSON field marked `PASSED`, a demo dashboard success indicator, or a notification does **not** authorize checkout, reprocessing or a retry. All external actions must independently pass current provider evidence and exact user-approved scope. Avoid generic retry middleware around non-idempotent provider actions.
+The presence of a row marked `READY`, a JSON field marked `PASSED`, or a notification does **not** authorize checkout, reprocessing or a retry. All external actions must independently pass current provider evidence and exact user-approved scope. Avoid generic retry middleware around non-idempotent provider actions.
 
 ## 8. Adopted PostgreSQL business schema — 16 tables
 
@@ -431,7 +430,7 @@ A long Gmail outage can outlive the provider's history retention. This design pr
 - Verify the new-only single-/multi-deal workflow, quantity-one policy, delivery-cutoff edge cases, financial limits, exact identity, and at-most-once submission behavior using appropriate synthetic evidence before considering provider acceptance.
 - Separately establish bounded read-only provider evidence for authentication, account alignment, field semantics, and current browser layouts. Synthetic fixtures do not establish live contracts.
 - Any live reservation, cancellation, purchase, provider write, or notification requires its own authorized scope and confirmed outcome; neither this design nor a recorded past success authorizes a new live invocation.
-- Before production, accept durable storage and restore/reconciliation, account ownership and loss handling, supervised restart, notifications, monitoring, and secured operational access. Do not infer health or acceptance from simulated dashboard values.
+- Before production, accept durable storage and restore/reconciliation, account ownership and loss handling, supervised restart, notifications, monitoring, and secured operational access. Require recorded operational evidence for health and acceptance.
 - Record evidence date, branch/commit, exact code path, provider/session scope, test type, outcome, exceptions, and side-effect or no-op proof.
 
 The implementation companion retains the staged delivery plan, proposed regression scenarios, and precise evidence-language rules from v20.
@@ -454,7 +453,6 @@ The original [v20 document](https://github.com/z0ned/BFMR-Automation-v2/blob/mai
 - **Repository safety and product authority:** [`AGENTS.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/AGENTS.md).
 - **Controlling historical decisions:** [`docs/DECISIONS.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/DECISIONS.md).
 - **Evidence and milestone boundaries:** [`docs/IMPLEMENTATION_PLAN.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/IMPLEMENTATION_PLAN.md) and [`docs/OPEN_ISSUES.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/OPEN_ISSUES.md).
-- **Prior fixes:** [`docs/REVIEW_FIXES_2026-10-12.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/REVIEW_FIXES_2026-10-12.md).
 - **Historical engine storage:** [`src/db/migrations/002_runtime_state.sql`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/migrations/002_runtime_state.sql), [`src/db/postgresDatabase.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/postgresDatabase.ts); older relational baseline [`001_initial_schema.sql`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/migrations/001_initial_schema.sql).
 - **Confirmed current single-deal code boundary:** [`scripts/test_real_email_e2e.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/scripts/test_real_email_e2e.ts).
 - **New decisions:** user's explicit design-session instructions/approvals on 16 October 2026, consolidated in Section 3. Current implementation status is recorded in the companion; single-deal automatic purchasing and the delivery cutoff remain pending.
@@ -499,7 +497,7 @@ This map describes the original split. Current schema, SQL and implementation su
 |---|---|---|
 | Header, status warning, 1.1 authority | Opening status; 1.2 | Opening status; 1.1; 9 |
 | 1.2 operating procedure; 1.3 document map | 1.2–1.3 | 1.1–1.2 |
-| 2 current implementation / intended-change matrix | 2 target architecture; 3 decisions | 2 existing baseline; 4 storage/UI boundaries |
+| 2 current implementation / intended-change matrix | 2 target architecture; 3 decisions | 2 existing baseline; 4 storage boundaries |
 | 2.1 recorded evidence and setup observations | 1.2 evidence distinctions | 2.1 historical evidence; 6.1 environment |
 | 3 decisions; 3.1 delivery examples; 3.2 email chronology | 3 (all decisions and examples retained) | 3.1, 3.3, 7.3 implementation gaps |
 | 4.1 Gmail provenance and classification | 4.1 | 3.1; 5.1 |

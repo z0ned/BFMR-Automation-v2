@@ -1,28 +1,28 @@
-BFMR AUTOMATION V2 - CURRENT OVERVIEW (12 OCTOBER 2026)
+BFMR AUTOMATION V2 — OVERVIEW (21 OCTOBER 2026)
 
-AUTHORITATIVE DOCUMENT
-Read docs/BFMR_Solution_Design_Specification_v1.9.pdf first, then AGENTS.md, docs/DECISIONS.md, docs/IMPLEMENTATION_PLAN.md and docs/OPEN_ISSUES.md. v1.5-v1.8 are historical records. Later explicit user decisions supersede conflicting older scope statements.
+CURRENT REFERENCES
+Start with README.md, docs/BFMR_Solution_Design_Specification_v22.md,
+docs/BFMR_Implementation_v22..md and AGENTS.md. OPEN_ISSUES.md tracks unfinished
+work; RELATIONAL_INTEGRATION.md and database/README.md describe persistence,
+configuration and controlled cutover.
 
-CURRENT PURPOSE AND STATUS
-Receive qualifying BFMR new-deal emails, create one quantity-one reservation per deal, check the exact confirmed reservation's supplier list for Amazon and, when eligible and all rules pass, place the approved Amazon quantity-one order. Check known Amazon orders after 03:00 Atlanta local time for tracking, submit matching order/tracking identifiers to BFMR through the implemented write workflow, and compare BFMR official statuses against local order history. The project contains code for these workflows but is not an accepted unattended production service.
+RUNTIME
+Node.js/TypeScript command-line scripts process authenticated Gmail new-deal
+messages, create and verify exact BFMR reservations, evaluate supplier evidence,
+and run the approved Amazon quantity-one workflow under its financial and
+checkout safeguards. Tracking and BFMR reconciliation run through the active
+worker. Provider contracts and supervised production acceptance remain gates.
 
-MULTI-DEAL EMAIL
-A distinct, body-announced multi-new-deal email can be processed when the declared deal set and trusted BFMR detail links are unambiguous. Reserve each deal once before evaluating the batch. Bundles remain one BFMR offer. Multiple-deal/all-open roundups without an explicit supported new-deal announcement, additional-slot/reservations-added messages, updates, payout changes and unrelated mail are not new-deal triggers. Subject text does not determine the body classification.
+PERSISTENCE
+The canonical business schema and upgrades live under database/. Relational
+repositories store reservations, orders, shipments, payments and evidence.
+Private Gmail, batch/recovery and status/notification journals remain explicit
+operational stores. The separate orchestration engine retains its existing
+compatibility store. Database transactions do not include external actions.
 
-AMAZON POLICY
-Per order: maximum complete total $100; BFMR payout must be at least the complete Amazon total; existing unpaid BFMR expected payouts plus proposed Amazon total may not exceed $200. The current reservation payout is excluded from the existing-unpaid subtotal and is checked separately against Amazon total. A failed rule cancels only the exact new BFMR reservation and requires readback. Unknown identity, amount, supplier, checkout selection or side-effect result blocks for review. Amazon order must be gift-marked and use free non-Prime delivery. See v1.9 for the complete identity and exposure rules.
-
-EMAIL AND ACCOUNT SAFETY
-The live Gmail queue stores fetched email work and history cursor together in a private atomic JSON file. Sender identity needs trusted Gmail authentication headers; the testing sender is allowed only in explicit testing mode. The worker obtains PostgreSQL advisory ownership before queue/browser actions. Browser writes require configured visible account identity and matching known reservation evidence from both browser My Tracker and the API. Missing evidence stops writes.
-
-TRACKING AND DAILY STATUS
-Use the exact Amazon Order #, ASIN and total to find the corresponding Orders card, then store labeled package tracking locally. BFMR Purchase and Shipment writes use the exact reservation and verified My Tracker readback. Daily BFMR reconciliation stores status history for open and terminal reservations and persistent discrepancies, with Telegram alerts. Actual Amazon selectors and BFMR read/write contracts still need live validation.
-
-PERSISTENCE AND DASHBOARD
-PostgreSQL stores the orchestration engine aggregate and cross-process account lock. Live Gmail work, batch progress, Amazon order ledger and BFMR status history are separate private JSON files. These stores are not yet integrated into a supervised service with production backups/restore. The dashboard is explicitly simulated; it reports no live service health and has no completed acceptance evidence.
-
-RELEASE BLOCKERS
-Validate real Gmail auth headers, BFMR account/tracker DOM selectors and cross-account evidence, My Tracker fields/paging/statuses/payout and purchase/shipment contracts, Amazon Business cart/review/order/tracking layouts, production PostgreSQL setup and backups, and supervised recovery. Keep provider evidence gates closed until verified. Expired Gmail history remains a persistent stop condition; no cursor reset or Inbox sweep is authorized.
-
-SAMPLES
-Rendered emails under docs/sample_emails/from_bfmr support local parser work only. They do not prove Gmail authenticity or authorize actions. Preserve privacy: no raw recipient data, tokens, account pages, secrets or real order/tracking identifiers in Git.
+SAFETY AND REMAINING WORK
+Use exact account, deal, reservation, order and tracking identity. Unknown
+outcomes stop for reconciliation; never replay a possibly completed action.
+Single-deal automatic purchasing and the 14-day latest-delivery cutoff remain
+unfinished. Follow OPEN_ISSUES.md for provider, database, recovery and service
+acceptance. No document or sample grants live action authority.

@@ -4,8 +4,6 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 3000",
-    "build": "tsc && vite build",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
@@ -21,35 +19,23 @@
     "auth-bfmr": "tsx scripts/auth_bfmr.ts",
     "debug-email": "tsx scripts/debug_gmail_intake.ts",
     "auth-gmail": "tsx scripts/auth_gmail_oauth.ts",
-    "preview": "vite preview --host 0.0.0.0 --port 3000",
     "typecheck:all": "tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --esModuleInterop --skipLibCheck scripts/*.ts tests/*.ts",
     "test:relational": "node --import tsx tests/relational_integration.test.ts"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^6.2.0",
-    "clsx": "^2.1.1",
     "dotenv": "^18.0.6",
     "googleapis": "^185.0.0",
     "imapflow": "^2.3.0",
-    "lucide-react": "^1.16.0",
     "pg": "^8.23.1",
-    "playwright": "^1.64.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.0.2"
+    "playwright": "^1.64.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",
-    "@tailwindcss/vite": "^4.0.9",
     "@types/node": "^22.13.5",
     "@types/pg": "^8.23.1",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "@vitejs/plugin-react": "^4.3.4",
     "pdf-parse": "^2.4.5",
-    "tailwindcss": "^4.0.9",
     "tsx": "^4.23.15",
-    "typescript": "^5.7.3",
-    "vite": "^6.2.0"
+    "typescript": "^5.7.3"
   }
 }

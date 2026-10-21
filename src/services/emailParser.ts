@@ -1,4 +1,4 @@
-import { IntakeEmail } from '../types/bfmr';
+import type { IntakeEmail } from '../types/intakeEmail';
 import { isTrustedBfmrDealUrl } from './bfmrUrl';
 
 function cleanQuotedPrintable(str: string): string {

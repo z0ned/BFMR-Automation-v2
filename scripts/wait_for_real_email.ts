@@ -1,7 +1,5 @@
 import './loadEnv';
 import { parseBfmrEmail as parseIncomingEmail } from '../src/services/bfmrEmailLinks';
-import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
-import { myTrackerService } from '../src/services/myTracker';
 
 // Permitted senders per Solution Design Specification v1.5 FR-001
 const PERMITTED_SENDERS = [
@@ -42,7 +40,7 @@ async function displayParsedDeal(emailData: {
   const senderType = isDirectBfmr 
     ? 'Direct BFMR Notification' 
     : 'Testing Forward from matt.ward@live.com (FR-001)';
-  console.log(`Sender Verification: PASS (${senderType})`);
+  console.log(`Sender Filter Match (authentication not established) (${senderType})`);
 
   // Parse deal using v1.5 rules
   const parsed = parseIncomingEmail({
@@ -67,75 +65,10 @@ async function displayParsedDeal(emailData: {
   console.log(`  • Trusted BFMR URL:   ${parsed.dealUrl || 'None (Must match buyformeretail.com)'}`);
   console.log('-'.repeat(80));
 
-  if (parsed.isSingleDeal && parsed.canonicalDealId && parsed.dealUrl) {
-    console.log('STATUS: COMMENCING MVP 1 RESERVATION PIPELINE');
-    console.log(`\n[Stage 1/3] Duplicate Safeguard: Checking My Tracker for deal "${parsed.canonicalDealId}"...`);
-
-    const trackerCheck = await myTrackerService.checkExistingReservation(parsed.canonicalDealId);
-    if (trackerCheck.hasDuplicate) {
-      console.log(`⚠️ [DUPLICATE BLOCKED] ${trackerCheck.reason}`);
-      console.log(`-> Skipping reservation creation per Specification v1.5 FR-004.\n`);
-      return;
-    }
-    console.log(`✅ [My Tracker Check] No active reservation found for deal "${parsed.canonicalDealId}".`);
-
-    console.log(`\n[Stage 2/3] Launching Playwright browser & navigating to deal...`);
-    const browser = new PlaywrightBfmrBrowser();
-    try {
-      const session = await browser.verifySession(process.env.BFMR_EXPECTED_ACCOUNT, parsed.dealUrl);
-      if (session !== 'AUTHENTICATED') {
-        const reason = {
-          AUTH_REQUIRED: 'BFMR is still showing its sign-in page or login form.',
-          UNTRUSTED_REDIRECT: 'The deal link redirected to a host that is not approved for BFMR.',
-          DEAL_PAGE_MISMATCH: 'BFMR is on an approved host, but the redirect did not land on a deal-detail page.',
-          PAGE_ERROR: 'BFMR did not load a usable deal page after navigation or sign-in.',
-          CHALLENGE: 'BFMR presented a CAPTCHA/access challenge; automation stopped for manual handling.',
-        }[session];
-        console.error(`❌ ${reason} Halting reservation.`);
-        return;
-      }
-
-      console.log(`\n[Stage 3/3] Submitting quantity 1 reservation on website form...`);
-      const result = await browser.submitReservation(parsed.dealUrl, parsed.canonicalDealId);
-
-      if (result.status === 'SUBMITTED') {
-        const record = await myTrackerService.recordReservation({
-          canonicalDealId: parsed.canonicalDealId,
-          title: parsed.dealTitle ?? 'Unknown deal',
-          retailer: parsed.retailer ?? 'Unknown retailer',
-        });
-
-        console.log('\n' + '='.repeat(80));
-        console.log('🎉 RESERVATION COMPLETED SUCCESSFULLY!');
-        console.log(`Deal ID:        ${parsed.canonicalDealId}`);
-        console.log(`Title:          ${parsed.dealTitle}`);
-        console.log(`Retailer:       ${parsed.retailer}`);
-        console.log(`Quantity:       1 offer (v1.5 FR-005 rule)`);
-        console.log(`Reservation ID: ${record.rid}`);
-        console.log(`Confirmed At:   ${record.reservedAt}`);
-        console.log('Matt will release this reservation manually when desired (v1.5 FR-012).');
-        console.log('='.repeat(80) + '\n');
-      } else if (result.status === 'CLOSED_NO_SLOTS') {
-        console.log(`\n⚠️ [SKIPPED] Deal has no slots available or reservation button is disabled.`);
-      } else {
-        console.log(`\n⚠️ [UNCERTAIN OUTCOME] ${result.errorDetail || 'Browser outcome unclear'}`);
-        console.log(`-> Halting retry per v1.5 FR-008 to protect against duplicate commitments.`);
-      }
-    } finally {
-      setTimeout(() => browser.close().catch(() => {}), 3000);
-    }
-  } else if (parsed.isMultiDeal) {
-    console.log('STATUS: SILENT SKIP — Multi-deal emails are excluded from MVP 1.');
-  } else if (parsed.isAdditionalSlotNotice) {
-    console.log('STATUS: SILENT SKIP — Additional-slot notices are excluded from MVP 1.');
-  } else {
-    console.log('STATUS: REVIEW REQUIRED — Could not resolve valid BFMR deal link or unrecognized format.');
-    const foundUrls = (emailData.body.match(/https?:\/\/[^\s<>"'()[\]]+/gi) || []).slice(0, 5);
-    if (foundUrls.length > 0) {
-      console.log('Detected Links in Email:');
-      foundUrls.forEach((u) => console.log(`  -> ${u}`));
-    }
-  }
+  // Parser diagnostics cannot use synthetic tracker state to authorize a
+  // provider mutation. The maintained runner owns account/persistence gates.
+  console.log('STATUS: PARSER DIAGNOSTIC ONLY — no reservation action is performed.');
+  console.log('Use npm run test-real-email for the separately authorized, gated workflow.');
   console.log('='.repeat(80) + '\n');
   console.log('Continuing to wait for next incoming email...\n');
 }
