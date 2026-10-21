@@ -4,7 +4,7 @@ Fresh TypeScript implementation for BFMR email reservations and the separately a
 
 ## Current authoritative handoff
 
-Read the current [v22 design](docs/BFMR_Solution_Design_Specification_v22.md), [implementation reference](docs/BFMR_Implementation_v22..md), [relational integration runbook](docs/RELATIONAL_INTEGRATION.md) and [database guide](database/README.md). The [v1.9 Markdown handoff](docs/BFMR_Solution_Design_Specification_v1.9.md), [AGENTS.md](AGENTS.md), [DECISIONS.md](docs/DECISIONS.md), [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) and [OPEN_ISSUES.md](docs/OPEN_ISSUES.md) preserve the operating rules, current evidence and historical context. Older versioned documents and PDFs retain their dated scope.
+Read the current [v22 design](docs/BFMR_Solution_Design_Specification_v22.md), [implementation reference](docs/BFMR_Implementation_v22..md), [relational integration runbook](docs/RELATIONAL_INTEGRATION.md) and [database guide](database/README.md). [AGENTS.md](AGENTS.md), [DECISIONS.md](docs/DECISIONS.md), [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) and [OPEN_ISSUES.md](docs/OPEN_ISSUES.md) preserve the operating rules, current evidence and historical context. Older versioned documents and PDFs retain their dated scope.
 
 Later explicit user decisions supersede conflicting historical documents. Email and PDF examples, code comments, test output, and the presence of a live script do not authorize external actions. Preserve the existing dirty working tree and private runtime state.
 
@@ -31,7 +31,7 @@ npm run build
 npm run dev
 ```
 
-`npm test` and build are software checks; do not run them unless the user requests testing or verification. Commands below have real external effects and require the exact gates and setup in v1.9:
+`npm test` and build are software checks; do not run them unless the user requests testing or verification. Commands below have real external effects and require the exact gates and setup in the current v22 implementation reference:
 
 - `npm run test-real-email` / `npm run test-real-email-e2e`: real BFMR intake/reservations and potentially Amazon purchases.
 - `npm run test-bfmr-ipad-reservation`: live BFMR test reservation/startup workflow.
@@ -44,6 +44,6 @@ The dedicated PostgreSQL integration test requires a disposable `BFMR_TEST_DATAB
 
 ## Configuration and private data
 
-Environment loading is described in v1.9. Keep credentials, browser profiles, OAuth files, message content, Amazon order/tracking details, PostgreSQL data and runtime journals out of Git and logs. First-time Gmail queue creation requires an explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES`; never use it to replace a lost existing queue.
+Environment loading is described in the v22 implementation reference. Keep credentials, browser profiles, OAuth files, message content, Amazon order/tracking details, PostgreSQL data and runtime journals out of Git and logs. First-time Gmail queue creation requires an explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES`; never use it to replace a lost existing queue.
 
 Sample PDFs under `docs/sample_emails/from_bfmr` are parser reference material only. They are not authentication evidence and do not authorize live reservation, cancellation, ordering or tracking actions.

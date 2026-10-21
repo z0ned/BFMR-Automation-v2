@@ -1,83 +1,73 @@
-# Open issues and release inputs
+# Open issues and release blockers
 
-Current status is controlled by [Solution Design Specification v1.9](BFMR_Solution_Design_Specification_v1.9.md). These items distinguish unresolved user decisions, external provider evidence, environment setup and unimplemented operational work. Code coverage alone does not close provider evidence.
+**Updated:** 21 October 2026
 
-## 21 October 2026 — external schema checkout dependency removed
+This is the current-only checklist of unfinished implementation, provider evidence and operational acceptance. Requirements are defined in the [v22 solution design](BFMR_Solution_Design_Specification_v22.md); implemented behavior, configuration and evidence are recorded in the [v22 implementation reference](BFMR_Implementation_v22..md) and [relational integration runbook](RELATIONAL_INTEGRATION.md). Database installation and upgrade boundaries are in [database/README.md](../database/README.md).
 
-The schema, upgrade migrations and preserved rationale now live under `database/` in this repository. Original SQL/design contents and reviewed schema hash are preserved; the relational fixture resolves the bundled schema without a required environment override. This resolves the split-repository source dependency, not installed schema/guard/role acceptance or actual database migration/cutover. The former repository remains available for history and has not been archived or deleted.
+Remove an item when its stated completion evidence is recorded in the implementation reference or project registers. Synthetic coverage does not establish a live provider contract, installed database enforcement or production acceptance.
 
-
-Verification: bundled-schema regressions passed 23/23 with `BFMR_SCHEMA_SQL_PATH` unset, and strict TypeScript checks passed. Original schema/migration/design-note bytes match the merged source; see `RELATIONAL_INTEGRATION.md` for the focused scope. Prior broader evidence retains its original dates and limits.
-
-## 21 October 2026 — documentation/schema alignment
-
-The current v22 pair now matches the adopted 16-table schema names and relationships, including direct reservation/payment-email reimbursements and `deal_retailers`. Earlier 15-entity conceptual fields, multiple order-linked payments and generic metadata-column examples are superseded. This resolves the documentation mismatch, not native PostgreSQL installation, actual guard/role/cutover acceptance, verified provider/payment contracts or production recovery. Existing offline evidence and the single-deal/14-day gaps remain as recorded below.
-
-
-## Release blockers and external evidence
+## Provider evidence
 
 ### EV-001 BFMR account identity and browser/API alignment
 
-The browser write guard needs exact account identity and a common known reservation visible in the browser and complete My Tracker API. Obtain sanitized current-page evidence for `BFMR_ACCOUNT_IDENTITY_SELECTOR`, `BFMR_TRACKER_BROWSER_URL`, `BFMR_ACCOUNT_RESERVATION_SELECTOR`, `data-reserve-id`, and `data-deal-id`. The current implementation cannot prove an account with no common known reservation. Determine a safe authoritative alternative. Until validated, missing selectors/identity fail closed and live reservation writes do not proceed.
+Verify current account/tracker markup and the configured `BFMR_ACCOUNT_IDENTITY_SELECTOR`, `BFMR_TRACKER_BROWSER_URL`, `BFMR_ACCOUNT_RESERVATION_SELECTOR`, `data-reserve-id` and `data-deal-id`. Establish that the browser and complete API read refer to the exact same account and reservation. Define a verified account-proof alternative for an account without a common known reservation. Missing identity evidence must continue to block writes.
 
 ### EV-002 Gmail provenance and message templates
 
-Capture sanitized Gmail API headers for direct BFMR mail and the authorized `matt.ward@live.com` testing forward. Confirm Google Authentication-Results, Received, DMARC, DKIM/SPF layouts, and ensure legitimate messages pass without trusting display names or body text. Rendered sample PDFs do not provide this evidence. Test subject invariance, body announcements, tracked links, multi-deal counts, duplicates, bundles, additional-slot notices and updates using sanitized fixtures.
+Validate sanitized Gmail API authentication headers for direct BFMR mail and the explicitly supported testing forward. Confirm Google routing, DMARC, DKIM/SPF and real single-/multi-deal template behavior, including bundles, duplicates, updates and additional-slot notices. Printed samples and sender display names cannot establish authentication.
 
 ### EV-003 My Tracker and BFMR API contracts
 
-Validate deal slug to `deal_id`, complete unfiltered pagination, retention of old active reservations, exact reserve ID, status and quantity/offer fields, supplier list, payout totals and unit amounts, amount paid, all open/terminal statuses and immediate post-submit visibility. Validate Purchase and Shipment request fields, returned IDs, eventual readback and behavior after an uncertain POST. Never treat an incomplete read as absence. Keep `BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED` unset until payout/status arithmetic is evidenced.
+Verify canonical deal/slug mapping, newly confirmed creation quantity/rate, full unfiltered pagination and retention, exact reservation/offer identity, status mapping, supplier evidence, money representations and immediate visibility. Verify Purchase/Shipment request fields, returned IDs, exact readback and uncertain-response behavior. Keep `BFMR_CREATION_TERMS_CONTRACT_VALIDATED` unset until its actual field contract is established.
 
 ### EV-004 Amazon Business checkout and tracking UI
 
-Verify real logged-in DOM layouts for saved account choice, exact single ASIN line/quantity, gift editor and saved gift state, free non-Prime delivery, total, duplicate warning, CVV challenge, submission confirmation Order #, Orders history card and package tracking details. The current order identity and tracking extractors have synthetic coverage; no single synthetic test proves live layout. Do not rerun a purchase to find an existing Order #.
+Verify current authenticated layouts for account selection, exact item/ASIN/quantity, saved gift state, free non-Prime delivery, complete total, delivery estimates, duplicate warnings, CVV challenges and causal confirmation Order #. Verify exact order-history/package/tracking extraction. Collect nonmutating evidence first; do not repeat an order to debug a missing identity.
 
-### EV-005 Full exposure semantics
+### EV-005 Full exposure and payment-coverage semantics
 
-The user settled a $100 total cap, BFMR payout >= full Amazon order cost, and <=$200 for existing unpaid BFMR expected payouts plus the proposed Amazon total. The code assumes unit payout multiplies quantity, total fields describe the whole row, `amount_paid` subtracts from expected payout, and current new reservation is excluded from the prior-orders subtotal. Validate those exact BFMR field meanings and which unpaid statuses count. Until then, leave the contract gate unset.
+Verify provider unit/total payout and cumulative `amount_paid` meanings, complete reservation coverage including manual records, and status/payment mapping. Confirm that locked SQL payouts and actual reimbursement records agree with the provider read before calculating existing exposure plus proposed retailer cost. Missing payment evidence and terminal status alone cannot establish settlement. Keep `BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED` unset until verified.
 
-## Environment and operations
+### EV-006 Actual payment-email evidence
 
-### SETUP-001 PostgreSQL and private state
+Establish the authenticated payment-notice contract and exact reservation/deal, actual amount, payment time and source provenance. Complete any automatic payment-template adapter only from verified evidence. Define reviewed handling for aggregate-only or conflicting payment evidence; do not infer individual payments or dates from cumulative balance changes. Preserve the one-reimbursement-per-reservation constraint.
 
-Configure the local mini-PC `DATABASE_URL`, account namespace and relational startup prerequisites in `RELATIONAL_INTEGRATION.md`. `src/db/migrations/002_runtime_state.sql` belongs to the separate JSONB engine. The live runner needs relational business-record backups plus private persistent storage/backups for Gmail, multi-deal/recovery and BFMR status/notification journals. Preserve the accepted legacy order file as a cutover hash boundary; standalone manual orders retain their separate ledger. Build and test backup/restore and stale backup reconciliation before deployment. Never test against production database.
+## Database and operational acceptance
 
-### SETUP-002 First queue initialization/recovery
+### SETUP-001 Local PostgreSQL and runtime configuration
 
-First-ever setup can use `BFMR_INITIALIZE_GMAIL_QUEUE=YES`, then remove it. Restore an existing queue if missing. `PROCESSING` rows and expired-history gaps require external BFMR/Amazon reconciliation and an explicit repair procedure; never delete state to restart intake. Expired Gmail history remains unresolved without an authorized recovery scan.
+Validate PostgreSQL 15+ on the mini-PC, configure the exact BFMR/retailer account and dedicated account ownership, and provision a non-owning runtime role with reviewed grants. Install only the applicable reviewed schema/upgrade for the actual database baseline. Runtime startup must validate its contract without applying DDL. Financial enforcement acceptance is tracked under IMPL-006 below.
 
-### SETUP-003 Runner service and notifications
+### SETUP-002 Gmail queue initialization and recovery
 
-The runner currently uses Gmail history polling and a single interactive process. Production service supervision, watch renewal/StreamingPull, durable notification delivery gates, browser desktop access after reboot, log retention, monitoring, Telegram outage behavior and restart recovery need an integrated runbook and acceptance.
+Define and verify first-ever initialization versus restoration of an existing queue. Reconcile interrupted `PROCESSING` work against BFMR/Amazon before operator repair. Preserve expired-history gaps; an alternative recovery scan or purchase backfill needs a separate explicit decision. Missing state must not silently initialize a new mailbox baseline.
 
-## 20 October 2026 design decision and focused implementation gap
+### SETUP-003 Supervised service, scheduling and notifications
+
+Provide and accept startup/reboot supervision, headed-browser/manual-auth access, ownership-loss shutdown, scheduled tracking/status checks, monitoring, log retention and durable notification-delivery recovery. Define and implement Gmail watch/StreamingPull if required by the intended service. Existing SQL and private operational stores need coordinated recovery; migration of all operational state into PostgreSQL is separate work.
+
+### SETUP-004 Actual historical reconciliation and cutover
+
+Reconcile real creation-term proofs, existing reservation/order/shipment identities and actual payment-email evidence. Review complete account coverage and legacy source hashes, resolve unsupported/conflicting records, and accept the controlled cutover only under separate authorization after backups. Import must not replay provider actions or substitute current deal terms for historical creation terms.
+
+### SETUP-005 Backup, restore and stale-state recovery
+
+Implement and verify backups/restoration of PostgreSQL, private Gmail/batch/recovery/status/notification stores and accepted legacy source files. Demonstrate safe recovery from stale backups and missing journals, preserving possible external outcomes and preventing duplicate actions. Establish access, retention and recovery procedures before unattended operation.
 
 ### IMPL-006 Creation-locked reservation payout (D22-03)
 
-The user decided that dedicated `RESERVATION_HISTORY` is not needed; its absence is no longer a design gap. A reservation's expected payout never changes after creation. Deal payout changes affect future reservations only. The active v22 target therefore has 15 tables; existing JSON/status journals and provider/workflow evidence remain preserved.
+Verify installed native PostgreSQL enforcement using the reviewed non-owning role: creation quantity/rate edits, including compensating edits preserving their product, must be rejected; ordinary status updates must remain permitted. Confirm the stored generated formula and enabled `ALWAYS` guard match [database/schema.sql](../database/schema.sql). Source and embedded-test evidence alone do not close installed enforcement or the historical authenticity checks required by SETUP-004.
 
-**Pending enforcement:** the separate schema's stored generated `expected_payout = quantity * payout_per_item` still recalculates if either writable input changes. Design and review a guard and upgrade migration that protect the creation financial snapshot and locked total without blocking ordinary status updates; integrate authoritative capture of creation terms and mismatch review into ingestion/reconciliation. Retain later conflicting provider observations, block their authoritative promotion and never replace creation payout with the current deal rate. Do not guess missing legacy creation terms. This documentation decision implements no guard, migration or runtime change. See [v22 design](BFMR_Solution_Design_Specification_v22.md#9-approved-authoritative-reconciliation-design) and [implementation amendment](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03).
+## Remaining application work
 
-**20 October 2026 source status:** The guard and upgrade-migration source are now present in `BFMR_DB_Schema/schema.sql` and `BFMR_DB_Schema/migrations/20261020_reservation_payout_immutability.sql`. `public.reject_reservation_payout_change()` uses an `AFTER UPDATE` row trigger enabled `ALWAYS`, compares final `NEW`/`OLD` `quantity` and `payout_per_item` via `IS DISTINCT FROM`, and raises SQLSTATE `23514` on a change. Ordinary updates retaining those inputs remain allowed; the generated expected-payout expression is unchanged. This supersedes only the pending guard-source work described above. See [BFMR_DB_Schema draft PR #1](https://github.com/z0ned/BFMR_DB_Schema/pull/1), source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`.
+### Single-deal automatic purchasing
 
-**Still open:** The SQL has not been applied or tested; no software tests were added or run, no database changed, and no provider action or deployment occurred. Runtime authoritative creation-term capture, payout-conflict retention/review, and legacy creation-evidence reconciliation remain pending. Do not infer historical creation terms from current deal payout or claim installed database enforcement from source presence.
+Implement the shared durable ordering/confirmation/reconciliation workflow for newly processed single-deal mail before removing its current early return. Preserve the same quantity-one, financial, identity, gift, free-delivery and uncertainty safeguards as the supported multi-deal path. Do not revisit completed Gmail messages to backfill purchases.
 
-## Code completion versus acceptance
+### Fourteen-day latest-delivery cutoff
 
-### 20 October 2026 relational integration source status
+Implement and cover the approved calendar-day rule: exactly 14 days is allowed; a later date rejects checkout with exact new-reservation cancellation/readback. A range uses its latest date; an explicitly absent estimate may proceed under other guards; unreadable/conflicting evidence stops for review. Settle order-date timezone and final-review estimate-change handling.
 
-Source implementation now covers relational business repositories, runner reservation capture, atomic complete-read reconciliation/conflict evidence, order/shipment ledger and tracking interfaces, actual verified-payment recording, fresh locked-payout exposure, and explicit startup/cutover controls. See [RELATIONAL_INTEGRATION.md](RELATIONAL_INTEGRATION.md). The runtime capture/conflict paths previously listed under IMPL-006 are implemented at the source level; source presence does not prove actual provider fields or installed database enforcement.
+### Operator repair for uncertain actions and replacements
 
-21 October 2026 offline evidence: 141 passed, zero failed, one native PostgreSQL integration skipped across 142 distinct tests; final focused relational cases passed 23/23 using disposable PGlite/canonical guarded schema. Compiler/build/whitespace checks passed. The final cutover/runtime predicate and order/shipment coherence review findings are fixed and covered. Browser fixture evidence uses system Chromium 154; see `RELATIONAL_INTEGRATION.md` for exact boundaries. This supersedes earlier untested-guard wording only for the embedded offline SQL evidence.
-
-Still open: provider creation-term/deal-rate/payment/full-tracker contracts remain unverified; native mini-PC PostgreSQL validation, actual schema/guard installation, runtime roles, an accepted real legacy cutover, backup/restore and service acceptance remain pending. Operational journals and the legacy JSONB engine remain separate stores. The single-deal purchase early return and independent 14-day delivery cutoff remain gaps. No live provider or production database was invoked and no actual migration/cutover/deployment occurred.
-
-- PostgreSQL transaction and advisory lock code exists and passed a disposable synthetic PostgreSQL integration. This is not production DB migration or backup acceptance.
-- File-backed queue, multi-deal, order and status journals exist but are not committed in one shared DB transaction with every external side effect.
-- Amazon purchase and BFMR tracking write code exists; no complete current live multi-deal Amazon/BFMR write cycle was verified.
-- Dashboard remains simulated and provides no live state.
-- User-reported live fixed-item purchase success is limited to that specific test/product/session; do not expand it as general evidence.
-
-## Resolved source-review findings (12 October 2026)
-
-The source review findings are fixed in code and have offline regression coverage: wrong-deal title fallback and open-status duplicates; unauthenticated sender/hardcoded auth pass; reminder-only browser account check; memory-only Gmail cursor/work; incompatible lifecycle status sets; daily history loss; fabricated reservation IDs; all-block incident clearing; process-local default orchestration persistence/locking; dashboard fabricated acceptance status; and the previously reported checkout single-line/order identity issues. See `REVIEW_FIXES_2026-10-12.md` and v1.9 Sections 4-11. Do not confuse “code fixed” with the live provider evidence listed above.
+Complete reviewed restart/repair procedures for uncertain reservation, checkout, BFMR Purchase/Shipment and notification outcomes. Resolve replacement/refund cases within the one-order-per-reservation model without fabricating identities, discarding evidence or silently inserting another order. Recovery must reconcile authoritative outcomes before any separately authorized retry.

@@ -1,6 +1,6 @@
 # Implementation plan and evidence
 
-**Current baseline:** `BFMR_Solution_Design_Specification_v1.9.md` and its PDF. Older entries below v1.8 are historical. Mark code completion separately from provider acceptance and production deployment. A passing synthetic fixture does not prove live BFMR/Amazon behavior.
+**Current baseline:** [v22 solution design](BFMR_Solution_Design_Specification_v22.md) and [v22 implementation reference](BFMR_Implementation_v22..md). [OPEN_ISSUES.md](OPEN_ISSUES.md) lists only unfinished work; this plan retains dated implementation/evidence history. Mark code completion separately from provider acceptance and production deployment. A passing synthetic fixture does not prove live BFMR/Amazon behavior.
 
 ## 21 October 2026 — database source consolidation
 
