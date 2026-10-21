@@ -6,11 +6,32 @@
 **Timezone for retailer status schedule:** `America/New_York` (Atlanta local time)  
 **Authority:** This version supersedes v1.8 for current behavior. v1.5-v1.8 remain historical records and are not additional active instructions.
 
+## 21 October 2026 — current v22 schema and implementation handoff
+
+The current [v22 design](BFMR_Solution_Design_Specification_v22.md) and [implementation reference](BFMR_Implementation_v22..md) now describe the adopted **16-table** schema contract and completed relational source integration. Their field dictionary, cardinalities, reporting SQL and ERD supersede the earlier 15-entity conceptual illustrations. The source/offline evidence and remaining native PostgreSQL, provider-contract, cutover and production gates are recorded in `RELATIONAL_INTEGRATION.md`; no new software test or live acceptance is claimed by this documentation revision. The current design PDF is refreshed; historical versions remain intact.
+
+
 ## 20 October 2026 target-design addendum — D22-03
 
 The later user decision removes dedicated `RESERVATION_HISTORY` from the v22 target and fixes a reservation's expected payout at creation. Deal payout changes affect future reservations only; a deal moving from $80 to $95 leaves an existing one-unit reservation at $80 and a subsequently created one-unit reservation at $95. Preserve the creation financial snapshot and conflicting provider observations for review. The active target now has 15 tables; see [v22 design](BFMR_Solution_Design_Specification_v22.md) and [implementation reference](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03).
 
 This is a documentation-only decision, not a new source audit, migration or runtime implementation. The separate schema's generated `quantity * payout_per_item` formula still permits input updates; protecting the locked total and integrating conflict handling remain pending. Earlier reservation-history wording below records existing JSON/status journals and historical code evidence, which remain intact; it does not require a dedicated relational history table.
+
+## 20 October 2026 source update — reservation payout guard
+
+Schema change: [BFMR_DB_Schema draft PR #1](https://github.com/z0ned/BFMR_DB_Schema/pull/1), source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`.
+
+The separate schema repository now includes guard source in `BFMR_DB_Schema/schema.sql` and `BFMR_DB_Schema/migrations/20261020_reservation_payout_immutability.sql`. `public.reject_reservation_payout_change()` runs as an `AFTER UPDATE` row guard on `public.reservations`, compares final `NEW` and `OLD` `quantity` and `payout_per_item` using `IS DISTINCT FROM`, and rejects changes with SQLSTATE `23514`. The trigger is enabled `ALWAYS`; ordinary updates retaining both inputs remain permitted. The generated `expected_payout = quantity * payout_per_item` expression is unchanged.
+
+This updates the preceding pending-guard status at the source level only. The guard has not been applied or tested; no software tests were added or run, no database was changed, and no provider action or deployment occurred. Runtime ingestion of authoritative creation terms, payout-conflict review, and reconciliation of legacy creation evidence remain pending. Missing historical terms must not be guessed or replaced with the current deal rate.
+
+## 20 October 2026 source update — relational business persistence
+
+The user authorized implementation of the relational integration described in [RELATIONAL_INTEGRATION.md](RELATIONAL_INTEGRATION.md). The source now connects the email runner to `src/db/relationalDatabase.ts` / `relationalRepositories.ts`, exact creation-term capture in `relationalReservations.ts` / `bfmrRelationalSync.ts`, relational order/shipment persistence in `relationalOrderLedger.ts`, verified payment recording in `relationalPayments.ts`, and fresh complete-coverage exposure in `relationalExposure.ts`. Single-client business transactions retain observations and conflict review without changing locked reservation terms. Duplicate creation capture does not revert a deal's newer rate.
+
+`relationalRuntime.ts` preserves account ownership and requires the installed schema/payout guard, accepted cutover/source hash and exact configured retailer account before provider/browser work. `relationalCutover.ts` and `scripts/reconcile_relational_cutover.ts` provide default report mode and a separately explicit transactional apply path; neither imports by startup nor replays provider actions. PostgreSQL is intended to run locally on the mini-PC. The legacy JSONB orchestration aggregate and private Gmail/batch/status/recovery/alert stores remain explicit separate stores, not authoritative SQL business records or one unified provider transaction.
+
+Evidence class: source implementation and user-authorized synthetic offline validation, recorded 21 October 2026. Latest results across runs: 142 distinct tests, 141 passed, zero failed, one native PostgreSQL integration skipped; the final focused relational suite passed 23/23 against disposable PGlite and canonical guarded schema. TypeScript checks, build and whitespace checks passed. Browser fixtures used system Chromium 154 because the bundled download was unavailable; see `RELATIONAL_INTEGRATION.md` for exact commands, source hash and limits. No live provider or production database was invoked and no actual migration, cutover or deployment was performed. Provider contract flags, legacy evidence, backup/restore and production acceptance remain gates. The existing single-deal purchase early return and the independent 14-day delivery-cutoff gap remain unchanged. This update supersedes earlier pending-runtime-integration and untested-guard wording only within the recorded source/offline scope; historical evidence and guard draft-PR links remain intact.
 
 ## 1. Purpose and safe reading order
 
@@ -31,7 +52,7 @@ This is a fresh TypeScript implementation; do not import the former BFMR codebas
 | BFMR identity and My Tracker | Exact deal-ID matching, detail API lookup, complete pagination reads, separate duplicate/confirmation checks, post-reservation supplier check, and exact-ID cancellation code exist. | Actual account alignment, response fields, status coverage, immediate visibility and supplier schemas remain provider evidence gates. Missing account proof blocks live writes. |
 | Amazon ordering | A separate fixed-product purchase CLI and an email-driven multi-deal purchase path enforce the approved amount, payout, exposure, gift, delivery and order identity rules. | A user reported a successful live fixed-product purchase and Order # capture. The email-driven ordering path and current Amazon Business layouts are not live-validated. |
 | Retailer tracking and BFMR updates | Daily Amazon order-history tracking, local package tracking ledger, BFMR purchase/shipment submissions, and daily BFMR status comparison/Telegram alerts are implemented. | Synthetic coverage only for retailer selectors and BFMR writes. No live shipment update was performed for this review. |
-| Orchestration database | A PostgreSQL JSONB aggregate store, row-locked transactions and session advisory ownership are implemented for the orchestration engine. The live email runner uses this PostgreSQL connection for exclusive account ownership; Gmail and order journals remain separate private JSON files. | Passed a disposable PostgreSQL 18 integration covering restart, rollback, a second process, and ownership connection loss. This is not production database migration/deployment evidence. |
+| Business and orchestration persistence | The live email runner uses relational reservation/order/shipment/payment records, evidence and serializable transactions with dedicated account ownership. The separate orchestration engine retains its JSONB aggregate; Gmail/recovery/status/alert journals remain private operational files. | Current relational validation is recorded in `RELATIONAL_INTEGRATION.md`. The older disposable PostgreSQL 18 engine test covers its original aggregate/lock implementation. Neither establishes production migration or deployment acceptance. |
 | Dashboard | Explicitly a simulated demonstration. Operational status is unknown, acceptance evidence starts pending, and a simulated action cannot mark tests passed. | No live service/API is connected. |
 | Operations/release | No service deployment, backup/restore procedure, production acceptance report, or complete provider contract verification. | M0-M5 are not represented as production accepted; see Section 12. |
 
@@ -126,11 +147,11 @@ The fixed-product CLI uses an exact Y/N prompt. The email-driven path is unatten
 
 Order # is captured from the thank-you confirmation reached by the exact submission and bound in memory to that browser page, ASIN and reviewed total. There is no fallback to the first matching order-history item. A missing, delayed beyond the supported wait, duplicate or mismatched confirmation ID is unknown; do not record an order against BFMR or associate tracking to it. The user reported that the fixed-product end-to-end order flow succeeded after a browser-evaluation extraction fix. The current correlation remains subject to live page layout and restart limitations.
 
-### 6.3 Local Amazon ledger and shipment tracking
+### 6.3 Amazon ledger and shipment tracking
 
-The private Amazon ledger records order ID, BFMR reservation/deal IDs when available, ASIN, USD total, timestamps, status and package tracking observations. The nightly checker navigates to `https://www.amazon.com/gp/css/order-history` using Playwright, matches one exact Order # section and the expected ASIN/total, then opens shipment detail and extracts labeled package tracking numbers. Track multiple packages separately; never attach a package to a different Order #. If the order is absent, canceled, ambiguous, not shipped, or layout is unknown, preserve prior evidence and alert/retry at the next schedule according to the journal.
+The live email runner's ledger interface reads typed relational orders/shipments and retained workflow snapshots. Standalone manual purchases retain their private file ledger. The nightly checker navigates to `https://www.amazon.com/gp/css/order-history` using Playwright, matches one exact Order # section and the expected ASIN/total, then opens shipment detail and extracts labeled package tracking numbers. Under the current schema, multiple distinct packages/tracking numbers become retained review evidence; they do not overwrite the single shipment. Missing or uncertain order identity and unsupported layouts preserve prior evidence and stop action-driving promotion.
 
-Only orders placed by the supported code paths are automatically in the local ledger. Older or manually placed purchases need a separate deliberate import procedure. Local file persistence is not PostgreSQL and must be included in secure backups.
+Older or manually placed purchases require the report-first cutover procedure in `RELATIONAL_INTEGRATION.md`. Canceled, partial and non-unit history remains in SQL and evidence while being excluded from the supported automation projection. Both the SQL database and separate private operational files require secure backups.
 
 ### 6.4 BFMR purchase/tracking submission
 
@@ -140,7 +161,7 @@ For an exact local order/reservation association, `bfmrTrackingSubmission.ts` po
 
 `src/services/bfmrStatus.ts` defines the common lifecycle classification used by tracker duplicates, open exposure and daily reconciliation. Recognized open values include Reserved, Purchased/Ordered, Shipped/Delivered, Package Received, Processed, Set Aside, Payment Error, Return/Deadline, Tracking Submitted, Payout Pending, and Unpaid. Recognized terminal values include Paid, Cancelled/Canceled, Returned, Closed, Expired and Released. Missing or unrecognized status is UNKNOWN and fails closed where state affects a decision.
 
-The $200 calculation reads quantity and all supported payout forms. Unit payout fields are multiplied by quantity; whole-row total payout fields are not. If multiple representations conflict, the amount is ambiguous and purchase stops. If `amount_paid` exists it is subtracted, otherwise the full outstanding expected payout is counted. Terminal rows do not add unpaid exposure and do not require payout details. The current newly reserved item is identity-checked and excluded from the existing unpaid subtotal; its current BFMR payout is compared separately with the Amazon order total. Maintain the live validation gate until actual status/payout fields, amount semantics, row coverage and pagination are verified.
+The live runner's $200 calculation uses locked SQL reservation payouts and actual recorded reimbursements, following a fresh complete reconciliation. Provider payout representations must agree with locked terms, and cumulative `amount_paid` must match verified payment records; a missing amount is unknown. A terminal status alone does not settle outstanding exposure. Canceled/released/expired reservations without orders are excluded. The exact current quantity-one Reserved reservation without an order is excluded from prior exposure; its locked payout separately covers its proposed complete order total. A later failed/incomplete read invalidates use of an older successful run. Keep the live contract gate closed until field meanings, payment evidence and complete coverage are verified.
 
 `src/services/bfmrDailyStatus.ts` retains all observed reservations including terminal rows. Each reservation stores a chronological status/identity history and missing-since value. Persistent discrepancy records retain first/last-seen and explicit resolution times. A missing previously open reservation remains visible in subsequent comparisons until it is observed again or an operator reconciles it; terminal observations do not disappear just because no Amazon ledger entry exists. The existing daily alert/outbox is a local JSON journal, not the production orchestration notification outbox.
 
@@ -158,13 +179,13 @@ Incident-owned deal blocks have `incident_id`. Resolving an incident clears only
 
 `src/db/postgresDatabase.ts` implements a durable account-scoped JSONB aggregate in `bfmr_runtime_state`. Each transaction loads the state row `FOR UPDATE`, mutates an isolated in-memory transaction context, and atomically commits the aggregate. A dedicated PostgreSQL session holds `pg_try_advisory_lock(hashtextextended(accountKey,0))` for cross-process account ownership. Database connection loss marks ownership lost, stops transaction work, and invokes browser shutdown. Production engine mode rejects the in-memory database; the memory implementation is serialized and isolated for tests only.
 
-Migration source is `src/db/migrations/002_runtime_state.sql`; initialization also creates the table idempotently. This JSONB aggregate is the implemented persistence choice; the older normalized schema in migration 001 is not the active store for this engine. The live email runner currently uses PostgreSQL mainly for exclusive account ownership, while queue, multi-deal progress, Amazon orders and BFMR daily status are private JSON files. Do not describe all live journals as PostgreSQL transactions.
+Migration source for that separate engine is `src/db/migrations/002_runtime_state.sql`; its initialization also creates the aggregate table idempotently. The older normalized migration 001 is not its active store. The live email runner instead uses `RelationalDatabase` and the separate `BFMR_DB_Schema` contract for business records, with read-only schema validation and a dedicated advisory-lock wrapper that performs no initialization DDL. Gmail, multi-deal progress, recovery, daily status and notification journals remain explicit private operational stores behind interfaces. Do not describe these stores or provider actions as one database transaction.
 
 A disposable PostgreSQL 18 integration test passed commit/restart persistence, rollback, an independently spawned Node process failing to acquire the account lock, and ownership connection loss preventing further database callbacks. No production database has been initialized or migrated. Configure a dedicated PostgreSQL database and backup policy before deployment.
 
 ### 8.3 Still missing for production service
 
-There is no complete production wiring that makes Gmail watch/StreamingPull, all journals, orchestrator state, Amazon side effects, BFMR writes and Telegram notifications one recoverable supervised application. There is no normalized schema migration path for the live JSON journals, no tested production backup/restore, and no boot/systemd/browser-session runbook. External side effects cannot be rolled back by a database transaction; retain intent-before-action and reconcile-before-retry for every future integration.
+There is no complete production wiring that makes Gmail watch/StreamingPull, all journals, orchestrator state, Amazon side effects, BFMR writes and Telegram notifications one recoverable supervised application. A controlled relational business-record cutover tool now exists, but no real import, production backup/restore or boot/systemd/browser-session acceptance has been performed. Operational journal migration remains separate work. External side effects cannot be rolled back by a database transaction; retain intent-before-action and reconcile-before-retry.
 
 ## 9. Dashboard and acceptance evidence
 
@@ -182,7 +203,7 @@ Key configuration names used by current paths:
 |---|---|
 | `BFMR_EXPECTED_ACCOUNT` | Expected visible BFMR account identity; required by live runner. |
 | `BFMR_INTAKE_MODE` | `production` default; set exactly `testing` to permit authenticated `matt.ward@live.com`. |
-| `DATABASE_URL` | PostgreSQL connection for account ownership (and explicit engine persistence). |
+| `DATABASE_URL` | Local PostgreSQL connection for relational business records and account ownership; see `RELATIONAL_INTEGRATION.md` for required account/cutover/contract configuration. |
 | `BFMR_INITIALIZE_GMAIL_QUEUE` | `YES` only for first-ever queue creation; unset afterwards. |
 | `BFMR_GMAIL_QUEUE_PATH` | Default `~/.local/state/bfmr/gmail-intake.json`. |
 | `BFMR_MULTI_DEAL_STATE_PATH` | Default `~/.local/state/bfmr/multi-deal.json`. |
@@ -228,7 +249,7 @@ For the preceding code-fix task (12 October 2026), the reported validation was:
 - New account identity browser cases used synthetic intercepted pages. Wrong visible account, API/browser reservation mismatch, duplicate browser row and missing configuration block as expected.
 - No production database, BFMR live reservation/cancellation, Amazon order, BFMR tracking POST, or Telegram alert was used for that review.
 
-This document update is documentation-only. The numbers above are the prior code task's recorded results; no new code test, typecheck or live provider check is claimed here. PDF text extraction and page rendering are artifact quality checks and must be recorded separately from software test evidence.
+The numbers above are the 12 October code task's recorded results. Current relational integration evidence is recorded separately in `RELATIONAL_INTEGRATION.md`; it does not turn historical counts into current results. PDF text extraction and page rendering remain artifact quality checks, separate from software test evidence.
 
 The 11 October fixed-product purchase-to-Order-# flow was reported successful by the user after the browser extraction defect was corrected. It is bounded, user-reported live evidence for that product/session, not independent acceptance across products or accounts. Earlier BFMR startup/cancellation observations are similarly bounded. v1.8 historical automated test counts refer to their then-current tree and must not be reused as current results.
 
@@ -285,4 +306,3 @@ Gmail history expiry remains an unresolved boundary. The saved cursor, explicit 
 ## Appendix B. Prior design records
 
 `BFMR_Solution_Design_Specification_v1.5.pdf` is the baseline requirements document; v1.6 and v1.7 record subsequent designs and decisions; v1.8 is the previous LLM handoff. Keep all prior PDFs and the v1.6 addendum unchanged for traceability. Use v1.9 and the current project registers for active behavior. Where a historical document conflicts with this record, apply v1.9 and the latest explicit user instruction.
-

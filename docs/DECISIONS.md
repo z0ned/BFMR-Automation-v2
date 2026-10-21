@@ -1,10 +1,31 @@
 # Decision register
 
+## 21 October 2026 — align v22 documentation with the adopted schema and integration
+
+The v22 design and implementation references now describe the existing **16-table** `BFMR_DB_Schema/schema.sql` contract plus the reviewed immutable-payout guard, matching the user's integration request. Actual columns, `deal_retailers`, reservation/payment-email reimbursements, single-record cardinalities, lookup mappings, evidence boundaries, SQL examples and ERD supersede the earlier 15-entity conceptual illustrations. This changes documentation to reflect already authorized/source-implemented choices; it adds no purchase scope, schema migration or provider authority. Source paths, 23/23 focused relational regressions and the aggregate 141-pass/one-native-PostgreSQL-skip evidence retain their recorded offline limits. The current v22 design PDF is refreshed from the Markdown; older versions remain unchanged.
+
+
+## 20 October 2026 — implement relational business persistence
+
+The user authorized using the existing `BFMR_DB_Schema/schema.sql` fields/relationships as the business persistence contract, connecting the runner and tracking/reconciliation services, preserving creation terms, integrating actual payments and complete-coverage exposure, and providing controlled cutover source. The implementation is described in [RELATIONAL_INTEGRATION.md](RELATIONAL_INTEGRATION.md). It does not redesign the schema or adopt the older v22 order-linked multiple-payment illustrations: reimbursement is directly linked to the reservation, with at most one actual payment row.
+
+Account ownership, startup schema/guard and retailer-account validation, a matching cutover marker/source hash, independent deal-rate evidence, and conflict retention remain required. Operational cursor/work/retry/alert stores and the legacy JSONB engine compatibility path remain explicit separate stores. Unknown legacy creation terms are never filled from today's deal payout, and import never replays provider effects.
+
+Evidence class: source implementation and user-authorized offline validation, recorded 21 October 2026: 141 passed, zero failed, one native PostgreSQL case skipped across 142 distinct tests; final focused relational cases passed 23/23 using disposable PGlite and canonical guarded schema. TypeScript checks, build and whitespace checks passed. System Chromium 154 browser fixtures do not prove live or bundled-browser behavior. Exact commands, schema hash and boundaries are in `RELATIONAL_INTEGRATION.md`. Final review aligned import/runtime automation scope and blocks inconsistent supported order/shipment states before cutover acceptance. No live provider or production database was invoked and no actual migration/cutover/deployment was performed. The current request changes persistence, not live authority, single-deal purchase scope or the independent 14-day delivery-cutoff gap. Earlier decision/evidence entries below retain their original dates and limitations; their untested-guard/source-only status is superseded only by this bounded offline evidence.
+
 ## 20 October 2026 — fixed reservation payout; no dedicated history table (D22-03)
 
 The user's decision is that `RESERVATION_HISTORY` is not needed. Expected payout is fixed when a reservation is created and never changes for that reservation. Payout changes belong to the deal and apply only to future reservations: a deal change from $80 to $95 leaves an existing one-unit reservation at $80 and gives a subsequently created one-unit reservation $95. Preserve the creation-time financial snapshot; with the current generated quantity-times-rate formula, protect its inputs against edits that recalculate the locked total. Retain conflicting provider observations for review rather than silently updating the reservation.
 
 This supersedes the dedicated table and payout-evolution requirements inherited from D20-13; the active v22 target now has 15 tables. D22-02's 16-table count below describes that earlier decision point. Existing JSON/status journals and provider/workflow evidence remain implementation facts and are not removed. See [v22 design](BFMR_Solution_Design_Specification_v22.md#3-approved-design-decisions-and-v22-amendments) and [implementation amendment](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03). Database enforcement is pending because the existing generated payout formula does not lock writable inputs. This records a user decision only; no code, migration, software test, provider action or production acceptance changed.
+
+## 20 October 2026 — reservation payout guard source (D22-03 follow-up)
+
+Schema change: [BFMR_DB_Schema draft PR #1](https://github.com/z0ned/BFMR_DB_Schema/pull/1), source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`.
+
+Guard source has been added to `BFMR_DB_Schema/schema.sql` and `BFMR_DB_Schema/migrations/20261020_reservation_payout_immutability.sql`. `public.reject_reservation_payout_change()` checks final `NEW` versus `OLD` `quantity` and `payout_per_item` with `IS DISTINCT FROM` in an `AFTER UPDATE` row trigger enabled `ALWAYS`; a change raises SQLSTATE `23514`. Updates retaining both inputs remain allowed, and the generated expected-payout expression is unchanged.
+
+Evidence class: source implementation only, superseding the pending-guard source status above. No software tests were added or run; the SQL has not been applied or tested, and no database, provider, or deployed runtime changed. Authoritative creation-term ingestion, provider-conflict review, and legacy creation-evidence reconciliation remain pending; retained observations and workflow evidence must not be discarded.
 
 ## 20 October 2026 — one shipment and tracking number per order (D22-02)
 
@@ -68,4 +89,3 @@ Fresh implementation; BFMR reservation creation through normal website form; My 
 ### Superseded financial discussion
 
 Earlier proposed evaluation/cancellation rules were at one point withdrawn, then later explicitly restored in the scoped multiple-deal Amazon workflow. Do not treat the broad historic discussion as additional criteria: only the exact cap, payout comparison, $200 exposure basis and cancellation rule in the controlling section apply. The unsettled contract details remain release gates.
-

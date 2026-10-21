@@ -19,6 +19,10 @@ export async function purchaseReservedDeal(
   productUrl: string,
   payoutCents: number,
   readOpenOrdersTotalCents: () => Promise<number>,
+  dependencies: {
+    readPurchaseEvidence?: typeof readAmazonPurchaseEvidence;
+    beforeSubmit?: () => Promise<void>;
+  } = {},
 ): Promise<{ status: 'INELIGIBLE'; cartCleared: boolean } | { status: 'PLACED'; orderId: string; asin: string; totalCents: number }> {
   const asin = amazonProductAsin(productUrl);
   if (!asin || !Number.isSafeInteger(payoutCents) || payoutCents <= 0) {
@@ -64,7 +68,7 @@ export async function purchaseReservedDeal(
   if (!await verifyAmazonCheckoutSelections(page, addressFragment, cardLast4)) {
     throw new Error('Expected delivery address or payment card was not uniquely visible at checkout; no order was submitted.');
   }
-  const refreshed = await readAmazonPurchaseEvidence(reference);
+  const refreshed = await (dependencies.readPurchaseEvidence ?? readAmazonPurchaseEvidence)(reference);
   if (!refreshed || refreshed.productUrl !== productUrl || refreshed.payoutCents !== payoutCents) {
     throw new Error('BFMR product or payout evidence changed before submission; no order was submitted.');
   }
@@ -79,6 +83,7 @@ export async function purchaseReservedDeal(
     return rejectCheckout();
   }
   log(`Submitting one ${title || asin}; BFMR payout $${(payoutCents / 100).toFixed(2)}, Amazon total $${review.totalUsd.toFixed(2)}, open orders after submission $${((openTotalCents + review.totalCents) / 100).toFixed(2)}.`);
+  await dependencies.beforeSubmit?.();
   const result = await submitAmazonOrderOnce(page, asin, title, process.env.AMAZON_DEFAULT_CARD, {
     maxTotalCents, confirmedTotalCents: review.totalCents, allowDuplicateWarning: false, log,
   });

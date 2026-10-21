@@ -1,7 +1,6 @@
 import type { PlaywrightBfmrBrowser } from '../adapters/playwrightBrowser';
 import type { Page } from 'playwright';
-import type { AmazonOrderRecord } from './amazonOrderLedger';
-import { amazonOrderLedger } from './amazonOrderLedger';
+import type { AmazonOrderLedger, AmazonOrderRecord } from './amazonOrderLedger';
 import { checkAmazonShipment } from './amazonShipmentCheck';
 
 /** Atlanta observes EST and EDT; use its IANA zone rather than a fixed UTC offset. */
@@ -21,7 +20,7 @@ export function atlantaDayAndHour(instant: Date): { day: string; hour: number } 
 
 export async function runDueAmazonTracking(options: {
   browser: PlaywrightBfmrBrowser;
-  ledger: ReturnType<typeof amazonOrderLedger>;
+  ledger: AmazonOrderLedger;
   hasIncomingMail: () => Promise<boolean>;
   onOrderFailure: (order: AmazonOrderRecord, error: unknown) => Promise<void>;
   now?: () => Date;
@@ -45,14 +44,14 @@ export async function runDueAmazonTracking(options: {
       const checked = await (options.checkShipment ?? checkAmazonShipment)(page, order, options.now?.() ?? new Date());
       checked.lastCheckedAtlantaDay = day;
       checked.lastAttemptAtlantaDay = day;
-      await options.ledger.update(checked);
+      await options.ledger.update(checked, 'AMAZON');
       await options.afterCheck?.(checked);
       console.log(`[Amazon tracking] ${order.orderId}: ${checked.status}; ${checked.packages.length} tracking number(s) recorded.`);
     } catch (error) {
       const current = (await options.ledger.load()).find((item) => item.orderId === order.orderId) ?? order;
       const failed = { ...current, lastAttemptAtlantaDay: day,
         lastError: error instanceof Error ? error.message.slice(0, 240) : 'Unknown Amazon tracking error' };
-      await options.ledger.update(failed);
+      await options.ledger.update(failed, 'OPERATIONAL');
       await options.onOrderFailure(order, error);
     } finally {
       await page.close().catch(() => {});

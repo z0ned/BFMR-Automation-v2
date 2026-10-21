@@ -2,6 +2,11 @@
 
 Current status is controlled by [Solution Design Specification v1.9](BFMR_Solution_Design_Specification_v1.9.md). These items distinguish unresolved user decisions, external provider evidence, environment setup and unimplemented operational work. Code coverage alone does not close provider evidence.
 
+## 21 October 2026 — documentation/schema alignment
+
+The current v22 pair now matches the adopted 16-table schema names and relationships, including direct reservation/payment-email reimbursements and `deal_retailers`. Earlier 15-entity conceptual fields, multiple order-linked payments and generic metadata-column examples are superseded. This resolves the documentation mismatch, not native PostgreSQL installation, actual guard/role/cutover acceptance, verified provider/payment contracts or production recovery. Existing offline evidence and the single-deal/14-day gaps remain as recorded below.
+
+
 ## Release blockers and external evidence
 
 ### EV-001 BFMR account identity and browser/API alignment
@@ -28,7 +33,7 @@ The user settled a $100 total cap, BFMR payout >= full Amazon order cost, and <=
 
 ### SETUP-001 PostgreSQL and private state
 
-Configure a dedicated `DATABASE_URL` and the normalized account namespace. `src/db/migrations/002_runtime_state.sql` is for the JSONB aggregate. The live runner also needs private persistent storage/backups for Gmail queue, multi-deal journal, Amazon order ledger and BFMR status history. Build and test backup/restore and stale backup reconciliation before deployment. Never test against production database.
+Configure the local mini-PC `DATABASE_URL`, account namespace and relational startup prerequisites in `RELATIONAL_INTEGRATION.md`. `src/db/migrations/002_runtime_state.sql` belongs to the separate JSONB engine. The live runner needs relational business-record backups plus private persistent storage/backups for Gmail, multi-deal/recovery and BFMR status/notification journals. Preserve the accepted legacy order file as a cutover hash boundary; standalone manual orders retain their separate ledger. Build and test backup/restore and stale backup reconciliation before deployment. Never test against production database.
 
 ### SETUP-002 First queue initialization/recovery
 
@@ -46,7 +51,19 @@ The user decided that dedicated `RESERVATION_HISTORY` is not needed; its absence
 
 **Pending enforcement:** the separate schema's stored generated `expected_payout = quantity * payout_per_item` still recalculates if either writable input changes. Design and review a guard and upgrade migration that protect the creation financial snapshot and locked total without blocking ordinary status updates; integrate authoritative capture of creation terms and mismatch review into ingestion/reconciliation. Retain later conflicting provider observations, block their authoritative promotion and never replace creation payout with the current deal rate. Do not guess missing legacy creation terms. This documentation decision implements no guard, migration or runtime change. See [v22 design](BFMR_Solution_Design_Specification_v22.md#9-approved-authoritative-reconciliation-design) and [implementation amendment](BFMR_Implementation_v22..md#14-reservation-payout-decision--20-october-2026-d22-03).
 
+**20 October 2026 source status:** The guard and upgrade-migration source are now present in `BFMR_DB_Schema/schema.sql` and `BFMR_DB_Schema/migrations/20261020_reservation_payout_immutability.sql`. `public.reject_reservation_payout_change()` uses an `AFTER UPDATE` row trigger enabled `ALWAYS`, compares final `NEW`/`OLD` `quantity` and `payout_per_item` via `IS DISTINCT FROM`, and raises SQLSTATE `23514` on a change. Ordinary updates retaining those inputs remain allowed; the generated expected-payout expression is unchanged. This supersedes only the pending guard-source work described above. See [BFMR_DB_Schema draft PR #1](https://github.com/z0ned/BFMR_DB_Schema/pull/1), source commit `a67a0715ef040b0dd65de17ce63a0a5e34898699`.
+
+**Still open:** The SQL has not been applied or tested; no software tests were added or run, no database changed, and no provider action or deployment occurred. Runtime authoritative creation-term capture, payout-conflict retention/review, and legacy creation-evidence reconciliation remain pending. Do not infer historical creation terms from current deal payout or claim installed database enforcement from source presence.
+
 ## Code completion versus acceptance
+
+### 20 October 2026 relational integration source status
+
+Source implementation now covers relational business repositories, runner reservation capture, atomic complete-read reconciliation/conflict evidence, order/shipment ledger and tracking interfaces, actual verified-payment recording, fresh locked-payout exposure, and explicit startup/cutover controls. See [RELATIONAL_INTEGRATION.md](RELATIONAL_INTEGRATION.md). The runtime capture/conflict paths previously listed under IMPL-006 are implemented at the source level; source presence does not prove actual provider fields or installed database enforcement.
+
+21 October 2026 offline evidence: 141 passed, zero failed, one native PostgreSQL integration skipped across 142 distinct tests; final focused relational cases passed 23/23 using disposable PGlite/canonical guarded schema. Compiler/build/whitespace checks passed. The final cutover/runtime predicate and order/shipment coherence review findings are fixed and covered. Browser fixture evidence uses system Chromium 154; see `RELATIONAL_INTEGRATION.md` for exact boundaries. This supersedes earlier untested-guard wording only for the embedded offline SQL evidence.
+
+Still open: provider creation-term/deal-rate/payment/full-tracker contracts remain unverified; native mini-PC PostgreSQL validation, actual schema/guard installation, runtime roles, an accepted real legacy cutover, backup/restore and service acceptance remain pending. Operational journals and the legacy JSONB engine remain separate stores. The single-deal purchase early return and independent 14-day delivery cutoff remain gaps. No live provider or production database was invoked and no actual migration/cutover/deployment occurred.
 
 - PostgreSQL transaction and advisory lock code exists and passed a disposable synthetic PostgreSQL integration. This is not production DB migration or backup acceptance.
 - File-backed queue, multi-deal, order and status journals exist but are not committed in one shared DB transaction with every external side effect.
@@ -57,4 +74,3 @@ The user decided that dedicated `RESERVATION_HISTORY` is not needed; its absence
 ## Resolved source-review findings (12 October 2026)
 
 The source review findings are fixed in code and have offline regression coverage: wrong-deal title fallback and open-status duplicates; unauthenticated sender/hardcoded auth pass; reminder-only browser account check; memory-only Gmail cursor/work; incompatible lifecycle status sets; daily history loss; fabricated reservation IDs; all-block incident clearing; process-local default orchestration persistence/locking; dashboard fabricated acceptance status; and the previously reported checkout single-line/order identity issues. See `REVIEW_FIXES_2026-10-12.md` and v1.9 Sections 4-11. Do not confuse “code fixed” with the live provider evidence listed above.
-

@@ -230,7 +230,11 @@ test('manual login and MFA resume from Amazon home without terminal input', asyn
     try {
       await f.context.route(`https://www.amazon.com${destination}`, async route => {
         if (authenticated) return route.fallback();
-        await route.fulfill({ status: 302, headers: { location: '/ap/signin' } });
+        // Keep the sign-in transition inside routed synthetic documents. An
+        // intercepted HTTP redirect can otherwise escape routing on some
+        // Chromium/Playwright versions and attempt an external proxy request.
+        await route.fulfill({ contentType: 'text/html',
+          body: '<script>location.href="/ap/signin"</script>' });
       });
       await f.context.route('https://www.amazon.com/ap/**', route => route.fulfill({
         contentType: 'text/html', body: '<input type="password"><input autocomplete="one-time-code">',

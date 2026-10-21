@@ -3,8 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readRecentReservedRows, type TrackerReservationRow } from './bfmrTrackerApi';
-import { amazonOrderLedger, type AmazonOrderRecord } from './amazonOrderLedger';
+import type { AmazonOrderLedger, AmazonOrderRecord } from './amazonOrderLedger';
 import { atlantaDayAndHour } from './nightlyAmazonTracking';
+import type { PrivateStateStore } from './privateJsonStore';
 
 export interface BfmrStatusRow {
   reserveId: string;
@@ -116,7 +117,8 @@ function alertMessages(day: string, issues: string[]): string[] {
   return messages;
 }
 
-export function bfmrStatusStore(file: string) {
+export type BfmrStatusStore = PrivateStateStore<BfmrStatusSnapshot>;
+export function bfmrStatusStore(file: string): BfmrStatusStore {
   return {
     async load(): Promise<BfmrStatusSnapshot | null> {
       let raw: string;
@@ -149,11 +151,12 @@ export function bfmrStatusStore(file: string) {
 }
 
 export async function runDueBfmrStatusCheck(options: {
-  store: ReturnType<typeof bfmrStatusStore>;
-  ledger: ReturnType<typeof amazonOrderLedger>;
+  store: BfmrStatusStore;
+  ledger: AmazonOrderLedger;
   hasIncomingMail: () => Promise<boolean>;
   notify: (message: string) => Promise<void>;
   readRows?: () => Promise<TrackerReservationRow[]>;
+  reconcile?: (rows: TrackerReservationRow[]) => Promise<{ promoted: boolean; issues: string[] }>;
   now?: () => Date;
 }): Promise<void> {
   const { day, hour } = atlantaDayAndHour(options.now?.() ?? new Date());
@@ -173,7 +176,12 @@ export async function runDueBfmrStatusCheck(options: {
     if (deliveryError) throw deliveryError;
     return;
   }
-  const official = summarizeBfmrRows(await (options.readRows ?? readRecentReservedRows)());
+  const rows = await (options.readRows ?? readRecentReservedRows)();
+  const reconciliation = await options.reconcile?.(rows);
+  if (reconciliation && !reconciliation.promoted) {
+    throw new Error('BFMR reconciliation retained conflicting/incomplete evidence; authoritative status was not changed.');
+  }
+  const official = summarizeBfmrRows(rows);
   const orders = await options.ledger.load();
   const issues = bfmrDiscrepancies(previous, official, orders);
   const observedAt = (options.now?.() ?? new Date()).toISOString();
@@ -184,7 +192,7 @@ export async function runDueBfmrStatusCheck(options: {
     await options.ledger.update({ ...order, bfmrOfficial: {
       status: row.status, quantity: row.quantity, purchaseId: row.purchaseId, shipmentId: row.shipmentId,
       orderNo: row.orderNo, trackingNumber: row.trackingNumber, observedAt,
-    } });
+    } }, 'BFMR');
   }
   const reservations = structuredClone(previous?.reservations ?? (previous?.openRows ?? []).map(row => ({
     reserveId: row.reserveId, history: [{ ...row, observedAt: previous!.observedAt }], missingSince: null as string | null,

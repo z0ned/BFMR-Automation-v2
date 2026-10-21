@@ -1,8 +1,8 @@
-import { amazonOrderLedger, type AmazonOrderRecord } from './amazonOrderLedger';
+import type { AmazonOrderLedger, AmazonOrderRecord } from './amazonOrderLedger';
 import { readRecentReservedRows, type TrackerReservationRow } from './bfmrTrackerApi';
 
 const TRACKER_UPDATE_URL = 'https://api.bfmr.com/api/v2/my-tracker';
-type Ledger = ReturnType<typeof amazonOrderLedger>;
+type Ledger = AmazonOrderLedger;
 
 function id(value: unknown): string | null {
   if (typeof value === 'string' && value.trim()) return value.trim();
@@ -55,7 +55,7 @@ function confirmedPurchase(row: TrackerReservationRow, order: AmazonOrderRecord)
 }
 
 /** Submit Amazon Order # as a BFMR purchase before the reservation timer expires. */
-export async function ensureBfmrPurchase(orderId: string, ledger: Ledger, dependencies: {
+async function confirmBfmrPurchase(orderId: string, ledger: Ledger, dependencies: {
   readRows?: () => Promise<TrackerReservationRow[]>;
   request?: typeof fetch;
 } = {}): Promise<void> {
@@ -67,7 +67,7 @@ export async function ensureBfmrPurchase(orderId: string, ledger: Ledger, depend
   const existingPurchase = confirmedPurchase(row, order);
   if (existingPurchase) {
     if (order.bfmrPurchaseId && order.bfmrPurchaseId !== existingPurchase) throw new Error('BFMR purchase ID changed; review required.');
-    if (order.bfmrPurchaseId !== existingPurchase) await ledger.update({ ...order, bfmrPurchaseId: existingPurchase });
+    if (order.bfmrPurchaseId !== existingPurchase) await ledger.update({ ...order, bfmrPurchaseId: existingPurchase }, 'BFMR');
     return;
   }
   if (id(row.purchase_id) || field(row.order_no) || id(row.shipment_id) || field(row.tracking_number)) {
@@ -77,7 +77,7 @@ export async function ensureBfmrPurchase(orderId: string, ledger: Ledger, depend
     throw new Error(`BFMR reservation ${order.reserveId} is no longer Reserved; no purchase update sent.`);
   }
   if (order.bfmrPurchaseIntentAt) throw new Error('Previous BFMR purchase update is unresolved. No repeat POST; inspect My Tracker.');
-  await ledger.update({ ...order, bfmrPurchaseIntentAt: new Date().toISOString() });
+  await ledger.update({ ...order, bfmrPurchaseIntentAt: new Date().toISOString() }, 'OPERATIONAL');
   let postError: unknown;
   try {
     await postTrackerUpdate({ reserve_id: order.reserveId, purchase_id: null, shipment_id: null,
@@ -88,12 +88,12 @@ export async function ensureBfmrPurchase(orderId: string, ledger: Ledger, depend
   if (!purchaseId) {
     throw new Error(`BFMR purchase update for ${order.reserveId} was not confirmed in My Tracker${postError ? ' after an uncertain response' : ''}. No repeat POST.`);
   }
-  await ledger.update({ ...(await latest(ledger, orderId)), bfmrPurchaseId: purchaseId });
+  await ledger.update({ ...(await latest(ledger, orderId)), bfmrPurchaseId: purchaseId }, 'BFMR');
   console.log(`[BFMR My Tracker] Amazon order ${orderId} confirmed as purchase ${purchaseId} for reservation ${order.reserveId}.`);
 }
 
 /** Submit one shipped quantity-one Amazon package to the exact BFMR purchase. */
-export async function ensureBfmrTracking(orderId: string, ledger: Ledger, dependencies: {
+async function confirmBfmrTracking(orderId: string, ledger: Ledger, dependencies: {
   readRows?: () => Promise<TrackerReservationRow[]>;
   request?: typeof fetch;
 } = {}): Promise<void> {
@@ -116,14 +116,14 @@ export async function ensureBfmrTracking(orderId: string, ledger: Ledger, depend
       (order.bfmrShipmentId && order.bfmrShipmentId !== existingShipment)) {
       throw new Error('BFMR shipment/tracking evidence conflicts with Amazon; no update sent.');
     }
-    if (!order.bfmrTrackingSubmittedAt) await ledger.update({ ...order, bfmrShipmentId: existingShipment, bfmrTrackingSubmittedAt: new Date().toISOString() });
+    if (!order.bfmrTrackingSubmittedAt) await ledger.update({ ...order, bfmrShipmentId: existingShipment, bfmrTrackingSubmittedAt: new Date().toISOString() }, 'BFMR');
     return;
   }
   if (String(row.status ?? row.item_status ?? row.reservation_status).trim().toLowerCase() !== 'purchased') {
     throw new Error('BFMR purchase is not in Purchased status; no tracking update sent.');
   }
   if (order.bfmrShipmentIntent) throw new Error('Previous BFMR shipment update is unresolved. No repeat POST; inspect My Tracker.');
-  await ledger.update({ ...order, bfmrShipmentIntent: { trackingNumber, at: new Date().toISOString() } });
+  await ledger.update({ ...order, bfmrShipmentIntent: { trackingNumber, at: new Date().toISOString() } }, 'OPERATIONAL');
   let postError: unknown;
   try {
     await postTrackerUpdate({ reserve_id: order.reserveId, purchase_id: purchaseId, shipment_id: null,
@@ -135,6 +135,47 @@ export async function ensureBfmrTracking(orderId: string, ledger: Ledger, depend
     field(after.tracking_number)?.toUpperCase() !== trackingNumber.toUpperCase()) {
     throw new Error(`BFMR tracking update for ${order.reserveId} was not confirmed in My Tracker${postError ? ' after an uncertain response' : ''}. No repeat POST.`);
   }
-  await ledger.update({ ...(await latest(ledger, orderId)), bfmrShipmentId: shipmentId, bfmrTrackingSubmittedAt: new Date().toISOString() });
+  await ledger.update({ ...(await latest(ledger, orderId)), bfmrShipmentId: shipmentId, bfmrTrackingSubmittedAt: new Date().toISOString() }, 'BFMR');
   console.log(`[BFMR My Tracker] Tracking confirmed as shipment ${shipmentId} for reservation ${order.reserveId}.`);
+}
+
+type TrackingDependencies = {
+  readRows?: () => Promise<TrackerReservationRow[]>;
+  request?: typeof fetch;
+};
+
+async function withRetainedReview(orderId: string, ledger: Ledger, action: 'PURCHASE' | 'SHIPMENT',
+  dependencies: TrackingDependencies, work: (dependencies: TrackingDependencies) => Promise<void>) {
+  let selectedRows: Array<Record<string, unknown>> = [];
+  const observeRows = async () => {
+    const rows = await (dependencies.readRows ?? readRecentReservedRows)();
+    const order = await latest(ledger, orderId);
+    selectedRows = rows.filter(row => id(row.reserve_id) === order.reserveId).map(row => ({
+      reserveId: id(row.reserve_id), dealId: id(row.deal_id), purchaseId: id(row.purchase_id), shipmentId: id(row.shipment_id),
+      orderNo: field(row.order_no), trackingNumber: field(row.tracking_number),
+      status: field(row.status ?? row.item_status ?? row.reservation_status), quantity: Number(row.qty ?? row.quantity),
+    }));
+    return rows;
+  };
+  try { await work({ ...dependencies, readRows: observeRows }); }
+  catch (error) {
+    if (ledger.recordReview) {
+      try {
+        await ledger.recordReview(orderId, `BFMR ${action} reconciliation stopped; inspect provider evidence before any retry.`, {
+          provider: 'BFMR', trackerRows: selectedRows,
+        });
+      } catch {
+        throw new Error('BFMR reconciliation stopped and its review evidence could not be persisted. Stop before further provider actions.', { cause: error });
+      }
+    }
+    throw error;
+  }
+}
+
+export function ensureBfmrPurchase(orderId: string, ledger: Ledger, dependencies: TrackingDependencies = {}): Promise<void> {
+  return withRetainedReview(orderId, ledger, 'PURCHASE', dependencies, observed => confirmBfmrPurchase(orderId, ledger, observed));
+}
+
+export function ensureBfmrTracking(orderId: string, ledger: Ledger, dependencies: TrackingDependencies = {}): Promise<void> {
+  return withRetainedReview(orderId, ledger, 'SHIPMENT', dependencies, observed => confirmBfmrTracking(orderId, ledger, observed));
 }

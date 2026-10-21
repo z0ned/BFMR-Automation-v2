@@ -10,6 +10,8 @@ import { isTrustedBfmrDealUrl } from '../src/services/bfmrUrl';
 import { requireReservationAlerts, withReservationFailureAlert } from '../src/services/reservationAlerts';
 import { runLiveTestStartup } from './live_test_startup';
 import { processEmail } from './test_real_email_e2e';
+import { openRelationalRuntime } from '../src/services/relationalRuntime';
+import { relationalStartupHooks } from '../src/services/relationalStartup';
 
 const run = promisify(execFile);
 const samplePdf = path.resolve('docs/sample_emails/from_bfmr/all_open_deals/EWg0AbZkhJSByrkm4ofOtMDzM6QAJVQ3r3wAA.pdf');
@@ -101,12 +103,16 @@ async function main() {
   }
 
   requireReservationAlerts();
+  const runtime = await openRelationalRuntime();
   const browser = new PlaywrightBfmrBrowser({ headless: false });
+  runtime.ownership.onOwnershipLost(() => { void browser.close(); });
   try {
-    await runLiveTestStartup(browser);
-    await withReservationFailureAlert(`PDF multi-deal test stopped. Source: ${pdfPath}`, () => processEmail(email, browser));
+    await runLiveTestStartup(browser, relationalStartupHooks(runtime));
+    await withReservationFailureAlert(`PDF multi-deal test stopped. Source: ${pdfPath}`,
+      () => processEmail({ ...email, source: 'LOCAL_PDF_TEST' }, browser, runtime));
   } finally {
     await browser.close();
+    await runtime.close();
   }
 }
 
