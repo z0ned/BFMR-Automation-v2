@@ -1,5 +1,9 @@
 # Decision register
 
+## 22 October 2026 — offline intake testing authorized
+
+The user explicitly requested adding and running offline intake tests. Use synthetic provider adapters and disposable PGlite with the actual operational SQL; block network access and private provider/database configuration in these suites. Optional typed persistence injection preserves production defaults. This authorizes offline verification, not native installation, legacy cutover, provider configuration, a live worker or deployment. Evidence is recorded in [GMAIL_PRODUCTION_INTAKE.md](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026).
+
 ## 21 October 2026 — implement required production intake source
 
 The user requested implementation of production intake. The new source uses CON-001 watch/owned StreamingPull with dedicated PostgreSQL operational tables; it does not redesign or alter the pinned business schema. Existing JSON Gmail state requires reviewed explicit import, never startup import/reset. A production entrypoint skips the separately scoped startup test reservation. This is implementation authority, not authority to install SQL, configure a live watch/subscription, invoke BFMR/Amazon actions or deploy. Static evidence and limits are recorded in IMPLEMENTATION_PLAN.md and GMAIL_PRODUCTION_INTAKE.md; no software test or provider acceptance is implied.

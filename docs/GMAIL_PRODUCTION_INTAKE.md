@@ -1,6 +1,6 @@
 # Production Gmail intake — implementation and operator runbook
 
-**21 October 2026 — source implementation and static checks only.** No new software tests were added or run, no SQL was installed/imported, and no Gmail watch, Pub/Sub connection, BFMR/Amazon action or deployment was invoked for this work. Native database, provider and supervised-operation acceptance remain open. Earlier test counts describe their own revisions.
+**Updated 22 October 2026 — source implementation and offline tests.** The source was implemented on 21 October; the user subsequently requested offline intake testing. Current results and limits are recorded below. No native database installation/import, Gmail watch, Pub/Sub connection, BFMR/Amazon action or deployment was invoked. Earlier test counts describe their own revisions.
 
 ## Contract and source
 
@@ -52,9 +52,17 @@ If no queue ever existed and this is authentic first-ever SQL initialization, ex
 
 An expired/rejected history cursor persists `GMAIL_HISTORY_GAP`; restart preserves it. PROCESSING work requires authoritative BFMR/Amazon reconciliation before operator repair. Restore SQL, private recovery journals and accepted source files consistently; never reset a cursor, blindly replay a task or repeat an uncertain provider action. Shutdown leaves the Gmail watch intact and unacknowledged/durable notifications recoverable. Notification and browser/provider transactions are not one atomic transaction.
 
+## Offline validation — 22 October 2026
+
+Run the dedicated suite with `npm run test:gmail-intake`. It uses synthetic Gmail/SDK/stream adapters, controlled coordinator failures and the actual `database/gmail_intake.sql` in disposable in-memory PGlite 0.5.10. A shared guard blocks socket/HTTP/TLS requests and removes provider/database environment configuration; no private configuration loader or live entrypoint is imported. Tests run serially without process isolation so named cases and counts remain visible in this environment.
+
+**Result: 62 passed, zero failed, zero skipped** on Node 24.19.0: 20 transport cases, 14 SQL-store cases, 26 coordinator cases and two coordinator/SQL integration cases. The integration cases query committed notification evidence from the ACK callback, inject a notification COMMIT failure, and reconstruct the store/coordinator after ACK loss to verify pending recovery without replaying completed work. `npm run typecheck`, `npm run typecheck:all` and whitespace checks passed. The pinned business schema and both SQL source files are unchanged. Earlier runs/reruns are not added to this distinct-case count.
+
+Coverage includes persistence before ACK; duplicate/poison/ACK failures; startup activation; complete history pagination/fetch/MIME failures; cursor/watch independence; bounded retry/lease/reconnect behavior; more than one notification batch; intake during paused browser work; transaction/ownership rollback; persistent gaps; interrupted PROCESSING work; legacy import idempotency; and shutdown. Optional typed pool injection and a narrow coordinator persistence interface enable offline fixtures; production defaults and action gates remain unchanged. Results apply to simulated adapters and embedded SQL, not native roles/locking, actual Google contracts or supervised production operation.
+
 ## Evidence still required before production acceptance
 
-- When testing is explicitly requested: verify commit-before-ACK failure/duplicate/poison cases, restart/activation races, full-page/fetch failures, more than one notification batch, cursor monotonicity, gap persistence, legacy import idempotency and interrupted-work guards.
+- Complete separately scoped native/provider failure, process-crash, coordinated restore and supervised-operation acceptance; the offline suite covers modeled behavior only.
 - Validate native PostgreSQL installation, actual schema-catalog deparsing/constraints, reviewed runtime grants, advisory ownership/loss and coordinated backup/restore. Static checks do not exercise SQL.
 - Verify real mailbox/OAuth identity, Gmail watch permissions/expiration/renewal, publisher/subscriber IAM, StreamingPull reconnect/lease/ACK behavior, history paging/retention and actual authenticated mail templates. Record the exact account/session/code revision and bounded effects.
 - Accept reboot/supervision, manual browser authentication, failed-alert handling, monitoring and operator recovery. Source implementation does not establish unattended readiness, and the independent single-deal purchase/delivery-cutoff gaps remain tracked in [OPEN_ISSUES.md](OPEN_ISSUES.md).

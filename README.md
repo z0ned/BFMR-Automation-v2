@@ -25,6 +25,7 @@ The authoritative 16-table schema is [database/schema.sql](database/schema.sql),
 ```bash
 npm test
 npm run test:relational
+npm run test:gmail-intake
 npm run typecheck
 npm run typecheck:all
 ```
@@ -43,7 +44,7 @@ The dedicated PostgreSQL integration test requires a disposable `BFMR_TEST_DATAB
 
 ## Configuration and private data
 
-Use [.env.example](.env.example) as the configuration template, merging missing entries into an existing private `.env` without replacing credentials. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull; periodic Gmail polling and Inbox sweeps are forbidden. Configure the exact Gmail mailbox/OAuth identity, Pub/Sub topic/subscription and a verified Pub/Sub credential identity. The worker now uses owned StreamingPull, commits notification evidence before ACK and commits admitted work with its consumed cursor. Startup/reconnect history continuation and daily watch renewal preserve cursor identity; no idle timer reads Gmail. Install the separate reviewed operational SQL and reconcile any legacy queue before a separately authorized live run. This source has static-check evidence only; provider and supervised-service acceptance remain open. See [production intake runbook](docs/GMAIL_PRODUCTION_INTAKE.md). IMAP and local inbound-listener utilities are not production substitutes.
+Use [.env.example](.env.example) as the configuration template, merging missing entries into an existing private `.env` without replacing credentials. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull; periodic Gmail polling and Inbox sweeps are forbidden. Configure the exact Gmail mailbox/OAuth identity, Pub/Sub topic/subscription and a verified Pub/Sub credential identity. The worker now uses owned StreamingPull, commits notification evidence before ACK and commits admitted work with its consumed cursor. Startup/reconnect history continuation and daily watch renewal preserve cursor identity; no idle timer reads Gmail. Install the separate reviewed operational SQL and reconcile any legacy queue before a separately authorized live run. Offline tests cover simulated adapters and embedded SQL; native/provider and supervised-service acceptance remain open. See [production intake runbook](docs/GMAIL_PRODUCTION_INTAKE.md). IMAP and local inbound-listener utilities are not production substitutes.
 
 Environment loading is described in the v22 implementation reference. Keep credentials, browser profiles, OAuth files, message content, Amazon order/tracking details, PostgreSQL data and runtime journals out of Git and logs. First-time Gmail queue creation requires an explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES`; never use it to replace a lost existing queue.
 

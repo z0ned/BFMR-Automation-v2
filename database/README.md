@@ -75,6 +75,10 @@ exact import controls, production-versus-test startup and remaining acceptance.
 
 ## Offline checks
 
+`npm run test:gmail-intake` validates the separate operational intake contract
+with synthetic providers and disposable PGlite. Current results and limits are
+recorded in the [intake runbook](../docs/GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026).
+
 With the application's development dependencies installed:
 
 ```sh

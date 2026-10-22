@@ -8,6 +8,7 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
+    "test:gmail-intake": "node --import tsx --test --test-isolation=none tests/gmail_push_transport.test.ts tests/postgres_gmail_intake.test.ts tests/production_gmail_intake.test.ts tests/gmail_intake_integration.test.ts",
     "test-amazon-purchase": "tsx scripts/test_amazon_purchase.ts",
     "test-bfmr-ipad-reservation": "tsx scripts/test_bfmr_ipad_reservation.ts",
     "test-amazon-checkout": "tsx scripts/test_amazon_checkout.ts",

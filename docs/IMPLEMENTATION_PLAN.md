@@ -1,5 +1,9 @@
 # Implementation plan and evidence
 
+## 22 October 2026 — requested offline intake validation
+
+Added dedicated adapter, SQL-store, coordinator and integration tests under `npm run test:gmail-intake`. Synthetic providers and disposable embedded PostgreSQL exercise failure/recovery behavior without a native database or live provider. Current results, scope and remaining acceptance are recorded in [GMAIL_PRODUCTION_INTAKE.md](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026). Historical test totals below retain their original revisions and are not combined with these cases.
+
 ## 21 October 2026 — production push-intake source implemented
 
 Implemented source for required CON-001 intake: owned low-level StreamingPull with explicit reconnect handling, mailbox/OAuth and subscription/topic verification, daily INBOX watch renewal, STARTING/ACTIVE delivery barrier, PostgreSQL notification/rejection/dedupe before ACK and atomic admissions/work/cursor progress. Removed both periodic Gmail history reads and the idle Gmail priority probe from the shared runner. Intake continues independently of serialized browser work and paused recovery UI; local timers do not poll Gmail.
@@ -51,7 +55,7 @@ Updated `BFMR_Solution_Design_Specification_v22.md` and `BFMR_Implementation_v22
 |---|---|---|
 | M0 Fresh project/bootstrap | Code complete | Node.js/TypeScript automation project, package lock, scripts and instructions exist. Historical clean-checkout evidence should not be mistaken for deployment. |
 | M1 Durable orchestration and ownership | Partial | Relational live-runner business repositories and atomic reconciliation; separate JSONB engine; cross-process advisory ownership and explicit operational stores. Need real cutover/schema/role acceptance, service lifecycle and backup/restore proof. |
-| M2 Gmail and Pub/Sub intake | Partial | Live runner uses authenticated Gmail API history plus durable private queue/cursor/dedupe, restart continuation and explicit gap. Watch/owned StreamingPull and dedicated SQL notification/work/cursor/run source now replace periodic polling. Requested regressions, installed operational SQL/import, real IAM/provider/reconnect/restore and supervision acceptance remain pending. |
+| M2 Gmail and Pub/Sub intake | Partial | Watch/owned StreamingPull and dedicated SQL notification/work/cursor/run source replace periodic polling. Offline failure/recovery tests cover simulated providers and embedded SQL. Installed operational SQL/import, real IAM/provider/reconnect/restore and supervision acceptance remain pending. |
 | M3 BFMR read contracts | Partial / live blocked | Trusted URL/deal API resolver, exact-ID My Tracker reads, shared status rules, account evidence gate and supplier check. Actual DOM selectors, account alignment, provider schema/status/payout/supplier coverage and immediate visibility need evidence. |
 | M4 Reservation and side-effect controls | Partial | Live interactive runner, quantity-one website reservations, post-reservation evaluation/cancellation, Amazon checks/order path, journals, retailer tracking, BFMR writes and daily discrepancy alerts. Amazon layouts and BFMR side-effect contracts are not fully validated live; operator recovery and production notification gates remain incomplete. |
 | M5 Deployment/operations | Not accepted | No supervised deployment, backup/restore proof, health/watch monitoring, operational runbook or complete acceptance report. |

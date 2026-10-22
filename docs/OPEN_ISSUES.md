@@ -1,6 +1,6 @@
 # Open issues and release blockers
 
-**Updated:** 21 October 2026
+**Updated:** 22 October 2026
 
 This is the current-only checklist of unfinished implementation, provider evidence and operational acceptance. Requirements are defined in the [v22 solution design](BFMR_Solution_Design_Specification_v22.md); implemented behavior, configuration and evidence are recorded in the [v22 implementation reference](BFMR_Implementation_v22..md) and [relational integration runbook](RELATIONAL_INTEGRATION.md). Database installation and upgrade boundaries are in [database/README.md](../database/README.md).
 
@@ -46,7 +46,7 @@ Verify first-ever SQL initialization versus restoration of an existing queue and
 
 ### SETUP-003 Supervised service, scheduling and notifications
 
-Provide and accept startup/reboot supervision, headed-browser/manual-auth access, ownership-loss shutdown, scheduled tracking/status checks, monitoring, log retention and durable notification-delivery recovery. Accept the new Gmail watch/Pub/Sub StreamingPull and dedicated SQL source under CON-001 through explicitly requested regressions and real-provider evidence: no periodic Gmail polling or Inbox sweep, durable PostgreSQL notifications before ACK, serialized work/cursor commits, daily watch renewal with baseline/expiration distinct from the consumed cursor, and startup/reconnect history continuation. The periodic Gmail loop is removed in source; native operational-schema validation/installation, legacy reconciliation/import and live reconnect/ACK/recovery behavior remain unverified. See GMAIL_PRODUCTION_INTAKE.md. No source/static result closes service acceptance. Verify mailbox/OAuth identity, configured topic/subscription and Pub/Sub credentials. The separate listener/IMAP fallback is not production acceptance. Existing SQL and private operational stores need coordinated recovery; migration of all operational state into PostgreSQL is separate work.
+Provide and accept startup/reboot supervision, headed-browser/manual-auth access, ownership-loss shutdown, scheduled tracking/status checks, monitoring, log retention and durable notification-delivery recovery. Establish real-provider evidence for CON-001 watch/StreamingPull, notification-before-ACK, serialized work/cursor commits, daily watch renewal and startup/reconnect continuation. Native operational-schema validation/installation, legacy reconciliation/import and live reconnect/ACK/process-crash/restore behavior remain unverified. See GMAIL_PRODUCTION_INTAKE.md for offline evidence and remaining boundaries. No source/static/synthetic result closes service acceptance. Verify mailbox/OAuth identity, configured topic/subscription and Pub/Sub credentials. The separate listener/IMAP fallback is not production acceptance. Existing SQL and private operational stores need coordinated recovery; migration of all operational state into PostgreSQL is separate work.
 
 ### SETUP-004 Actual historical reconciliation and cutover
 

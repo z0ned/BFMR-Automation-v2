@@ -114,7 +114,7 @@ These results do not verify a native mini-PC PostgreSQL installation, real provi
 - Real creation/deal payout fields, full tracker retention/completeness, payment evidence, account alignment and current retailer/BFMR DOM/API contracts remain release gates. Keep contract flags unset until their meanings are verified.
 - Installing the schema/guard, accepting an actual legacy import, runtime role provisioning, mini-PC startup/reboot supervision, backup/restore and production recovery have not been performed by this work.
 - Single-new-deal automatic purchasing still has its existing early-return boundary, and the separate 14-day latest-delivery cutoff remains unimplemented. Neither behavior is broadened by persistence integration.
-- Required Gmail watch/owned StreamingPull and SQL notification-before-ACK/cursor/watch recovery are now implemented in source; the periodic Gmail loop is removed. Requested regressions, installed operational SQL, real legacy import and provider/recovery acceptance remain pending. Broader operational queue/outbox integration and a supervised service also remain unfinished. No deployment or new live invocation is authorized by source presence.
+- Required Gmail watch/owned StreamingPull and SQL notification-before-ACK/cursor/watch recovery are implemented and have [offline intake coverage](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026); the periodic Gmail loop is removed. Installed operational SQL, real legacy import and native/provider/recovery acceptance remain pending. Broader operational queue/outbox integration and a supervised service also remain unfinished. No deployment or new live invocation is authorized by source presence.
 
 ## Documentation QA — 21 October 2026
 

@@ -98,7 +98,7 @@ The persistence contract is the adopted 16-table PostgreSQL schema in Section 8,
 
 ### 2.3 Operational requirements
 
-Before unattended production operation, provide supervised execution, durable private storage, account ownership and loss handling, backup/restore and stale-state reconciliation, restart recovery, notification delivery controls, monitoring, and an operator procedure for browser login/MFA. **CON-001 requires Gmail watch and Pub/Sub StreamingPull intake. No periodic Gmail polling or Inbox sweep is permitted.** The worker source now implements watch/owned StreamingPull and dedicated SQL intake; its static checks do not establish native installation, provider contracts or supervised production acceptance. An expired Gmail history cursor must preserve a gap and stop; there is no authorized blanket Inbox scan or silent cursor reset.
+Before unattended production operation, provide supervised execution, durable private storage, account ownership and loss handling, backup/restore and stale-state reconciliation, restart recovery, notification delivery controls, monitoring, and an operator procedure for browser login/MFA. **CON-001 requires Gmail watch and Pub/Sub StreamingPull intake. No periodic Gmail polling or Inbox sweep is permitted.** The worker source now implements watch/owned StreamingPull and dedicated SQL intake; its static checks and [offline intake tests](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026) do not establish native installation, provider contracts or supervised production acceptance. An expired Gmail history cursor must preserve a gap and stop; there is no authorized blanket Inbox scan or silent cursor reset.
 
 ## 3. Approved design decisions and v22 amendments
 

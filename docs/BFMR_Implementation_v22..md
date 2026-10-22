@@ -62,7 +62,7 @@ The guard source is in `database/schema.sql`, with its upgrade in `database/migr
 
 | Area | Source as implemented | Remaining gate |
 |---|---|---|
-| Gmail intake | Watch/owned StreamingPull, SQL notification-before-ACK and atomic work/cursor; startup/reconnect catch-up and daily renewal | New source has static checks only; requested regressions, installed intake SQL/legacy import, actual contracts and supervision remain open |
+| Gmail intake | Watch/owned StreamingPull, SQL notification-before-ACK and atomic work/cursor; startup/reconnect catch-up and daily renewal | Offline tests cover synthetic adapters and embedded SQL; native installation/legacy import, actual contracts and supervision remain open |
 | Reservations | Normal Playwright form, exact confirmation, SQL intent/creation capture and guarded recovery | Real creation/deal field contracts, account alignment and accepted historical evidence |
 | Amazon purchasing | Existing multi-deal path, fixed-item manual test and SQL pre-submit intent/order ledger | Single-deal shared purchase workflow and 14-day delivery cutoff; current DOM contracts |
 | Orders/shipments | Typed SQL rows through the ledger interface; one shipment/tracking number per order; retained review/exclusion evidence | Real retailer tracking and BFMR Purchase/Shipment contracts |
@@ -112,7 +112,7 @@ The Gmail intake tasks run independently while browser work or its recovery UI i
 
 `gmailIntakeQueue.ts` is now a legacy file/fixture interface. If its private queue exists, startup requires the accepted source hash from an explicit `scripts/import_gmail_intake.ts` report/apply path; it never imports automatically. Preserve accepted bytes. Authentic first-ever SQL setup alone may use `BFMR_INITIALIZE_GMAIL_QUEUE=YES`, then remove it. Missing previous journals, history gaps and unresolved PROCESSING records require authoritative reconciliation, not a new baseline. Separate `auth_gmail_oauth.ts`/`wait_for_real_email.ts` utilities and IMAP fallback are not this production worker. The [intake runbook](GMAIL_PRODUCTION_INTAKE.md) owns installation, configuration, controlled import and outstanding acceptance.
 
-Evidence for this new source: TypeScript static checks and source/document review only. No software tests were added/run because AGENTS.md requires an explicit testing request; earlier suite results do not cover this intake implementation. No schema installation/import, actual Gmail watch, Pub/Sub connection, provider action or deployment was invoked.
+The 21 October implementation had static/source-review evidence only. On 22 October the user explicitly requested offline intake tests; `npm run test:gmail-intake` now covers adapters, coordinator, actual operational SQL in disposable PGlite and their persistence/ACK integration. Results, coverage and limitations are recorded once in the [intake runbook](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026). No native schema installation/import, actual Gmail watch, Pub/Sub connection, provider action or deployment was invoked. Historical suite results retain their original scope.
 
 **Unimplemented design change retained in v21:** both single and multi new-deal processing must use the same durable per-message/per-reservation state machine and side-effect intent records. The existing `scripts/test_real_email_e2e.ts` returns after supplier evaluation for single-deal mail (`if (!parsed.isMultiDealAnnouncement) return;`), while `multiDealJournal` is created only for multi-deal mail. Removing the return line alone is **unsafe**: extend durable order intent/confirmation/reconciliation to single-deal mail first. Previously processed messages remain tombstoned, not retrospectively purchased.
 
@@ -341,6 +341,7 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 | `npm run typecheck`, `npm run typecheck:all` | Static checks; recorded current results are in Section 2.1. |
 | `npm test` | Inspect environment first; never target a real DB. Current evidence uses direct per-file execution to expose individual cases. |
 | `npm run test:relational` | Disposable PGlite regression suite using bundled `database/schema.sql`, pinned to its reviewed hash; no private DB URL or external checkout. |
+| `npm run test:gmail-intake` | Offline intake adapters, coordinator and operational SQL/integration tests; synthetic providers, network guard and disposable PGlite. See the intake runbook for results and limits. |
 | `npx tsx scripts/reconcile_relational_cutover.ts ...` | Default read-only report; actual apply is a separately authorized reviewed-hash/account database write. |
 | `npx tsx scripts/record_reimbursement.ts ...` | Default payment-manifest report; explicit reviewed-hash apply after accepted cutover. No provider actions. |
 | `npm start` | **LIVE** watch/StreamingPull and existing BFMR/Amazon processing gates; no temporary test startup reservation. Not invoked/accepted by this source work. |

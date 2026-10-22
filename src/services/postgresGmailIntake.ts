@@ -1,6 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Pool, type PoolClient } from 'pg';
+import { Pool } from 'pg';
 import type { GmailQueueState, QueuedEmail } from './gmailIntakeQueue';
+import type { BusinessQueryable } from '../db/relationalTypes';
+
+export interface GmailIntakeClient extends BusinessQueryable { release(destroy?: boolean): void }
+export interface GmailIntakePool {
+  connect(): Promise<GmailIntakeClient>;
+  end(): Promise<void>;
+  on?(event: 'error', listener: (error: Error) => void): unknown;
+}
 
 export interface GmailIntakeOptions {
   account: string;
@@ -75,25 +83,25 @@ type StateRow = { account_namespace: string; mailbox: string; subscription: stri
 
 /** Dedicated private operational store. No DDL, automatic import or transaction retry. */
 export class PostgresGmailIntakeStore {
-  private readonly pool: Pool;
+  private readonly pool: GmailIntakePool;
   private validated = false;
   private unavailable = false;
   private closed = false;
   private closing: Promise<void> | undefined;
   private tail: Promise<void> = Promise.resolve();
-  constructor(connectionString: string, private readonly options: GmailIntakeOptions) {
+  constructor(connectionString: string, private readonly options: GmailIntakeOptions, dependencies: { pool?: GmailIntakePool } = {}) {
     demand(connectionString && options.account.trim() && options.mailbox === options.mailbox.trim().toLowerCase()
       && options.mailbox.includes('@') && /^projects\/[^/]+\/subscriptions\/[^/]+$/.test(options.subscription)
       && /^projects\/[^/]+\/topics\/[^/]+$/.test(options.topic), 'GMAIL_INTAKE_CONFIGURATION_INVALID');
-    this.pool = new Pool({ connectionString, max: 2, connectionTimeoutMillis: 10000,
+    this.pool = dependencies.pool ?? new Pool({ connectionString, max: 2, connectionTimeoutMillis: 10000,
       statement_timeout: 30000, application_name: 'bfmr:gmail-intake' });
-    this.pool.on('error', () => { this.unavailable = true; });
+    this.pool.on?.('error', () => { this.unavailable = true; });
   }
-  private async transaction<T>(fn: (client: PoolClient) => Promise<T>, readOnly = false, schemaCheck = false): Promise<T> {
+  private async transaction<T>(fn: (client: GmailIntakeClient) => Promise<T>, readOnly = false, schemaCheck = false): Promise<T> {
     const prior = this.tail; let release!: () => void;
     this.tail = new Promise<void>(resolve => { release = resolve; });
     await prior;
-    let client: PoolClient | undefined;
+    let client: GmailIntakeClient | undefined;
     let destroy = false;
     try {
       demand(!this.closed && !this.unavailable, 'GMAIL_INTAKE_STORAGE_UNAVAILABLE');
@@ -112,7 +120,7 @@ export class PostgresGmailIntakeStore {
       throw new GmailIntakeStorageError('GMAIL_INTAKE_STORAGE_FAILURE_RECONCILE_BEFORE_RETRY');
     } finally { client?.release(destroy); release(); }
   }
-  private async state(client: PoolClient, lock = false): Promise<StateRow | null> {
+  private async state(client: GmailIntakeClient, lock = false): Promise<StateRow | null> {
     const result = await client.query<StateRow>(`SELECT * FROM public.gmail_intake_state
       WHERE account_namespace=$1${lock ? ' FOR UPDATE' : ''}`, [this.options.account]);
     if (!result.rows.length) return null;
@@ -121,14 +129,14 @@ export class PostgresGmailIntakeStore {
       && row.topic === this.options.topic, 'GMAIL_INTAKE_SCOPE_CONFLICT');
     return row;
   }
-  private async createNamespace(client: PoolClient): Promise<StateRow> {
+  private async createNamespace(client: GmailIntakeClient): Promise<StateRow> {
     await client.query(`INSERT INTO public.gmail_intake_state(account_namespace,mailbox,subscription,topic)
       VALUES($1,$2,$3,$4) ON CONFLICT(account_namespace) DO NOTHING`,
     [this.options.account, this.options.mailbox, this.options.subscription, this.options.topic]);
     const state = await this.state(client, true);
     demand(state, 'GMAIL_INTAKE_STATE_MISSING'); return state;
   }
-  private async queue(client: PoolClient, state: StateRow | null): Promise<GmailQueueState | null> {
+  private async queue(client: GmailIntakeClient, state: StateRow | null): Promise<GmailQueueState | null> {
     if (!state?.consumed_cursor) return null;
     const rows = await client.query<{ gmail_message_id: string; state: 'PENDING' | 'PROCESSING' | 'DONE'; payload: QueuedEmail | null }>(
       `SELECT gmail_message_id,state,payload FROM public.gmail_intake_work
@@ -138,7 +146,7 @@ export class PostgresGmailIntakeStore {
         ...(row.payload === null ? {} : { email: row.payload }) })) };
     validateQueue(queue, this.options.mailbox); return queue;
   }
-  private async assertRun(client: PoolClient, runId: string, states: string[]): Promise<void> {
+  private async assertRun(client: GmailIntakeClient, runId: string, states: string[]): Promise<void> {
     const result = await client.query<{ state: string }>(`SELECT state FROM public.gmail_intake_runs
       WHERE id=$1 AND account_namespace=$2 FOR UPDATE`, [runId, this.options.account]);
     demand(result.rows.length === 1 && states.includes(result.rows[0].state), 'GMAIL_INTAKE_RUN_NOT_ACTIVE');
@@ -380,7 +388,7 @@ export class PostgresGmailIntakeStore {
         ? { expirationMs: state.watch_expires_at.getTime(), renewedAtMs: state.watch_renewed_at.getTime() } : null;
     }, true);
   }
-  private async assessImport(client: PoolClient, existing: StateRow | null, sourceSha256: string,
+  private async assessImport(client: GmailIntakeClient, existing: StateRow | null, sourceSha256: string,
     fingerprint: string): Promise<LegacyGmailImportAssessment> {
     if (!existing) return { ready: true, alreadyAccepted: false };
     if (existing.consumed_cursor !== null) {

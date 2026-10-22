@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import type { QueuedEmail } from './gmailIntakeQueue';
-import { PostgresGmailIntakeStore } from './postgresGmailIntake';
+import type { PostgresGmailIntakeStore } from './postgresGmailIntake';
 import { GmailHistoryGapError, GmailReadRetryableError,
   type GmailPushProvider, type GmailPushSubscription, type PubSubDelivery } from './gmailPushTransport';
 
@@ -9,10 +9,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const WATCH_MARGIN_MS = 5 * 60 * 1000;
 type WakeReason = 'STARTUP' | 'RECONNECT' | 'NOTIFICATION';
 
+/** Narrow persistence boundary permits deterministic offline failure injection. */
+export type ProductionGmailIntakeStore = Pick<PostgresGmailIntakeStore,
+  'validateSchema' | 'load' | 'startRun' | 'setWatch' | 'activate' | 'recordNotification'
+  | 'pendingNotifications' | 'ingest' | 'markGap' | 'mark' | 'stopRun'>;
+
 /** Do not silently start a new SQL mailbox over a previously used private queue.
  * Accepted source bytes remain a recovery boundary after explicit import.
  */
-export async function assertLegacyGmailSource(store: PostgresGmailIntakeStore, file: string): Promise<void> {
+export async function assertLegacyGmailSource(store: Pick<PostgresGmailIntakeStore, 'legacySourceHash'>, file: string): Promise<void> {
   let hash: string | null = null;
   try { hash = createHash('sha256').update(await fs.readFile(file)).digest('hex'); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Legacy Gmail source is unreadable; restore/reconcile before intake.'); }
@@ -46,7 +51,7 @@ export class ProductionGmailIntake {
   constructor(private readonly options: {
     mailbox: string;
     topic: string;
-    store: PostgresGmailIntakeStore;
+    store: ProductionGmailIntakeStore;
     provider: GmailPushProvider;
     subscription: GmailPushSubscription;
     verifyOwnership: () => Promise<void>;

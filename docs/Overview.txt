@@ -15,8 +15,8 @@ worker. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull, with no
 periodic Gmail polling or Inbox sweep. New worker source removes that loop and
 uses owned StreamingPull plus dedicated SQL intake. Required production mailbox/OAuth, topic/subscription
 and Pub/Sub credential settings are in .env.example. The PostgreSQL
-notification-before-ACK and cursor/watch/reconnect source has static checks only;
-requested regressions, installed SQL/import and live acceptance remain pending.
+notification-before-ACK and cursor/watch/reconnect source has offline coverage;
+installed SQL/import and native/provider/service acceptance remain pending.
 Provider contracts and supervised production acceptance remain gates.
 
 PERSISTENCE
