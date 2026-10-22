@@ -73,12 +73,12 @@ async function findExactOrderCard(page: Page, order: AmazonOrderRecord): Promise
 }
 
 /** Read-only Amazon website lookup. Unknown layouts never yield tracking data. */
-export async function checkAmazonShipment(page: Page, order: AmazonOrderRecord, now = new Date()): Promise<AmazonOrderRecord> {
+export async function checkAmazonShipment(page: Page, order: AmazonOrderRecord, now = new Date(), expectedAccountEmail?: string): Promise<AmazonOrderRecord> {
   page.setDefaultTimeout(10_000);
   const deadline = Date.now() + 90_000;
   await page.goto(ORDERS_URL, { waitUntil: 'domcontentloaded', timeout: 15_000 });
   assertAmazonPage(page);
-  await requireAmazonAccountIdentity(page);
+  await requireAmazonAccountIdentity(page, expectedAccountEmail);
   let card: OrderCard | null = null;
   const visited = new Set<string>();
   for (let index = 0; index < 10; index++) {

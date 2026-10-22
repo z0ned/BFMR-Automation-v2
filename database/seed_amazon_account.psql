@@ -1,0 +1,116 @@
+-- Initial application records, separate from reusable schema.sql and upgrades.
+-- Run as the schema owner after both schema files, with the writer stopped.
+-- CCV stays required. Supply it privately through BFMR_INITIAL_ACCOUNT_CCV;
+-- never put the actual value in this file, psql arguments or Git.
+\set ON_ERROR_STOP on
+\set VERBOSITY terse
+
+BEGIN;
+SET LOCAL search_path = pg_catalog, public;
+LOCK TABLE public.retailers, public.retailer_accounts IN SHARE ROW EXCLUSIVE MODE;
+
+DO $ranking_contract$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_attribute AS a
+        WHERE a.attrelid = 'public.retailer_accounts'::regclass
+          AND a.attname = 'retailer_account_ranking'
+          AND NOT a.attisdropped AND a.attnotnull
+          AND a.atttypid = 'pg_catalog.int4'::regtype
+          AND a.attidentity = '' AND a.attgenerated = ''
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_catalog.pg_attrdef AS d
+              WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum
+          )
+    ) THEN
+        RAISE EXCEPTION 'Initial account seeding requires finalized non-null integer ranking';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_constraint AS c
+        JOIN pg_catalog.pg_index AS i ON i.indexrelid = c.conindid
+        WHERE c.conrelid = 'public.retailer_accounts'::regclass
+          AND c.conname = 'retailer_accounts_retailer_ranking_uk'
+          AND c.contype = 'u' AND c.convalidated
+          AND i.indisunique AND i.indisvalid
+          AND c.conkey = ARRAY[
+              (SELECT a.attnum FROM pg_catalog.pg_attribute AS a
+               WHERE a.attrelid = c.conrelid AND a.attname = 'retailer_id' AND NOT a.attisdropped),
+              (SELECT a.attnum FROM pg_catalog.pg_attribute AS a
+               WHERE a.attrelid = c.conrelid AND a.attname = 'retailer_account_ranking' AND NOT a.attisdropped)
+          ]::smallint[]
+    ) THEN
+        RAISE EXCEPTION 'Initial account seeding requires the per-retailer unique ranking constraint';
+    END IF;
+END;
+$ranking_contract$;
+
+-- Client-side COPY sends the private value as data, not a SQL string literal.
+-- Reject malformed/missing input before emitting any data. No CCV is echoed by
+-- psql, included in an exception, or retained in this temporary table at commit.
+CREATE TEMP TABLE bfmr_initial_account_input (ccv text) ON COMMIT DROP;
+\copy pg_temp.bfmr_initial_account_input (ccv) FROM PROGRAM 'LC_ALL=C; export LC_ALL; case "$BFMR_INITIAL_ACCOUNT_CCV" in [0-9][0-9][0-9]|[0-9][0-9][0-9][0-9]) printenv BFMR_INITIAL_ACCOUNT_CCV ;; *) exit 1 ;; esac' WITH (FORMAT text)
+
+DO $seed_preflight$
+BEGIN
+    IF (SELECT count(*) FROM pg_temp.bfmr_initial_account_input) <> 1
+       OR EXISTS (
+           SELECT 1 FROM pg_temp.bfmr_initial_account_input
+           WHERE ccv IS NULL OR ccv !~ '^[0-9]{3,4}$'
+       )
+    THEN
+        RAISE EXCEPTION 'A private three- or four-digit initial account CCV is required';
+    END IF;
+
+    IF (SELECT count(*) FROM public.retailers WHERE name = 'Amazon') > 1 THEN
+        RAISE EXCEPTION 'Amazon retailer is ambiguous; no seed records were changed';
+    END IF;
+END;
+$seed_preflight$;
+
+INSERT INTO public.retailers (name, primary_url)
+SELECT 'Amazon', 'https://www.amazon.com/'
+WHERE NOT EXISTS (SELECT 1 FROM public.retailers WHERE name = 'Amazon');
+
+DO $retailer_identity$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.retailers
+        WHERE name = 'Amazon' AND primary_url = 'https://www.amazon.com/'
+    ) THEN
+        RAISE EXCEPTION 'Existing Amazon retailer differs from the requested initial record';
+    END IF;
+END;
+$retailer_identity$;
+
+INSERT INTO public.retailer_accounts
+    (retailer_id, email, retailer_account_ranking, ccv)
+SELECT r.id, 'tahatan_investments@outlook.com', 1, input.ccv
+FROM public.retailers AS r
+CROSS JOIN pg_temp.bfmr_initial_account_input AS input
+WHERE r.name = 'Amazon'
+ON CONFLICT DO NOTHING;
+
+-- Exact reruns are harmless. Conflicts stop rather than altering an existing
+-- account, rank, security code, retailer identity or order association.
+DO $account_identity$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.retailer_accounts AS a
+        JOIN public.retailers AS r ON r.id = a.retailer_id
+        CROSS JOIN pg_temp.bfmr_initial_account_input AS input
+        WHERE r.name = 'Amazon'
+          AND a.email = 'tahatan_investments@outlook.com'
+          AND a.retailer_account_ranking = 1
+          AND a.ccv = input.ccv
+    ) THEN
+        RAISE EXCEPTION 'Initial Amazon account conflicts with existing data; no seed records were changed';
+    END IF;
+END;
+$account_identity$;
+
+COMMIT;
+
+\echo 'Initial Amazon retailer/account records are ready; rank is 1.'

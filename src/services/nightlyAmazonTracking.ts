@@ -24,6 +24,7 @@ export async function runDueAmazonTracking(options: {
   hasIncomingMail: () => Promise<boolean>;
   onOrderFailure: (order: AmazonOrderRecord, error: unknown) => Promise<void>;
   now?: () => Date;
+  expectedAccountEmail?: string;
   checkShipment?: (page: Page, order: AmazonOrderRecord, now: Date) => Promise<AmazonOrderRecord>;
   afterCheck?: (order: AmazonOrderRecord) => Promise<void>;
 }): Promise<void> {
@@ -41,7 +42,9 @@ export async function runDueAmazonTracking(options: {
     if (await options.hasIncomingMail()) return;
     const page = await options.browser.createRetailerTab();
     try {
-      const checked = await (options.checkShipment ?? checkAmazonShipment)(page, order, options.now?.() ?? new Date());
+      const checked = options.checkShipment
+        ? await options.checkShipment(page, order, options.now?.() ?? new Date())
+        : await checkAmazonShipment(page, order, options.now?.() ?? new Date(), options.expectedAccountEmail);
       checked.lastCheckedAtlantaDay = day;
       checked.lastAttemptAtlantaDay = day;
       await options.ledger.update(checked, 'AMAZON');

@@ -35,17 +35,25 @@ export interface CutoverReservation {
   reimbursement?: VerifiedPaymentNotice;
 }
 /** Private, operator-reviewed import contract; it is not a provider response. */
+export interface FreshStartBoundary {
+  mode: 'START_FROM';
+  startsAt: string;
+  priorCompletedActivity: 'EXCLUDED';
+  noOutstandingWork: true;
+}
 export interface RelationalCutoverManifest {
-  version: 1;
+  version: 1 | 2;
   account: string;
   approvedAt: string;
-  coverage: { allReservations: true; allOrders: true; actualPayments: true };
+  coverage: { allReservations: true; allOrders: true; actualPayments: true } | { sinceBaseline: true };
+  baseline?: FreshStartBoundary;
   legacyOrderLedgerSha256: string | null;
   excludedStandaloneOrderIds: string[];
   reservations: CutoverReservation[];
 }
 export interface CutoverReport {
   version: 1;
+  baseline?: FreshStartBoundary;
   ready: boolean;
   reservationCount: number;
   orderCount: number;
@@ -98,16 +106,44 @@ function emailValid(value: EmailInput | undefined): boolean {
     nonblank(value.emailType) && timestamp(value.receivedAt));
 }
 
+function validFreshStartBoundary(value: unknown, approvedAt: unknown): value is FreshStartBoundary {
+  const boundary = value as FreshStartBoundary | undefined;
+  return !!boundary && boundary.mode === 'START_FROM' && timestamp(boundary.startsAt)
+    && timestamp(approvedAt) && Date.parse(boundary.startsAt) <= Date.parse(approvedAt)
+    && Date.parse(approvedAt) <= Date.now() && boundary.priorCompletedActivity === 'EXCLUDED'
+    && boundary.noOutstandingWork === true;
+}
+
+export function assertEmailSinceCutover(startsAt: string | null, receivedAt: string): void {
+  if (startsAt !== null && (!timestamp(startsAt) || !timestamp(receivedAt)
+      || Date.parse(receivedAt) < Date.parse(startsAt))) {
+    throw new Error('Trigger email predates the accepted fresh-start boundary or has an invalid timestamp; no reservation may be submitted.');
+  }
+}
+
 export function parseRelationalCutoverManifest(value: unknown): RelationalCutoverManifest {
   const input = value as RelationalCutoverManifest;
-  if (!input || typeof input !== 'object' || input.version !== 1 || !nonblank(input.account) ||
-      !timestamp(input.approvedAt) || input.coverage?.allReservations !== true ||
-      input.coverage?.allOrders !== true || input.coverage?.actualPayments !== true ||
+  if (!input || typeof input !== 'object' || ![1, 2].includes(input.version) || !nonblank(input.account) ||
+      !timestamp(input.approvedAt) ||
       !(input.legacyOrderLedgerSha256 === null || (typeof input.legacyOrderLedgerSha256 === 'string' && sha256(input.legacyOrderLedgerSha256))) ||
       !Array.isArray(input.excludedStandaloneOrderIds) || !input.excludedStandaloneOrderIds.every(nonblank) ||
       new Set(input.excludedStandaloneOrderIds).size !== input.excludedStandaloneOrderIds.length ||
       !Array.isArray(input.reservations)) {
     throw new Error('Cutover manifest lacks explicit version, account, approval, complete coverage, or legacy-file hash.');
+  }
+  if (input.version === 1) {
+    if (!input.coverage || typeof input.coverage !== 'object' || !('allReservations' in input.coverage) || input.coverage.allReservations !== true
+        || input.coverage.allOrders !== true || input.coverage.actualPayments !== true
+        || 'sinceBaseline' in input.coverage || input.baseline !== undefined) {
+      throw new Error('Historical cutover requires complete historical coverage without a fresh-start boundary.');
+    }
+  } else {
+    if (!validFreshStartBoundary(input.baseline, input.approvedAt) || !input.coverage || typeof input.coverage !== 'object'
+        || !('sinceBaseline' in input.coverage) || input.coverage.sinceBaseline !== true
+        || 'allReservations' in input.coverage || 'allOrders' in input.coverage || 'actualPayments' in input.coverage
+        || input.reservations.length || input.excludedStandaloneOrderIds.length || input.legacyOrderLedgerSha256 !== null) {
+      throw new Error('Fresh-start cutover requires an explicit boundary, no outstanding work and no historical import.');
+    }
   }
   const reserveIds = new Set<string>();
   const orderIds = new Set<string>();
@@ -241,6 +277,21 @@ function checkLegacy(manifest: RelationalCutoverManifest, legacy: AmazonOrderRec
 async function inspect(tx: BusinessRepositories, manifest: RelationalCutoverManifest, legacy: AmazonOrderRecord[]): Promise<CutoverReport> {
   const issues: string[] = [];
   checkLegacy(manifest, legacy, issues);
+  if (manifest.version === 2) {
+    const markers = await tx.query<{ evidence: JsonObject }>(`SELECT evidence FROM public.workflow_evidence
+      WHERE action_type='RELATIONAL_CUTOVER' AND phase='CONFIRMED' AND outcome='ACCEPTED'`);
+    if (markers.rows.length && (markers.rows.length !== 1 || markers.rows[0].evidence.version !== 2
+        || markers.rows[0].evidence.account !== manifest.account
+        || stable(markers.rows[0].evidence.baseline ?? null) !== stable(manifest.baseline))) {
+      issues.push('A different cutover is already accepted; a fresh start cannot replace it.');
+    }
+    const intake = await tx.query<{ occupied: boolean }>(`SELECT
+      EXISTS(SELECT 1 FROM public.gmail_intake_state)
+      OR EXISTS(SELECT 1 FROM public.gmail_intake_runs)
+      OR EXISTS(SELECT 1 FROM public.gmail_intake_notifications)
+      OR EXISTS(SELECT 1 FROM public.gmail_intake_work) AS occupied`);
+    if (intake.rows[0]?.occupied !== false) issues.push('Existing SQL Gmail state requires reconciliation; fresh start cannot reset it.');
+  }
   const reservations = await tx.reservations.list();
   const orders = await tx.orders.list();
   const payments = await tx.reimbursements.list();
@@ -331,7 +382,8 @@ async function inspect(tx: BusinessRepositories, manifest: RelationalCutoverMani
     }
   }
   return {
-    version: 1, ready: issues.length === 0, reservationCount: manifest.reservations.length,
+    version: 1, ...(manifest.baseline ? { baseline: manifest.baseline } : {}),
+    ready: issues.length === 0, reservationCount: manifest.reservations.length,
     orderCount: manifest.reservations.filter(item => item.order).length,
     reimbursementCount: manifest.reservations.filter(item => item.reimbursement).length,
     excludedStandaloneOrderCount: manifest.excludedStandaloneOrderIds.length, issues,
@@ -345,18 +397,23 @@ export async function reconcileRelationalCutover(db: RelationalDatabase, manifes
 
 export async function assertRelationalCutoverReady(db: RelationalDatabase, options: {
   account: string; legacyOrderLedgerSha256: string | null;
-}): Promise<void> {
-  await db.withTransaction(async tx => {
+}): Promise<string | null> {
+  return db.withTransaction(async tx => {
     const result = await tx.query<{ evidence: JsonObject }>(
       `SELECT evidence FROM public.workflow_evidence
        WHERE action_type='RELATIONAL_CUTOVER' AND phase='CONFIRMED' AND outcome='ACCEPTED'`,
     );
     const evidence = result.rows[0]?.evidence;
-    if (result.rows.length !== 1 || evidence?.version !== 1 || evidence.account !== options.account.trim().toLowerCase() ||
+    if (result.rows.length !== 1 || !evidence || (evidence.version !== 1 && evidence.version !== 2)
+        || evidence.account !== options.account.trim().toLowerCase() ||
         typeof evidence.manifestSha256 !== 'string' || !sha256(evidence.manifestSha256) ||
         evidence.legacyOrderLedgerSha256 !== options.legacyOrderLedgerSha256) {
       throw new Error('Relational cutover is not accepted for this account and legacy source; reconcile before starting the writer.');
     }
+    if (evidence.version === 1 && evidence.baseline === undefined) return null;
+    if (evidence.version === 2 && options.legacyOrderLedgerSha256 === null
+        && validFreshStartBoundary(evidence.baseline, evidence.approvedAt)) return evidence.baseline.startsAt;
+    throw new Error('Accepted cutover boundary is invalid; writer must remain stopped.');
   });
 }
 
@@ -373,11 +430,14 @@ export async function applyRelationalCutover(db: RelationalDatabase, input: {
          WHERE action_type='RELATIONAL_CUTOVER' AND phase='CONFIRMED' AND outcome='ACCEPTED'`,
       );
       if (markers.rows.length) {
-        if (markers.rows.length !== 1 || markers.rows[0].evidence.account !== manifest.account ||
+        if (markers.rows.length !== 1 || markers.rows[0].evidence.account !== manifest.account
+            || markers.rows[0].evidence.version !== manifest.version
+            || stable(markers.rows[0].evidence.baseline ?? null) !== stable(manifest.baseline ?? null) ||
             markers.rows[0].evidence.manifestSha256 !== input.manifestSha256) {
           throw new Error('A different relational cutover has already been accepted.');
         }
-        return { version: 1, ready: true, reservationCount: manifest.reservations.length,
+        return { version: 1, ...(manifest.baseline ? { baseline: manifest.baseline } : {}),
+          ready: true, reservationCount: manifest.reservations.length,
           orderCount: manifest.reservations.filter(item => item.order).length,
           reimbursementCount: manifest.reservations.filter(item => item.reimbursement).length,
           excludedStandaloneOrderCount: manifest.excludedStandaloneOrderIds.length, issues: [] };
@@ -438,7 +498,8 @@ export async function applyRelationalCutover(db: RelationalDatabase, input: {
       }
       await tx.evidence.appendWorkflow({
         correlationId, actionType: 'RELATIONAL_CUTOVER', phase: 'CONFIRMED', outcome: 'ACCEPTED',
-        evidence: { version: 1, account: manifest.account, manifestSha256: input.manifestSha256,
+        evidence: { version: manifest.version, account: manifest.account, manifestSha256: input.manifestSha256,
+          ...(manifest.baseline ? { baseline: { ...manifest.baseline } } : {}),
           legacyOrderLedgerSha256: manifest.legacyOrderLedgerSha256, approvedAt: manifest.approvedAt,
           reservationCount: report.reservationCount, orderCount: report.orderCount,
           reimbursementCount: report.reimbursementCount, excludedStandaloneOrderCount: report.excludedStandaloneOrderCount },

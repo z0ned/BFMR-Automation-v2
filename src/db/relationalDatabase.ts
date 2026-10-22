@@ -12,7 +12,8 @@ interface ColumnContract { type: string; required?: boolean }
 const column = (type: string, required = true): ColumnContract => ({ type, required });
 const requiredColumns: Record<string, Record<string, ColumnContract>> = {
   retailers: { id: column('bigint'), name: column('text'), primary_url: column('text') },
-  retailer_accounts: { id: column('bigint'), retailer_id: column('bigint'), email: column('text'), ccv: column('text') },
+  retailer_accounts: { id: column('bigint'), retailer_id: column('bigint'), email: column('text'), ccv: column('text'),
+    retailer_account_ranking: column('integer') },
   reservation_status: { id: column('bigint'), description: column('text') },
   order_status: { id: column('bigint'), description: column('text') },
   shipment_status: { id: column('bigint'), description: column('text') },
@@ -78,6 +79,9 @@ export class RelationalDatabase {
       }
       const payout = columns.find(item => item.table_name === 'reservations' && item.column_name === 'expected_payout');
       assert(payout?.generated === 's' && normalizedSql(payout.expression ?? '') === 'quantity*payout_per_item', 'stored generated reservation payout formula');
+      const ranking = columns.find(item => item.table_name === 'retailer_accounts' && item.column_name === 'retailer_account_ranking');
+      assert(ranking && ranking.expression === null && ranking.generated === '' && ranking.identity === '',
+        'retailer account rankings must be explicitly assigned, without a default or generation');
 
       const constraints = (await client.query<CatalogConstraint>(`SELECT c.relname AS table_name,k.conname AS constraint_name,
         k.contype AS constraint_type,k.convalidated AS validated,
@@ -100,7 +104,8 @@ export class RelationalDatabase {
         ['reservation_status', ['description']], ['order_status', ['description']], ['shipment_status', ['description']],
         ['reservations', ['id', 'deal_id']], ['orders', ['reservation_id']], ['orders', ['retailer_id', 'order_id']],
         ['shipments', ['order_id']], ['reimbursements', ['reservation_id']],
-        ['retailer_accounts', ['retailer_id', 'email']], ['retailer_accounts', ['id', 'retailer_id']], ['sync_runs', ['id', 'provider']],
+        ['retailer_accounts', ['retailer_id', 'email']], ['retailer_accounts', ['id', 'retailer_id']],
+        ['retailer_accounts', ['retailer_id', 'retailer_account_ranking']], ['sync_runs', ['id', 'provider']],
       ] as Array<[string, string[]]>) keys(table, fields);
       const fk = (table: string, fields: string[], target: string, targetFields: string[] = ['id']) => assert(constraints.some(item =>
         item.table_name === table && item.constraint_type === 'f' && item.validated && item.key_columns.join(',') === fields.join(',') &&

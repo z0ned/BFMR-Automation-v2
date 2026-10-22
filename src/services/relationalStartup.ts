@@ -14,7 +14,7 @@ import { recordReservationNotAttempted } from './relationalReservations';
 export function relationalStartupHooks(runtime: RelationalRuntime) {
   let prepared: PreparedRelationalReservation | undefined;
   return {
-    async beforeMutation() { await runtime.ownership.verifyOwnership(); },
+    async beforeMutation() { await runtime.ownership.verifyOwnership(); await runtime.verifyRetailerAccount(); },
     async afterNotSubmitted(deal: StartupDeal) {
       if (!prepared || prepared.dealId !== deal.id) throw new Error('Startup non-submission intent is missing.');
       await recordReservationNotAttempted(runtime, prepared);
@@ -40,6 +40,7 @@ export function relationalStartupHooks(runtime: RelationalRuntime) {
     async beforeSubmit(deal: StartupDeal) {
       prepared = await prepareRelationalReservation(runtime, { dealUrl: deal.url, dealId: deal.id, title: deal.title });
       await runtime.ownership.verifyOwnership();
+      await runtime.verifyRetailerAccount();
     },
     async afterConfirmed(reference: ReservationReference | undefined) {
       if (!reference) throw new Error('Startup confirmation omitted exact reservation identity.');

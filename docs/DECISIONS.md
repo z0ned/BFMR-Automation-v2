@@ -4,6 +4,48 @@
 
 The user requested implementation of the action-control step from the repository review: strict checkout expectations and exact Amazon buying-account evidence, explicit cancellation release proof, persistent incident blocking and production startup recovery audits. Implementation uses existing business evidence tables and preserves approved purchase scope, CON-001 intake and at-most-once mutation rules. A verified account selector and one-time reviewed recovery inventory are additional source gates, not provider acceptance or permission to run the worker. No general incident-reset/repair capability is authorized by source presence. Details and static-check limits are in [ACTION_CONTROL.md](ACTION_CONTROL.md) and the v22 implementation amendment. No software tests or live actions were performed.
 
+## 22 October 2026 — start from today; exclude prior completed activity
+
+The user subsequently authorized focused offline validation and committing/pushing
+the fresh-start change. Tests use synthetic state and disposable PGlite; native
+cutover application and live provider/worker actions remain separate. Evidence is
+recorded in the [runbook](RELATIONAL_INTEGRATION.md#offline-fresh-start-validation--22-october-2026).
+
+After reporting no outstanding work and no located recovery files, the operator
+explicitly chose a new operational boundary and excluded prior completed
+activity. Use a version-2 cutover declaration with an exact UTC start instant,
+explicit exclusion and no-outstanding-work assertion; never represent it as
+complete historical coverage. Existing history-mode imports stay unchanged.
+Prepare/report first; do not silently apply a marker, reset Gmail or ignore
+unknown unpaid/provider evidence. The [cutover runbook](RELATIONAL_INTEGRATION.md#explicit-start-from-today-boundary--22-october-2026)
+owns procedure and limitations. This decision does not itself apply a cutover or
+authorize a live worker.
+
+## 22 October 2026 — focused offline account tests and publication authorized
+
+The user approved adding/running focused offline account-selection, ranking,
+upgrade and seed tests, followed by committing and pushing the completed work.
+Use synthetic identities and disposable PGlite; private-input shell checks use
+only synthetic environment values. This does not authorize an installed database
+upgrade, real rank backfill, live provider action or deployment. See the
+[database guide](../database/README.md#offline-account-ranking-validation--22-october-2026)
+for evidence and limits.
+
+## 22 October 2026 — explicit initial Amazon retailer/account seed
+
+The user requested the initial Amazon retailer/account in the creation workflow with rank **1**, retaining required CCV. [The seed source](../database/seed_amazon_account.psql) keeps the requested initial identity in that file and receives CCV only through private `BFMR_INITIAL_ACCOUNT_CCV` and client-side COPY into a temporary table. Never commit a CCV literal or print its value. Worker CCV reads remain forbidden; fresh integer/non-null/unique ranking and reviewed existing-account backfill remain required. An explicit seed is not a rank default or general autofill.
+
+[The creation installer](../database/bfmr-postgres-db-install.psql) includes the seed under `bfmr_owner` after both schemas and grants worker SELECT on ranking, preserving existing ownership/password controls and withholding CCV/account writes. Source changes remain uninstalled; [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026) records synthetic validation without installed database/provider actions or deployment. See [database/README.md](../database/README.md) for the operator boundary.
+
+## 22 October 2026 — ranked database selection of the Amazon account
+
+The user clarified that a retailer has multiple accounts. Require exactly one `retailers` row where `name = 'Amazon'`, then select its account using `ORDER BY retailer_account_ranking ASC LIMIT 1`. Multiple accounts are valid; zero linked accounts stop startup. Add integer `retailer_account_ranking NOT NULL` and `UNIQUE (retailer_id, retailer_account_ranking)`, without default/generated values or automatic assignment. No positivity or consecutive-rank requirement was added. This supersedes the interim exactly-one-account interpretation.
+
+IDs, stored email and rank come only from the database, without environment overrides or a `ccv` read. Pin the chosen account for the worker run; changed selection stops work, never silently switches. Existing provider/checkout/homepage guards remain independent. Existing least-privilege roles need SELECT on ranking, without application permission to update it.
+
+The current worker handles one selected account per run, not multi-account tracking. Keep existing orders tied to their original account; review outstanding orders on other accounts before reprioritizing because they may be outside the next run's selected ledger projection. No tracking redesign is implied by the selection change.
+
+Existing-database upgrade source is two-stage: nullable ranking plus uniqueness, then reviewed manual backfill, then `NOT NULL` finalization. No inferred/default ranks; runtime schema validation refuses the unfinished contract. This authorizes source/schema/template/documentation changes, not installing SQL, backfilling an actual database, provider actions, cutover or deployment. Ranking source remains uninstalled; subsequent user-authorized [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026) records the focused tests. Earlier dated results retain their original schema/source scope.
 
 ## 22 October 2026 — offline intake testing authorized
 

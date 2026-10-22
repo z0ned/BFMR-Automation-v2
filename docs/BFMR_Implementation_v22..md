@@ -14,13 +14,59 @@ Evidence: `npm run typecheck`, strict TypeScript checking of `scripts/*.ts`, and
 **Prepared:** 19 October 2026  
 **Project:** BFMR Automation v2  
 **Source baseline:** [Solution Design Specification v20](https://github.com/z0ned/BFMR-Automation-v2/blob/21ef194/docs/BFMR_Solution_Design_Specification_v20.md), compiled 16 October 2026
-**Updated:** 21 October 2026
+**Updated:** 22 October 2026
 
 **Change type:** Current relational source integration, offline validation, configuration and controlled-cutover reference. No actual schema installation, legacy cutover, provider action or deployment was performed.
 
 **Companion:** [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) owns the business and technical requirements, approved decisions, architecture, adopted 16-table schema, reporting semantics, and unresolved design questions.
 
+## 22 October 2026 — native operator reports and fresh-start source
+
+The operator reports successful PostgreSQL 17 ranking preparation/finalization
+with no pre-existing accounts, private seed and application-role account reads.
+Reported catalog results show integer/non-null/no-default ranking, the composite
+unique key and rank SELECT=true/rank UPDATE=false/CCV SELECT=false. The operator
+reports successful application business-schema/account validation, intake schema
+and SELECT/no-DELETE/no-TRUNCATE checks, and three ownership results: acquire,
+refuse a competitor, release/reacquire. The missing expected-account configuration
+was populated privately before the ownership rerun. These are bounded user
+reports, not assistant-observed native tests, complete permissions/restore
+acceptance or provider evidence.
+
+Reported inventory found no current default journals or business/intake records,
+and no accepted marker; the checked older-container diffs/Windows-profile search
+found no matching files. The operator confirmed no outstanding work and chose
+to exclude prior completed activity. `relationalCutover.ts` now separates
+version-1 historical coverage from a version-2 exact UTC boundary with explicit
+exclusion/no-outstanding-work assertions. `prepare_fresh_start_cutover.ts` writes
+only a private candidate and runs the existing report; runtime reads the accepted
+boundary and blocks older email-triggered reservation preparation. The
+[runbook](RELATIONAL_INTEGRATION.md#explicit-start-from-today-boundary--22-october-2026)
+details refusals and the separate first-watch coverage issue. Subsequent
+user-authorized tests passed; see [fresh-start offline evidence](RELATIONAL_INTEGRATION.md#offline-fresh-start-validation--22-october-2026).
+`npm run typecheck`, `npm run typecheck:all` and whitespace checks passed. No
+operator cutover/provider invocation was performed by the assistant. Earlier
+offline results retain their recorded revision scope.
+
 > **Implementation snapshot — 21 October 2026:** Relational business repositories and runner integration are implemented against the bundled `database/schema.sql`, including the immutable-payout guard. Reservations, orders, shipments, actual payments and retained evidence use SQL; operational Gmail/recovery/status/notification stores remain separate. Across offline runs, 141 tests passed, zero failed and one native PostgreSQL case was skipped; the final relational suite passed 23/23 with disposable PGlite. TypeScript checks passed. Native mini-PC PostgreSQL, installed guard/roles, real cutover and provider/production acceptance remain pending. Single-deal automatic ordering and the 14-day delivery cutoff remain unimplemented.
+
+## 22 October 2026 — explicit initial Amazon seed source
+
+[database/seed_amazon_account.psql](../database/seed_amazon_account.psql) provides the requested initial Amazon retailer/account at rank **1**. Required `ccv` and fresh-schema integer/non-null/per-retailer unique ranking remain intact; this is an explicit seed, not a default or automatic rank backfill. CCV is supplied privately through `BFMR_INITIAL_ACCOUNT_CCV` and client-side COPY into a temporary table, with no committed secret literal. Worker account reads remain unable to select `ccv`.
+
+[database/bfmr-postgres-db-install.psql](../database/bfmr-postgres-db-install.psql) includes the seed after both schemas under `bfmr_owner` and grants worker SELECT on ranking while excluding CCV and account writes. Existing installer ownership/password controls are preserved. Installer changes remain uninstalled; the seed SQL and private-input validation now have [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026). No installed database/provider action or deployment occurred. Operator procedure and boundaries are in [database/README.md](../database/README.md).
+
+## 22 October 2026 — ranked database-selected Amazon account
+
+Amazon retailer/account selection comes from the database: exactly one `retailers` row where `name = 'Amazon'`, then its account selected by `ORDER BY retailer_account_ranking ASC LIMIT 1`. Multiple accounts are valid; zero linked accounts stop startup. Ranking is an integer, `NOT NULL`, unique with `retailer_id`, and has no default/generated value or automatic assignment. IDs, stored email and ranking replace retailer-account environment requirements. The approved HTTPS Amazon homepage and existing provider/checkout identity guards remain required. The account query selects `id`, `retailer_id`, `email` and `retailer_account_ranking`, never `ccv`.
+
+The selected account is pinned for the worker run; revalidation stops on changed selection rather than switching. Existing databases require a nullable/unique prepare migration, reviewed manual rank backfill, then `NOT NULL` finalization. The worker rejects an intermediate schema. Existing least-privilege roles need SELECT on ranking, without application permission to update it; see [RELATIONAL_INTEGRATION.md](RELATIONAL_INTEGRATION.md#retailer-account-ranking-upgrade--22-october-2026).
+
+This remains one selected account per run, not multi-account tracking. Existing orders keep their original account; orders on other accounts can be outside the selected ledger projection. Review outstanding orders and their tracking/reconciliation before changing priorities.
+
+This is source/configuration/SQL work only. Ranking source remains uninstalled; focused offline tests now cover the changed schema/source as recorded in [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026). Earlier dated test results retain their original scope. No database, provider, cutover or deployment action was performed.
+
+Static review on 22 October: `npm run typecheck`, `npm run typecheck:all` and `git diff --check` passed for the pending account-selection/ranking changes. The creation installer includes the private-input seed while the owner role is active; its only grant change adds account-ranking SELECT. Ranking finalization also rejects identity/generated columns. These checks do not execute the SQL or establish database/runtime acceptance.
 
 ## 21 October 2026 — artifact cleanup
 
@@ -57,7 +103,7 @@ Use this document to locate the existing code, understand the current runtime an
 
 ### 1.3 Schema adoption and cardinalities — 21 October 2026
 
-The application's business contract is the **16-table** [database/schema.sql](../database/schema.sql), including `deal_retailers` and immutable creation payout. The schema, both upgrade migrations and design notes are now maintained under `database/` in this repository, copied without SQL/content changes from `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`. That source includes the merged guard. The exact hashes and installation/upgrade boundaries are in [database/README.md](../database/README.md); no external schema checkout is required. This supersedes the earlier 15-entity dictionary and renamed examples, but does not install or migrate a database.
+The application's business contract is the **16-table** [database/schema.sql](../database/schema.sql), including `deal_retailers`, immutable creation payout and required per-retailer account ranking. The original guarded schema, two upgrades and design notes were copied unchanged on 21 October from `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`; the 22 October ranking source updates that schema and adds two upgrade stages. Current and historical hashes and installation boundaries are in [database/README.md](../database/README.md); no external schema checkout is required. This supersedes the earlier 15-entity dictionary and renamed examples, but does not install or migrate a database.
 
 At most one order per reservation, one shipment/tracking number per order, and one reimbursement per reservation are enforced by unique foreign keys. Reimbursements link directly to reservations and their payment email, so an order is not required. Multiple orders for the same retailer account/deal are allowed across different reservations regardless of previous order status. Multiple provider shipments/tracking values are retained as review exceptions, not collapsed or overwritten.
 
@@ -171,7 +217,7 @@ After 03:00 Atlanta local time, the source also retrieves a complete BFMR My Tra
 
 `relationalRepositories.ts` provides parameterized email/deal, reservation, order, shipment, reimbursement, observation, workflow and sync-run operations using actual SQL names. Idempotent creation compares identity and monetary terms rather than overwriting them. Integer cents convert explicitly to/from PostgreSQL numeric; bigint/numeric boundary values remain strings.
 
-`relationalRuntime.ts` claims dedicated account ownership without legacy initialization, validates schema, the exact configured Amazon account and a single accepted cutover/source-hash marker before provider/browser work. Ownership loss stops work and closes the controlled browser. It deliberately does not select `retailer_accounts.ccv`.
+`relationalRuntime.ts` claims dedicated account ownership without legacy initialization, validates schema, the database-selected Amazon retailer/account and a single accepted cutover/source-hash marker before provider/browser work. Selection requires exactly one retailer with `name = 'Amazon'`, then the account with its lowest `retailer_account_ranking`; multiple accounts are valid, zero linked accounts stop startup. IDs/email/rank come from those rows. The selected identity is pinned for the run and rechecked before guarded actions; changed selection stops rather than switches. Ownership loss stops work and closes the controlled browser. It deliberately does not select `retailer_accounts.ccv`.
 
 The separately retained `PostgresDatabase`/`bfmr_runtime_state` aggregate supports the older orchestration model. Migrations 001/002 do not install the adopted business schema. The in-memory database remains test support. The orchestration model does not establish a supervised production service.
 
@@ -318,7 +364,6 @@ Older specifications/PDFs are available in Git history. This documentation split
 | Variable(s) | Purpose / condition |
 |---|---|
 | `BFMR_EXPECTED_ACCOUNT`, `DATABASE_URL` | Exact BFMR account, relational business store and dedicated ownership; local mini-PC PostgreSQL. Never print DB URL. |
-| `BFMR_RETAILER_ACCOUNT_ID`, `BFMR_RETAILER_ACCOUNT_EMAIL` | Existing approved Amazon database account and exact expected stored email; no inferred selection. |
 | `BFMR_SCHEMA_SQL_PATH` | Optional test-only override for an identical reviewed schema file; defaults to the bundled schema using module-relative resolution. Not needed for normal tests or runtime. |
 | `BFMR_CREATION_TERMS_CONTRACT_VALIDATED` | Leave unset until canonical deal/new-reservation financial fields are verified; only `YES` enables capture adapter. |
 | `BFMR_ACCOUNT_IDENTITY_SELECTOR`, `BFMR_TRACKER_BROWSER_URL` | Actual **validated** BFMR browser identity/tracker selectors and same-origin URL; absent/unknown blocks live reservation writes. |
@@ -350,6 +395,8 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 | `npm run typecheck`, `npm run typecheck:all` | Static checks; recorded current results are in Section 2.1. |
 | `npm test` | Inspect environment first; never target a real DB. Current evidence uses direct per-file execution to expose individual cases. |
 | `npm run test:relational` | Disposable PGlite regression suite using bundled `database/schema.sql`, pinned to its reviewed hash; no private DB URL or external checkout. |
+| `npm run test:cutover-start` | Offline fresh-start scope, private preparation, report/acceptance persistence and old-email guards; see the relational runbook for evidence and limits. |
+| `npm run test:retailer-accounts` | Offline account selection/ranking, staged SQL upgrades and synthetic seed SQL/input checks; native psql/roles remain unverified. |
 | `npm run test:gmail-intake` | Offline intake adapters, coordinator and operational SQL/integration tests; synthetic providers, network guard and disposable PGlite. See the intake runbook for results and limits. |
 | `npx tsx scripts/reconcile_relational_cutover.ts ...` | Default read-only report; actual apply is a separately authorized reviewed-hash/account database write. |
 | `npx tsx scripts/record_reimbursement.ts ...` | Default payment-manifest report; explicit reviewed-hash apply after accepted cutover. No provider actions. |

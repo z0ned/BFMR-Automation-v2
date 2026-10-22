@@ -6,12 +6,13 @@ import { PGlite } from '@electric-sql/pglite';
 import type { QueryResult, QueryResultRow } from 'pg';
 import { RelationalDatabase, type RelationalClient, type RelationalPool } from '../../src/db/relationalDatabase';
 
-/** Canonical schema: database/schema.sql, imported without SQL changes from
- * BFMR_DB_Schema commit a67a0715ef040b0dd65de17ce63a0a5e34898699.
+/** Canonical schema: database/schema.sql, based on BFMR_DB_Schema commit
+ * a67a0715ef040b0dd65de17ce63a0a5e34898699 plus the approved 22 October
+ * retailer-account ranking amendment. Earlier test evidence predates it.
  * No private DATABASE_URL is consulted. Cases share one embedded process with
  * a newly created public schema per fixture to bound WASM startup and memory.
  */
-const CANONICAL_SCHEMA_SHA256 = 'f7849f7cad80c26f1c46d38369e2c58ed3a17d263d71f0696753b21397e8bab3';
+const CANONICAL_SCHEMA_SHA256 = '6c7c2707e854d9f5d07c9db073b5508792800ef5c57b6dcb5d19e2c445682af6';
 export const schemaPath = process.env.BFMR_SCHEMA_SQL_PATH || fileURLToPath(new URL('../../database/schema.sql', import.meta.url));
 export const databaseTestOptions = { skip: false };
 let embeddedPromise: Promise<PGlite> | undefined;

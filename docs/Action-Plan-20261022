@@ -1,0 +1,29 @@
+ACTION PLAN OCTOBER 22 2026
+
+1. Close the action-control gaps.
+Require expected checkout configuration, establish exact Amazon account proof, resolve cancellation-release evidence, and define which unresolved incidents block new work. Audit production startup against every recovery store independently of the temporary test-reservation workflow.
+Completion criterion: missing or conflicting evidence prevents the affected mutation, and restart preserves that block.
+
+2. Extract one durable single-/multi-deal workflow.
+Move production coordination from the test-named script into a shared application service. Give both message types durable per-message/per-reservation progress. Preserve the requirement to attempt all multi-deal reservations before evaluating the batch. Reconcile possible external outcomes before any reviewed repair; never backfill completed mail into purchasing.
+Completion criterion: both message types use the same purchasing safeguards and recover correctly at each external-action boundary.
+
+3. Implement the delivery-date policy end to end.
+Represent estimates as known, explicitly absent, or unknown. Use the latest date in a range, settle the calendar/timezone convention, revalidate immediately before submission, and persist the accepted estimate. Exactly 14 days passes; later dates reject with exact cancellation/readback; ambiguous evidence stops for review.
+Completion criterion: checkout decisions and saved order evidence agree across boundary dates, ranges, midnight/DST cases and changed estimates.
+
+4. Complete payment and informational-email ingestion.
+Establish real authenticated payment-template evidence, then connect payment processing to the intake workflow. Retain relevant update-email/deal associations without allowing those messages to trigger reservations. Preserve the approved one-reimbursement-per-reservation model and route unsupported payments to review.
+Completion criterion: a verified payment records idempotently, updates outstanding exposure, and permits subsequent reconciliation without manual bookkeeping.
+
+5. Validate providers and the native database in parallel.
+Collect sanitized, nonmutating evidence first for Gmail provenance, BFMR browser/API alignment, tracker completeness and financial semantics, Amazon checkout/tracking layouts, and BFMR update contracts. Validate the existing schema and installer against disposable native PostgreSQL using the intended non-owning role.
+Completion criterion: each contract has dated evidence tied to a code revision, with native constraints, permissions and ownership-loss behavior demonstrated.
+
+6. Reconcile and perform the controlled cutover.
+Back up actual SQL and private state, resolve historical creation terms and payment evidence, and review both business and Gmail import reports. Apply only reviewed inputs under separately authorized execution.
+Completion criterion: startup accepts the exact account/source hashes, historical records reconcile, and restoration cannot replay provider actions.
+
+7. Package and accept production operation.
+Add service supervision, reboot/manual-auth procedures, durable storage configuration, health signals, log retention, coordinated backup/restore, and operator repair tools. Exercise the actual worker through offline integration and failure scenarios, then perform narrowly authorized provider acceptance and a supervised pilot.
+Completion criterion: reboot, process crash, lost responses, database failure, expired Gmail history and failed alerts all produce predictable, recoverable behavior.

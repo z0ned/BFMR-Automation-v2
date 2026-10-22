@@ -119,6 +119,7 @@ async function reserveEmailDeal(
     dealUrl: (await browser.init()).url(), dealId, title: visibleDealTitle, email, correlationId,
   });
   await runtime.ownership.verifyOwnership();
+  await runtime.verifyRetailerAccount();
   await assertIntakeReady();
   console.log('[Live BFMR E2E] Submitting one unit through the deal page.');
   const submission = await browser.submitReservation(dealUrl, dealId);
@@ -224,6 +225,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
       console.error(`[Live BFMR E2E] Amazon product link or exact payout is missing or ambiguous for reservation ${reference.reserveId}; reservation retained for review.`);
       continue;
     }
+    await runtime.verifyRetailerAccount();
     if (progress) { progress.orderStarted.push(reference.reserveId); await batchJournal.save(progress); }
     const purchase = await purchaseReservedDeal(browser, reference, evidence.productUrl, evidence.payoutCents,
       async () => {
@@ -233,7 +235,8 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
         });
         if (!readback.promoted) throw new Error('Latest reservation/payment reconciliation requires review; no order was submitted.');
         return readRelationalExposureCents(runtime.db, reference);
-      }, { readPurchaseEvidence: ref => readLockedPurchaseEvidence(runtime, ref),
+      }, { expectedAccountEmail: runtime.retailerAccount.email,
+        readPurchaseEvidence: ref => readLockedPurchaseEvidence(runtime, ref),
         beforeMutation: async () => { await assertIntakeReady(); await runtime.ownership.verifyOwnership(); },
         beforeSubmit: async () => {
           await assertIntakeReady();
@@ -245,6 +248,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
               evidence: { bfmr_reservation_id: reference.reserveId, bfmr_deal_id: reference.dealId } });
           });
           await runtime.ownership.verifyOwnership();
+          await runtime.verifyRetailerAccount();
           await assertIntakeReady();
         } });
     if (purchase.status === 'INELIGIBLE') {
@@ -308,7 +312,7 @@ export async function runBfmrWorker(options: { testStartupReservation?: boolean 
       await sendBfmrStatusAlert('Gmail intake stopped. New browser work is blocked; inspect durable intake state and provider configuration before restarting.');
     },
   });
-  const assertActionsReady = async () => { intake.assertHealthy(); await control.assertReady(); await ownership.verifyOwnership(); };
+  const assertActionsReady = async () => { intake.assertHealthy(); await control.assertReady(); await ownership.verifyOwnership(); await runtime.verifyRetailerAccount(); };
   browser.setActionGuard(assertActionsReady);
   ownership.onOwnershipLost(() => { void intake.stop(); void browser.close(); });
   const auditRecovery = async () => control.auditRecovery(async () => {
@@ -367,7 +371,7 @@ export async function runBfmrWorker(options: { testStartupReservation?: boolean 
       await assertActionsReady();
       try {
         await runDueAmazonTracking({
-          browser, ledger: orderLedger, hasIncomingMail,
+          browser, ledger: orderLedger, hasIncomingMail, expectedAccountEmail: runtime.retailerAccount.email,
           afterCheck: async order => {
             await assertActionsReady();
             await ensureBfmrTracking(order.orderId, orderLedger, { beforeMutation: assertActionsReady });

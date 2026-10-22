@@ -21,6 +21,7 @@ export async function purchaseReservedDeal(
   payoutCents: number,
   readOpenOrdersTotalCents: () => Promise<number>,
   dependencies: {
+    expectedAccountEmail?: string;
     readPurchaseEvidence?: typeof readAmazonPurchaseEvidence;
     beforeSubmit?: () => Promise<void>;
     beforeMutation?: () => Promise<void>;
@@ -38,7 +39,7 @@ export async function purchaseReservedDeal(
   const addressFragment = process.env.AMAZON_EXPECTED_DELIVERY_FRAGMENT?.trim();
   const cardLast4 = process.env.AMAZON_EXPECTED_CARD_LAST4?.trim();
   if (!addressFragment || !cardLast4 || !/^\d{4}$/.test(cardLast4) ||
-      !process.env.BFMR_RETAILER_ACCOUNT_EMAIL?.trim() ||
+      !dependencies.expectedAccountEmail?.trim() ||
       !process.env.AMAZON_ACCOUNT_IDENTITY_SELECTOR?.trim() ||
       process.env.AMAZON_ACCOUNT_IDENTITY_CONTRACT_VALIDATED !== 'YES') {
     throw new Error('Exact Amazon account, delivery address and payment-card expectations are required before cart actions.');
@@ -49,7 +50,7 @@ export async function purchaseReservedDeal(
   const log = (message: string) => console.log(`[Amazon reserved deal ${asin}] ${message}`);
   const rejectCheckout = async (): Promise<{ status: 'INELIGIBLE'; cartCleared: boolean }> => {
     await dependencies.beforeMutation?.();
-    await requireAmazonAccountIdentity(page);
+    await requireAmazonAccountIdentity(page, dependencies.expectedAccountEmail);
     try {
       await removePreparedAmazonCartItem(page, asin);
       return { status: 'INELIGIBLE', cartCleared: true };
@@ -61,7 +62,7 @@ export async function purchaseReservedDeal(
   const title = await runAmazonCheckoutRehearsal(page, productUrl, {
     log,
     accessTimeoutMs: 30_000,
-    beforeCartMutation: async () => { await dependencies.beforeMutation?.(); await requireAmazonAccountIdentity(page); },
+    beforeCartMutation: async () => { await dependencies.beforeMutation?.(); await requireAmazonAccountIdentity(page, dependencies.expectedAccountEmail); },
     manual: async () => { throw new Error('Amazon requires a manual checkout choice; unattended order stopped before submission.'); },
   });
   await ensureAmazonGiftSelected(page, log);
@@ -96,10 +97,10 @@ export async function purchaseReservedDeal(
   log(`Submitting one ${title || asin}; BFMR payout $${(payoutCents / 100).toFixed(2)}, Amazon total $${review.totalUsd.toFixed(2)}, open orders after submission $${((openTotalCents + review.totalCents) / 100).toFixed(2)}.`);
   const result = await submitAmazonOrderOnce(page, asin, title, process.env.AMAZON_DEFAULT_CARD, {
     maxTotalCents, confirmedTotalCents: review.totalCents, allowDuplicateWarning: false, log,
-    beforeContinuation: async () => { await dependencies.beforeMutation?.(); await requireAmazonAccountIdentity(page); },
+    beforeContinuation: async () => { await dependencies.beforeMutation?.(); await requireAmazonAccountIdentity(page, dependencies.expectedAccountEmail); },
     beforeClick: async () => {
       await dependencies.beforeSubmit?.();
-      await requireAmazonAccountIdentity(page);
+      await requireAmazonAccountIdentity(page, dependencies.expectedAccountEmail);
       if (!await verifyAmazonCheckoutSelections(page, addressFragment, cardLast4)) {
         throw new Error('Exact delivery address or payment card changed before submission.');
       }
