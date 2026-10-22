@@ -1,5 +1,12 @@
 # Implementation plan and evidence
 
+## 22 October 2026 — shared single-/multi-deal source implemented
+
+Extracted worker coordination to `bfmrWorker.ts`, per-message/per-reservation processing to `dealEmailWorkflow.ts`, reservation actions to `emailReservation.ts` and checkout orchestration to `reservedDealPurchase.ts`. `DealEmailWorkflowStore` persists append-only SQL checkpoints with optimistic revision checks and immutable identity for both message types. Single-deal mail now reaches the same guarded order path. Multi-deal reservation/evaluation barriers and existing financial/account/uncertainty safeguards remain. Report-first reconciliation supports freshly validated, reviewed local repair of safe interrupted states, atomic queue/snapshot/local-record repair and exact workflow-scoped email incident resolution; unknown effects cannot be replayed or invented. See [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md).
+
+Compilation/whitespace checks only; no software tests were added/run under the explicit-request rule. No live worker, provider mutation, SQL installation, actual report/apply, import or deployment was invoked. Behavioral crash/recovery, native SQL/role and provider acceptance remain open; previous suite totals do not cover this change.
+
+
 ## 22 October 2026 — merge action controls with ranked-account and fresh-start work
 
 Resolved the work/main merge while retaining main's ranked PostgreSQL account selection and explicit fresh-start cutover boundary. Amazon browser proof and tracking now receive the runtime's pinned database-selected email directly, without reintroducing removed environment overrides. Mutation readiness also verifies that the ranked selection has not changed. Both branches' decision/evidence entries are retained. Source and strict script TypeScript checks and whitespace checks passed; no software tests or live workflow/database invocation was performed for this merge. Earlier behavioral evidence retains its original revision and scope.

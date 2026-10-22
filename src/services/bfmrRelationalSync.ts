@@ -94,7 +94,7 @@ function optionalStoredIdentity(value: unknown): string | null {
  * shipment may exist before its BFMR submission, so missing BFMR shipment IDs
  * at Reserved/Purchased are allowed until shipment confirmation is established.
  */
-async function providerOrderIssues(tx: BusinessRepositories, reservation: ReservationRecord,
+export async function providerOrderIssues(tx: BusinessRepositories, reservation: ReservationRecord,
   observed: TrackerFinancialObservation): Promise<string[]> {
   const issues: string[] = [];
   const order = await tx.orders.findByReservationId(reservation.id);

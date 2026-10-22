@@ -1,5 +1,10 @@
 # Decision register
 
+## 22 October 2026 — shared single-/multi-deal workflow implementation
+
+The user requested extracting production coordination into shared services and making both qualifying message types durable with identical purchase safeguards. Preserve the all-reservations-before-evaluation barrier, reconcile possible effects before reviewed repair and never backfill completed mail. The source now uses existing append-only SQL evidence, exact admitted PROCESSING identity, causal action checkpoints and report-first/freshly validated local repair scoped to interrupted work. This changes source behavior, not live invocation authority or installed schema. See [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md). No software tests, provider action or actual repair/deployment occurred.
+
+
 ## 22 October 2026 — close reviewed action-control gaps
 
 The user requested implementation of the action-control step from the repository review: strict checkout expectations and exact Amazon buying-account evidence, explicit cancellation release proof, persistent incident blocking and production startup recovery audits. Implementation uses existing business evidence tables and preserves approved purchase scope, CON-001 intake and at-most-once mutation rules. A verified account selector and one-time reviewed recovery inventory are additional source gates, not provider acceptance or permission to run the worker. No general incident-reset/repair capability is authorized by source presence. Details and static-check limits are in [ACTION_CONTROL.md](ACTION_CONTROL.md) and the v22 implementation amendment. No software tests or live actions were performed.

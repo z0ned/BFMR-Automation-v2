@@ -30,7 +30,7 @@ export class WorkerActionControl {
     }
   }
 
-  async block(code: string): Promise<void> {
+  async block(code: string, workflowId?: string): Promise<void> {
     // Set the local latch before awaiting storage. Failed persistence cannot
     // let the running worker continue or automatically repeat an external write.
     this.stopped = true;
@@ -38,7 +38,7 @@ export class WorkerActionControl {
     if (!/^[A-Z][A-Z0-9_]*$/.test(code)) throw new Error('Invalid action-control reason.');
     await this.db.withTransaction(tx => tx.evidence.appendWorkflow({ correlationId: randomUUID(),
       actionType: 'WORKER_ACTION_CONTROL', phase: 'BLOCKED', outcome: code,
-      evidence: { account: this.account, schemaVersion: 1 } }));
+      evidence: { account: this.account, schemaVersion: 1, ...(workflowId ? { workflow_id: workflowId } : {}) } }));
     this.blockRecorded = true;
   }
 
@@ -87,7 +87,7 @@ export class WorkerActionControl {
         AND NOT EXISTS (SELECT 1 FROM public.orders o WHERE o.reservation_id=i.reservation_id))
       OR (i.action_type='RESERVATION_CREATION' AND i.phase='INTENT'
         AND NOT EXISTS (SELECT 1 FROM public.workflow_evidence c WHERE c.action_type=i.action_type
-          AND c.correlation_id=i.correlation_id AND c.phase IN ('CONFIRMED','NO_ACTION')
+          AND c.id>i.id AND c.correlation_id=i.correlation_id AND c.phase IN ('CONFIRMED','NO_ACTION')
           AND c.evidence->>'bfmr_deal_id'=i.evidence->>'bfmr_deal_id')) LIMIT 1`));
     if (result.rows.length) throw new Error('Unresolved reservation or checkout intent requires authoritative reconciliation before startup.');
   }

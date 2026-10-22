@@ -2,7 +2,7 @@
 
 **22 October 2026 — source implementation; provider and operational acceptance pending.**
 
-This implements the action-control step of the project review. It does not implement single-deal ordering, the delivery cutoff, automatic reimbursement intake, deployment or generic operator repair. No live workflow, schema installation, database import, notification or provider action was run.
+This implements the action-control step of the project review. The subsequent [shared workflow](SHARED_EMAIL_WORKFLOW.md) implements source single-deal ordering and a narrowly scoped reviewed email repair path. The delivery cutoff, automatic reimbursement intake, deployment and generic operator repair remain separate work. No live workflow, schema installation, database import, notification or provider action was run.
 
 ## Checkout and account evidence
 
@@ -24,7 +24,7 @@ Only one exact reservation/deal row, quantity one, with agreeing status/quantity
 
 Email action failures, intake failure, tracking failures, BFMR discrepancies, and maintenance/notification failures block further work. A successful later alert or worker restart does not clear the block. Intake shutdown awaits the failure handler so normal cleanup does not close the database ahead of the block attempt. Independent Gmail admission can continue during a browser pause; the serial browser consumer does not advance/replay interrupted work.
 
-The reader recognizes an append-only `WORKER_ACTION_CONTROL / RESOLVED / REVIEWED` event only for the same account and exact `blocked_event_id`, with a `review_source_sha256`. This is an evidence format, **not a public reset API or authorization**. Source does not generate resolutions. Review must substantiate provider outcomes, reconcile SQL/journals/pending notifications and retain its actual evidence before any separately authorized repair. A hash alone does not authenticate provider evidence. General report/apply repair tooling and native/provider acceptance remain unfinished; do not edit/delete evidence or invent a resolution to get the worker running.
+The reader recognizes an append-only `WORKER_ACTION_CONTROL / RESOLVED / REVIEWED` event only for the same account and exact `blocked_event_id`, with a `review_source_sha256`. This is an evidence format, **not a public reset API or authorization**. The narrowly scoped shared-email repair tool can generate resolutions only for exact workflow-scoped email incidents after fresh provider reconciliation and reviewed local repair; it cannot clear generic/unrelated incidents. Review must substantiate provider outcomes, reconcile SQL/journals/pending notifications and retain its actual evidence before any separately authorized repair. A hash alone does not authenticate provider evidence. General report/apply repair tooling and native/provider acceptance remain unfinished; do not edit/delete evidence or invent a resolution to get the worker running.
 
 ## Startup and recovery inventory
 
