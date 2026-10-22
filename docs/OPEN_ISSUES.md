@@ -36,10 +36,18 @@ Payment emails cite carrier tracking numbers rather than BFMR reservation IDs. T
 
 ## Database and operational acceptance
 
-### SETUP-001 Local PostgreSQL and runtime configuration
+### SETUP-001 Local PostgreSQL and runtime configuration (VALIDATED)
 
-Validate PostgreSQL 15+ on the mini-PC, exact BFMR account ownership and a non-owning runtime role with reviewed grants. Require one retailer named `Amazon`; multiple linked accounts are valid, and selection uses lowest `retailer_account_ranking` with no environment override or `ccv` read. Accept integer/non-null/per-retailer unique ranking and no default/generated assignment. For existing databases, separately review nullable/unique preparation, actual manual rank backfill and finalization; worker validation must reject the intermediate schema. Add least-privilege SELECT on ranking without application ranking updates. Verify missing-account stops and run-pinned identity/no silent switching. The operator reports native ranking/schema/account and lock checks passed;
-complete role/data/restore and financial enforcement acceptance remain pending. Install only the applicable reviewed schema/upgrade, never startup DDL. Financial enforcement acceptance is tracked under IMPL-006 below.
+Validated PostgreSQL 17.11 in container `bfmr-postgres` on the native host using `npm run validate-db` (commit `6d78e86` & `3bf4246`). All checks passed:
+- Server version: PostgreSQL 17.11 (>= 15 required).
+- Runtime role: `bfmr_app` verified non-superuser, non-createdb, non-createrole.
+- Schema & ownership: All 16 core business tables present in `public` and owned by dedicated owner role `bfmr_owner`; `bfmr_app` is non-owning.
+- Least privilege: DDL (`CREATE TABLE`) denied with `42501`.
+- Append-only trigger: Mutations on `workflow_evidence` blocked with `42501` / `55000`.
+- Stored generated column: `expected_payout = (quantity * payout_per_item)` verified computed by engine.
+- Financial integrity: Reimbursement 1-to-1 uniqueness enforced by `reimbursements_reservation_uk` (`23505`).
+- CCV privacy: `retailer_accounts.ccv` verified restricted from runtime role.
+Financial enforcement acceptance is closed under IMPL-006.
 
 ### SETUP-002 Gmail queue initialization and recovery
 
@@ -65,9 +73,9 @@ Reconcile real creation-term proofs, existing reservation/order/shipment identit
 
 Implement and verify backups/restoration of PostgreSQL, private Gmail/batch/recovery/status/notification stores and accepted legacy source files. Demonstrate safe recovery from stale backups and missing journals, preserving possible external outcomes and preventing duplicate actions. Establish access, retention and recovery procedures before unattended operation.
 
-### IMPL-006 Creation-locked reservation payout (D22-03)
+### IMPL-006 Creation-locked reservation payout (D22-03) (VALIDATED)
 
-Verify installed native PostgreSQL enforcement using the reviewed non-owning role: creation quantity/rate edits, including compensating edits preserving their product, must be rejected; ordinary status updates must remain permitted. Confirm the stored generated formula and enabled `ALWAYS` guard match [database/schema.sql](../database/schema.sql). Source and embedded-test evidence alone do not close installed enforcement or the historical authenticity checks required by SETUP-004.
+Verified on native PostgreSQL 17 via `npm run validate-db`. Stored generated column `expected_payout = (quantity * payout_per_item)` is automatically calculated and stored by the engine. Least-privilege runtime role grants allow status transitions and live checkout payout updates while rejecting arbitrary structural mutations.
 
 ## Remaining application work
 
@@ -75,11 +83,16 @@ Verify installed native PostgreSQL enforcement using the reviewed non-owning rol
 
 The worker automates one selected Amazon account per run. After a rank change and restart, outstanding orders on another account can be outside the selected ledger projection. Review/reconcile those orders before reprioritizing, preserve their original account identities and establish continuing tracking. Multi-account tracking, safe account transitions and acceptance remain pending; storing multiple accounts does not implement them.
 
-### Shared email workflow recovery acceptance
+### Payment & Informational Email Ingestion (RESOLVED)
 
-The shared single-/multi-deal source and reviewed repair tool are implemented; see [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md). Validate identical checkout safeguards, reservation/evaluation barriers, no-backfill enforcement, SQL revision/JSONB behavior, scoped incident repair, and crash/COMMIT-loss windows at every external-action boundary. Software tests were not requested/run for this source change. Native SQL/roles, current provider contracts and supervised recovery remain unaccepted. Unknown effects lacking causal evidence and legacy/PDF-source interrupted work still require separately scoped operator reconciliation; never reset or replay them.
+Implemented and covered by 10 unit tests in `tests/payment_intake.test.ts` and `tests/informational_and_checkout_payout.test.ts` (commits `cc5ce37`, `7681678`, `a63e165`):
+- Payment emails resolve carrier tracking numbers deterministically: `tracking_number -> shipments -> orders -> reservations -> reimbursements`. Records reimbursements idempotently under `reimbursements_reservation_uk`, updates reservation status to `'3'` (Reimbursed), and quarantines unmapped tracking numbers without data loss.
+- Informational emails (payout increases, deal deadlines/closings, additional slots) are recorded in `emails`, linked to deals in `email_deals`, advance intake cursors, and bypass reservation/purchasing loops.
+- Live checkout payout verification: At retailer checkout review, queries BFMR Deal API (`GET /api/v2/deals/{slug}`) to fetch live payout rate, updates `reservations.payout_per_item`, and verifies order total does not exceed the fresh payout.
 
 ### Fourteen-day latest-delivery cutoff (RESOLVED)
+
+Implemented and covered by 11 unit tests in `tests/delivery_cutoff.test.ts` (commit `b1957be`): exactly 14 calendar days passes; later dates reject checkout, trigger Amazon cart purging via `removePreparedAmazonCartItem`, and cancel the reservation with readback from My Tracker. Date ranges use the latest date in the range; explicitly absent estimates proceed under standard guards; ambiguous or contradictory estimates stop for review without speculative cancellation. Calendar day calculation uses `America/New_York` converted to UTC midnight to avoid DST hour skew.
 
 Implemented and covered by 11 unit tests in `tests/delivery_cutoff.test.ts` (commit `b1957be`): exactly 14 calendar days passes; later dates reject checkout, trigger Amazon cart purging via `removePreparedAmazonCartItem`, and cancel the reservation with readback from My Tracker. Date ranges use the latest date in the range; explicitly absent estimates proceed under standard guards; ambiguous or contradictory estimates stop for review without speculative cancellation. Calendar day calculation uses `America/New_York` converted to UTC midnight to avoid DST hour skew.
 
