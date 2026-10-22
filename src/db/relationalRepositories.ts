@@ -123,6 +123,8 @@ export class BusinessRepositories implements BusinessQueryable {
     },
     findByBfmrId: async (bfmrId: string): Promise<DealRecord | null> => this.one<DealRecord>(
       'SELECT * FROM public.deals WHERE bfmr_deal_id=$1', [text(bfmrId)]),
+    findById: async (dealId: DbId): Promise<DealRecord | null> => this.one<DealRecord>(
+      'SELECT * FROM public.deals WHERE id=$1', [id(dealId)]),
     ensureRetailer: async (dealId: DbId, retailerId: DbId): Promise<void> => {
       await this.query('INSERT INTO public.deal_retailers(deal_id,retailer_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [id(dealId), id(retailerId)]);
     },
@@ -211,6 +213,8 @@ export class BusinessRepositories implements BusinessQueryable {
       return (await this.one<ShipmentRecord>('UPDATE public.shipments SET status_id=$2 WHERE id=$1 RETURNING *', [existing.id, id(input.statusId ?? existing.status_id)]))!;
     },
     findByOrderId: async (orderId: DbId): Promise<ShipmentRecord | null> => this.one<ShipmentRecord>('SELECT * FROM public.shipments WHERE order_id=$1', [id(orderId)]),
+    findByTrackingNumber: async (trackingNumber: string): Promise<ShipmentRecord | null> =>
+      this.one<ShipmentRecord>('SELECT * FROM public.shipments WHERE tracking_number=$1 LIMIT 1', [text(trackingNumber)]),
   };
 
   readonly reimbursements = {

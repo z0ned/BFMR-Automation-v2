@@ -19,4 +19,11 @@ export type IntakeEmail = {
   isBundle?: boolean;
   payoutPrice?: number;
   retailPrice?: number;
+  isPaymentNotice?: boolean;
+  paymentNotice?: {
+    trackingNumbers: string[];
+    amountCents: number;
+    paidAt: string;
+    paymentReference?: string;
+  };
 };

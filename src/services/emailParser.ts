@@ -129,8 +129,48 @@ export function parseIncomingEmail(raw: {
     dealUrl = deal.url;
     canonicalDealId = deal.id;
   }
-  const isSingleDeal = isNewDealAnnouncement && deals.size === 1 && !isMultiDeal && !isAdditionalSlotNotice;
-  const isMultiDealAnnouncement = isNewDealAnnouncement && isMultiDeal && !isAdditionalSlotNotice &&
+  const isPaymentNotice =
+    /\b(?:payment sent|we have sent your payment|payment.*has been sent|payment of\s*\$[0-9,.]+|payout processed|payout sent|ach transfer sent|instant payout sent)\b/i.test(readableBody) ||
+    /\b(?:payment sent|payout processed|payout sent)\b/i.test(subject);
+
+  let paymentNotice: {
+    trackingNumbers: string[];
+    amountCents: number;
+    paidAt: string;
+    paymentReference?: string;
+  } | undefined = undefined;
+
+  if (isPaymentNotice) {
+    const paymentAmountMatch =
+      readableBody.match(/(?:payment(?:\s+amount|\s+of)?|paid|total(?:\s+payout)?)\s*:?\s*\$([0-9,]+(?:\.\d{2})?)/i) ||
+      readableBody.match(/\$([0-9,]+(?:\.\d{2})?)/i);
+    const amountVal = paymentAmountMatch ? parseFloat(paymentAmountMatch[1].replace(/,/g, '')) : 0;
+    const amountCents = Math.round(amountVal * 100);
+
+    const trackingMatches = [
+      ...readableBody.matchAll(/\b(TBA[0-9]{12}|1Z[0-9A-Z]{16}|9400\d{18,22}|\d{12,15})\b/gi),
+    ];
+    const labeledTracking = [...readableBody.matchAll(/tracking(?:\s+numbers?|\s+ids?)?\s*:?\s*([a-zA-Z0-9]+)/gi)];
+    const rawTrackings = [
+      ...trackingMatches.map(m => m[1]),
+      ...labeledTracking.map(m => m[1]),
+    ];
+    const trackingNumbers = [...new Set(rawTrackings.map(t => t.trim()))].filter(t => t.length >= 8);
+
+    const refMatch =
+      readableBody.match(/(?:reference|trace|transaction|payment\s+id)\s*:?\s*([a-zA-Z0-9_-]+)/i);
+    const paymentReference = refMatch ? refMatch[1].trim() : undefined;
+
+    paymentNotice = {
+      trackingNumbers,
+      amountCents,
+      paidAt: raw.receivedAt || new Date().toISOString(),
+      paymentReference,
+    };
+  }
+
+  const isSingleDeal = !isPaymentNotice && isNewDealAnnouncement && deals.size === 1 && !isMultiDeal && !isAdditionalSlotNotice;
+  const isMultiDealAnnouncement = !isPaymentNotice && isNewDealAnnouncement && isMultiDeal && !isAdditionalSlotNotice &&
     deals.size >= 2 && announcedCount === deals.size;
 
   // Only an explicit body field is enough to identify the retailer. Retailer
@@ -159,8 +199,10 @@ export function parseIncomingEmail(raw: {
     rawBody: body,
     isSingleDeal,
     isAdditionalSlotNotice,
-    isMultiDeal,
+    isMultiDeal: !isPaymentNotice && isMultiDeal,
     isMultiDealAnnouncement,
+    isPaymentNotice,
+    paymentNotice,
     deals: [...deals.values()].map(deal => ({ canonicalDealId: deal.id, dealUrl: deal.url, ...(deal.title ? { dealTitle: deal.title } : {}) })),
     dealUrl,
     canonicalDealId,

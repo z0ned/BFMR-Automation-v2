@@ -115,3 +115,88 @@ export async function recordVerifiedPayment(
     throw new Error('Payment recording was not committed; reconcile the authenticated notice and existing payment before any retry.');
   }
 }
+
+export interface TrackingPaymentNoticeInput {
+  trackingNumber: string;
+  amountCents: number;
+  paidAt: string;
+  paymentReference?: string | null;
+  email: EmailInput;
+  sourceSha256: string;
+}
+
+export type RecordTrackingPaymentResult =
+  | { status: 'RECORDED'; reimbursement: ReimbursementRecord; reservationId: string; orderId: string }
+  | { status: 'UNRESOLVED_TRACKING'; trackingNumber: string; emailId: string }
+  | { status: 'CONFLICT'; reason: string };
+
+/**
+ * Resolves a payment notice through its carrier tracking ID:
+ * tracking_number -> shipments -> orders -> reservations -> reimbursements
+ */
+export async function recordPaymentByTrackingNumber(
+  tx: BusinessRepositories,
+  input: TrackingPaymentNoticeInput,
+): Promise<RecordTrackingPaymentResult> {
+  if (!input.trackingNumber || !input.trackingNumber.trim()) {
+    return { status: 'CONFLICT', reason: 'Tracking number is required to resolve reservation.' };
+  }
+  const cleanTracking = input.trackingNumber.trim();
+  const shipment = await tx.shipments.findByTrackingNumber(cleanTracking);
+  if (!shipment) {
+    const email = await tx.emails.upsert(input.email);
+    await tx.evidence.appendWorkflow({
+      emailId: email.id,
+      correlationId: randomUUID(),
+      actionType: 'REIMBURSEMENT_RECORDING',
+      phase: 'REVIEW',
+      outcome: 'UNRESOLVED_PAYMENT_TRACKING',
+      evidence: {
+        schemaVersion: 1,
+        trackingNumber: cleanTracking,
+        amountCents: input.amountCents,
+        sourceSha256: input.sourceSha256,
+        reasonCode: 'TRACKING_NUMBER_NOT_FOUND',
+      },
+    });
+    return { status: 'UNRESOLVED_TRACKING', trackingNumber: cleanTracking, emailId: email.id };
+  }
+
+  const order = await tx.orders.findById(shipment.order_id);
+  if (!order || !order.reservation_id) {
+    return { status: 'CONFLICT', reason: `Shipment ${shipment.id} is not linked to an order with a valid reservation.` };
+  }
+
+  const reservation = await tx.reservations.findById(order.reservation_id);
+  if (!reservation || !reservation.deal_id) {
+    return { status: 'CONFLICT', reason: `Order ${order.id} is not linked to an existing reservation.` };
+  }
+
+  const deal = await tx.deals.findById(reservation.deal_id);
+  if (!deal) {
+    return { status: 'CONFLICT', reason: `Reservation ${reservation.id} is not linked to an existing deal.` };
+  }
+
+  const notice: VerifiedPaymentNotice = {
+    bfmrReservationId: reservation.bfmr_reservation_id,
+    bfmrDealId: deal.bfmr_deal_id,
+    email: input.email,
+    amountCents: input.amountCents,
+    paidAt: input.paidAt,
+    paymentReference: input.paymentReference ?? null,
+    verification: {
+      authenticatedGmailApi: true,
+      paymentContractValidated: true,
+      sourceSha256: input.sourceSha256,
+      verifiedAt: new Date().toISOString(),
+    },
+  };
+
+  const reimbursement = await recordVerifiedPaymentInTransaction(tx, notice);
+  return {
+    status: 'RECORDED',
+    reimbursement,
+    reservationId: reservation.id,
+    orderId: order.id,
+  };
+}

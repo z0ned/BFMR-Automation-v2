@@ -1,5 +1,7 @@
+import { createHash, randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import { recordPaymentByTrackingNumber } from './relationalPayments';
 import { multiDealJournal } from './multiDealJournal';
 import { postReservationJournal } from './postReservationJournal';
 import { WorkerActionControl } from './workerActionControl';
@@ -51,6 +53,56 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
     throw new Error('Legacy batch or post-reservation work is unfinished; preserve/reconcile it before new workflow enrollment.');
   }
   const parsed = parseBfmrEmail({ ...email, messageId: email.id });
+
+  if (parsed.isPaymentNotice && parsed.paymentNotice) {
+    const trackingNumbers = parsed.paymentNotice.trackingNumbers;
+    const sha256 = createHash('sha256').update(email.body || email.id).digest('hex');
+
+    if (trackingNumbers.length === 0) {
+      await runtime.db.withTransaction(async tx => {
+        const savedEmail = await tx.emails.upsert({
+          gmailMessageId: email.id,
+          subject: email.subject,
+          emailType: 'PAYMENT_SENT',
+          receivedAt: email.receivedAt,
+        });
+        await tx.evidence.appendWorkflow({
+          emailId: savedEmail.id,
+          correlationId: randomUUID(),
+          actionType: 'REIMBURSEMENT_RECORDING',
+          phase: 'REVIEW',
+          outcome: 'PAYMENT_WITHOUT_TRACKING',
+          evidence: {
+            schemaVersion: 1,
+            amountCents: parsed.paymentNotice!.amountCents,
+            sourceSha256: sha256,
+            reasonCode: 'NO_TRACKING_NUMBERS_EXTRACTED',
+          },
+        });
+      });
+      return;
+    }
+
+    for (const trackingNumber of trackingNumbers) {
+      await runtime.db.withTransaction(async tx => {
+        await recordPaymentByTrackingNumber(tx, {
+          trackingNumber,
+          amountCents: parsed.paymentNotice!.amountCents,
+          paidAt: parsed.paymentNotice!.paidAt,
+          paymentReference: parsed.paymentNotice!.paymentReference,
+          email: {
+            gmailMessageId: email.id,
+            subject: email.subject,
+            emailType: 'PAYMENT_SENT',
+            receivedAt: email.receivedAt,
+          },
+          sourceSha256: sha256,
+        });
+      });
+    }
+    return;
+  }
+
   if (!parsed.isSingleDeal && !parsed.isMultiDealAnnouncement) throw new Error('Unsupported new-deal announcement.');
   const store = new DealEmailWorkflowStore(runtime.db, runtime.account);
   let checkpoint = await store.claim(email, parsed.isMultiDealAnnouncement ? 'MULTI_DEAL' : 'SINGLE_DEAL',
