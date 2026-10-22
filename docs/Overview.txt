@@ -30,6 +30,7 @@ compatibility store. Database transactions do not include external actions.
 SAFETY AND REMAINING WORK
 Use exact account, deal, reservation, order and tracking identity. Unknown
 outcomes stop for reconciliation; never replay a possibly completed action.
-Single-deal automatic purchasing and the 14-day latest-delivery cutoff remain
-unfinished. Follow OPEN_ISSUES.md for provider, database, recovery and service
+Shared single-/multi-deal purchasing and reviewed recovery now have source
+implementation; behavioral/provider acceptance and the 14-day delivery cutoff remain
+unfinished. See docs/SHARED_EMAIL_WORKFLOW.md. Follow OPEN_ISSUES.md for provider, database, recovery and service
 acceptance. No document or sample grants live action authority.

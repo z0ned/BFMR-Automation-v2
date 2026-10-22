@@ -1,8 +1,13 @@
 # BFMR Automation v2 — Solution Design Specification
 
+## 22 October 2026 — unified message workflow source amendment
+
+The approved new-only single-/multi-deal purchase behavior now has one source implementation with durable per-message/per-reservation SQL snapshots and a strict reservation-pass barrier. Exact causal results precede local persistence/reporting; interrupted external effects require current provider reconciliation before reviewed local repair. Completed Gmail tombstones and historical email records cannot be enrolled into purchasing. See [shared workflow runbook](SHARED_EMAIL_WORKFLOW.md) for source paths and failure/recovery boundaries. Source/static checks do not establish behavioral, native-provider or production acceptance; the separate 14-day delivery rule remains unimplemented.
+
+
 ## 22 October 2026 — action-control implementation amendment
 
-The worker now requires exact configured Amazon address/card expectations and contract-gated visible active-account proof; cancellation requires an explicit exact canceled row rather than disappearance. Account-scoped incidents persist in append-only SQL evidence and stop new work across restarts. Production startup audits recovery journals, transition-log presence, pending alerts and unresolved SQL/provider intents independently of the temporary test reservation. A reviewed first-adoption recovery inventory is required; it never proves missing history safe. See [action-control runbook](ACTION_CONTROL.md) for exact configuration, evidence and repair boundaries. No new schema or purchasing scope is adopted. This is source implementation and static checking, not software regression, provider or production acceptance. The single-deal and 14-day delivery gaps remain.
+The worker now requires exact configured Amazon address/card expectations and contract-gated visible active-account proof; cancellation requires an explicit exact canceled row rather than disappearance. Account-scoped incidents persist in append-only SQL evidence and stop new work across restarts. Production startup audits recovery journals, transition-log presence, pending alerts and unresolved SQL/provider intents independently of the temporary test reservation. A reviewed first-adoption recovery inventory is required; it never proves missing history safe. See [action-control runbook](ACTION_CONTROL.md) for exact configuration, evidence and repair boundaries. No new schema or purchasing scope is adopted. This is source implementation and static checking, not software regression, provider or production acceptance. The subsequent shared workflow implements the single-deal source path; behavioral recovery acceptance and the 14-day delivery gap remain.
 
 
 **VERSION 22 | Business requirements, technical requirements, decisions, and target architecture**
@@ -31,9 +36,9 @@ The proposed system would manage that process from beginning to end:
 
 **The business goal is to reduce repetitive work and costly mistakes while providing a clear picture of outstanding commitments and reimbursements.** Safeguards are central to the design: prevent duplicate purchases, verify the correct accounts and products, and pause for review when an outcome is uncertain.
 
-The source now integrates relational business persistence, creation-locked payouts, reconciliation, orders/shipments, verified-payment recording and controlled cutover. Unified single-/multi-deal purchasing, the 14-day delivery cutoff and production operations still require work. Source completion and offline regression results do not establish live provider contracts or unattended readiness.
+The source now integrates relational business persistence, creation-locked payouts, reconciliation, orders/shipments, verified-payment recording and controlled cutover. Unified single-/multi-deal purchasing now has source implementation; behavioral recovery acceptance, the 14-day delivery cutoff and production operations still require work. Source completion and offline regression results do not establish live provider contracts or unattended readiness.
 
-> **Design status — 21 October 2026:** The adopted database contract is the 16-table `database/schema.sql` in this repository, including the immutable-payout guard. This supersedes the earlier 15-entity conceptual dictionary, order-linked multiple-payment illustrations and generic metadata-column proposal. Application integration is implemented and tested offline; native PostgreSQL installation, real cutover and provider/production acceptance remain pending. Single-deal automatic purchasing and the 14-day delivery cutoff remain unimplemented. This document grants no live action authority.
+> **Design status — 22 October 2026:** The adopted database contract is the 16-table `database/schema.sql` in this repository, including the immutable-payout guard. This supersedes the earlier 15-entity conceptual dictionary, order-linked multiple-payment illustrations and generic metadata-column proposal. Application integration is implemented and tested offline; native PostgreSQL installation, real cutover and provider/production acceptance remain pending. Shared single-/multi-deal automatic purchasing and reviewed recovery are source-implemented; behavioral recovery acceptance remains pending. The 14-day delivery cutoff remains unimplemented. This document grants no live action authority.
 
 **21 October 2026 — repository artifacts:** Dependencies are managed with npm and `package-lock.json`; install with `npm ci`. The redundant `bun.lock` and obsolete v1.6–v1.8 specification PDFs under `output/pdf/` have been removed. This housekeeping changes no business behavior, schema or runtime authority.
 
@@ -111,8 +116,8 @@ D20 decisions below were recorded on 16 October 2026 after v1.9. D22-01 records 
 
 | ID | Decision | Status |
 |---|---|---|
-| D20-01 | **Single-deal emails** may drive automatic Amazon purchasing, under **exactly the same** eligibility, financial, identity, checkout and recovery safeguards as approved multi-deal emails. | Approved; not implemented |
-| D20-02 | This expanded purchasing applies to **newly processed emails only**. Never revisit prior completed single-deal mail or backfill purchases without separate explicit authority. | Approved; not implemented |
+| D20-01 | **Single-deal emails** may drive automatic Amazon purchasing, under **exactly the same** eligibility, financial, identity, checkout and recovery safeguards as approved multi-deal emails. | Source implemented; acceptance pending |
+| D20-02 | This expanded purchasing applies to **newly processed emails only**. Never revisit prior completed single-deal mail or backfill purchases without separate explicit authority. | Source implemented; acceptance pending |
 | D20-03 | If the retailer's latest estimated delivery date is **more than 14 calendar days after the order date**, reject checkout; cancel only the **exact newly confirmed reservation** with validated release readback. Exactly 14 days is allowed. | Approved; not implemented |
 | D20-04 | For a retailer delivery **date range**, compare the **latest** date to the 14-day cutoff. If **no estimate is provided**, proceed subject to all other guards. If date evidence is contradictory/ambiguous/unreadable, stop for review, not speculative cancellation. | Approved; not implemented |
 | D20-05 | Adopt a **relational/hybrid PostgreSQL target design**, superseding a plan to rely only on the JSONB account aggregate for business reporting. The agreed target is **17 named tables** in the original v20 design. | Historical 17-/15-table counts superseded by adopted 16-table schema; source integrated, no actual migration |
@@ -478,8 +483,8 @@ The original [v20 document](https://github.com/z0ned/BFMR-Automation-v2/blob/21e
 - **Controlling historical decisions:** [`docs/DECISIONS.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/DECISIONS.md).
 - **Evidence and milestone boundaries:** [`docs/IMPLEMENTATION_PLAN.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/IMPLEMENTATION_PLAN.md) and [`docs/OPEN_ISSUES.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/OPEN_ISSUES.md).
 - **Historical engine storage:** [`src/db/migrations/002_runtime_state.sql`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/migrations/002_runtime_state.sql), [`src/db/postgresDatabase.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/postgresDatabase.ts); older relational baseline [`001_initial_schema.sql`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/migrations/001_initial_schema.sql).
-- **Confirmed current single-deal code boundary:** [`scripts/test_real_email_e2e.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/scripts/test_real_email_e2e.ts).
-- **New decisions:** user's explicit design-session instructions/approvals on 16 October 2026, consolidated in Section 3. Current implementation status is recorded in the companion; single-deal automatic purchasing and the delivery cutoff remain pending.
+- **Historical single-deal code boundary (superseded by the shared workflow):** [`scripts/test_real_email_e2e.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/scripts/test_real_email_e2e.ts).
+- **New decisions:** user's explicit design-session instructions/approvals on 16 October 2026, consolidated in Section 3. Current implementation status is recorded in the companion; single-deal purchasing has shared source implementation; behavioral recovery acceptance and the delivery cutoff remain pending.
 
 The source implementation, environment, historical results, proposed delivery phases, and code-file map are carried in [BFMR Implementation v22](BFMR_Implementation_v22..md). The v22 Markdown pair is the maintained documentation source. Historical specifications and generated PDFs are available through Git history; no generated specification PDFs are maintained in the current tree. Email/PDF parser samples remain reference fixtures. Appendix B maps every v20 section to its v21 destination.
 
@@ -525,7 +530,7 @@ This map describes the original split. Current schema, SQL and implementation su
 | 2.1 recorded evidence and setup observations | 1.2 evidence distinctions | 2.1 historical evidence; 6.1 environment |
 | 3 decisions; 3.1 delivery examples; 3.2 email chronology | 3 (all decisions and examples retained) | 3.1, 3.3, 7.3 implementation gaps |
 | 4.1 Gmail provenance and classification | 4.1 | 3.1; 5.1 |
-| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 current queue and early-return gap; 4.2 journals |
+| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 shared workflow and queue; 4.2 SQL checkpoints and legacy journals |
 | 4.3 duplicate checks and confirmation | 4.3 | 3.2; 5.2 |
 | 5.1 eligibility; 5.2 rejection/uncertainty policy | 5.1–5.2 | 3.3 existing policy and unimplemented cutoff |
 | 5.3 order identity and retailer constraints | 5.3 | 3.3 |

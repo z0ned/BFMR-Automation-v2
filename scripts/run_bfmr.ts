@@ -1,5 +1,5 @@
 import './loadEnv';
-import { runBfmrWorker } from './test_real_email_e2e';
+import { runBfmrWorker } from '../src/services/bfmrWorker';
 
 // LIVE production entrypoint: no temporary test startup reservation. Existing
 // provider, account, purchase and cutover gates still apply independently.

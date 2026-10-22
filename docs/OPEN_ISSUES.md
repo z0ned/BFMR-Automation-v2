@@ -75,9 +75,9 @@ Verify installed native PostgreSQL enforcement using the reviewed non-owning rol
 
 The worker automates one selected Amazon account per run. After a rank change and restart, outstanding orders on another account can be outside the selected ledger projection. Review/reconcile those orders before reprioritizing, preserve their original account identities and establish continuing tracking. Multi-account tracking, safe account transitions and acceptance remain pending; storing multiple accounts does not implement them.
 
-### Single-deal automatic purchasing
+### Shared email workflow recovery acceptance
 
-Implement the shared durable ordering/confirmation/reconciliation workflow for newly processed single-deal mail before removing its current early return. Preserve the same quantity-one, financial, identity, gift, free-delivery and uncertainty safeguards as the supported multi-deal path. Do not revisit completed Gmail messages to backfill purchases.
+The shared single-/multi-deal source and reviewed repair tool are implemented; see [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md). Validate identical checkout safeguards, reservation/evaluation barriers, no-backfill enforcement, SQL revision/JSONB behavior, scoped incident repair, and crash/COMMIT-loss windows at every external-action boundary. Software tests were not requested/run for this source change. Native SQL/roles, current provider contracts and supervised recovery remain unaccepted. Unknown effects lacking causal evidence and legacy/PDF-source interrupted work still require separately scoped operator reconciliation; never reset or replay them.
 
 ### Fourteen-day latest-delivery cutoff
 

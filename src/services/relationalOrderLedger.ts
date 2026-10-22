@@ -231,7 +231,7 @@ async function context(tx: BusinessRepositories, row: OrderRecord) {
   return { reservation, dealId: deal.rows[0].bfmr_deal_id };
 }
 
-async function readRecord(tx: BusinessRepositories, row: OrderRecord): Promise<AmazonOrderRecord> {
+export async function readRelationalOrderRecord(tx: BusinessRepositories, row: OrderRecord): Promise<AmazonOrderRecord> {
   const { reservation, dealId } = await context(tx, row);
   if (row.quantity !== 1 || row.canceled_quantity !== 0) throw new Error('Non-unit or canceled retailer orders require explicit reconciliation.');
   const status = row.status_id === '1' ? 'PENDING' : row.status_id === '3' ? 'SHIPPED' : row.status_id === '5' ? 'DELIVERED' : null;
@@ -374,7 +374,7 @@ export function relationalOrderLedger(db: RelationalDatabase, options: Relationa
         return fail('Retailer order and shipment delivery states are inconsistent.');
       }
       if (row) {
-        const previous = await readRecord(tx, row);
+        const previous = await readRelationalOrderRecord(tx, row);
         const mismatch = immutableStateProblem(previous, record);
         if (mismatch) return fail(mismatch);
         if (mode === 'UPDATE' && source !== 'AMAZON' &&
@@ -446,7 +446,7 @@ export function relationalOrderLedger(db: RelationalDatabase, options: Relationa
             await retainLocalProjectionReview(tx, row, AMAZON_AUTOMATION_SCOPE_ACTION, 'EXCLUDED', exclusion);
             continue;
           }
-          try { records.push(await readRecord(tx, row)); }
+          try { records.push(await readRelationalOrderRecord(tx, row)); }
           catch {
             blocked = true;
             await retainLocalProjectionReview(tx, row, ORDER_REVIEW_ACTION, 'BLOCKED',

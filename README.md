@@ -18,6 +18,8 @@ The worker source uses relational PostgreSQL business repositories with dedicate
 
 The worker now enforces [action controls](docs/ACTION_CONTROL.md): exact configured checkout expectations and contract-gated active Amazon account identity, explicit cancellation status, persistent SQL incident blocks, and recovery audits before startup. First adoption requires a reviewed recovery-file baseline; never initialize it over lost state. No software regression or live acceptance of these new guards is claimed.
 
+Both qualifying message types now use the [shared durable workflow](docs/SHARED_EMAIL_WORKFLOW.md) in `src/services/bfmrWorker.ts` and `dealEmailWorkflow.ts`. Single-deal ordering uses the same guards as multi-deal ordering. SQL action checkpoints and a report-first reviewed repair command preserve uncertain outcomes and completed-message tombstones; no automatic replay or purchase backfill is permitted. Behavioral/native/provider acceptance remains open.
+
 ## Database source
 
 The authoritative 16-table schema is [database/schema.sql](database/schema.sql), with [upgrade migrations](database/migrations/) and [design notes](database/DESIGN_DECISIONS.md) in this repository. It includes immutable reservation creation terms, one order per reservation, one shipment/tracking number per order and one reimbursement per reservation. No separate schema checkout is needed. See [database/README.md](database/README.md) for source provenance, fresh-install versus upgrade boundaries and offline checks. Startup never applies SQL automatically.

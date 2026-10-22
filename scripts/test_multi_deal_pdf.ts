@@ -9,7 +9,7 @@ import { parseBfmrEmail } from '../src/services/bfmrEmailLinks';
 import { isTrustedBfmrDealUrl } from '../src/services/bfmrUrl';
 import { requireReservationAlerts, withReservationFailureAlert } from '../src/services/reservationAlerts';
 import { runLiveTestStartup } from './live_test_startup';
-import { processEmail } from './test_real_email_e2e';
+import { processEmail } from '../src/services/dealEmailWorkflow';
 import { openRelationalRuntime } from '../src/services/relationalRuntime';
 import { relationalStartupHooks } from '../src/services/relationalStartup';
 

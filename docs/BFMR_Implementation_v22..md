@@ -1,5 +1,12 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 22 October 2026 — shared durable email workflow source
+
+Production coordination now lives in `src/services/bfmrWorker.ts` and `dealEmailWorkflow.ts`; the test-named script is a thin explicitly invoked startup-test wrapper. Single- and multi-new-deal messages share the same reservation-first/evaluation/purchase phases and guards. Append-only SQL snapshots bind per-message/per-reservation intent, causal confirmation, source identity and account. Newly processed SQL PROCESSING mail only may enroll; completed or historical mail cannot be backfilled. `reconcile_deal_email.ts` supplies read-only report/freshly revalidated, reviewed-hash local repair without provider replay. Queue repair, scoped incident resolution and supported local records commit together. Exact configuration, action boundaries, unsupported uncertain outcomes and acceptance limits are in [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md).
+
+Evidence: source and strict script TypeScript and whitespace checks; no software tests or live actions, database migration, actual reconciliation/repair, cutover or deployment were run. Behavioral/native/provider recovery acceptance remains pending. Single-deal ordering is source-implemented; the delivery cutoff and automatic payment ingestion remain separate unfinished work.
+
+
 ## 22 October 2026 — action controls tightened
 
 Implemented `amazonAccountIdentity.ts`, `workerActionControl.ts` and worker/adapter wiring. Email checkout rejects missing address/card expectations; verified visible active-account text must equal the configured retailer-account email before cart mutation/final submission and retailer tracking. Final submit rechecks checkout evidence after authorization; CVV continuation and BFMR mutations retain health/ownership guards. Missing cancellation rows no longer prove release, and conflicting status/quantity aliases stop.
@@ -159,7 +166,7 @@ During the setup discussion recorded in v20, the user reported a working non-roo
 
 ### 3.1 Email intake and the single-deal implementation boundary
 
-The production source entrypoint is `scripts/run_bfmr.ts` (`npm start`), reusing `runBfmrWorker` in `scripts/test_real_email_e2e.ts`. Gmail watch and the owned low-level Pub/Sub StreamingPull connection replace periodic history polling. `gmailPushTransport.ts` verifies the OAuth mailbox and pull-subscription/topic configuration, bounds provider reads/leases and emits explicit reconnect continuations without parsing unstable SDK debug messages. `productionGmailIntake.ts` buffers startup deliveries until the ACTIVE run commit, persists accepted/rejected/duplicate notification evidence before ACK, serializes full-history reads and atomically commits classifications/admissions, work, covered notification completion and consumed cursor. Quiet-mailbox timers never read Gmail; watch/lease timers and local maintenance scheduling have distinct purposes.
+The production source entrypoint is `scripts/run_bfmr.ts` (`npm start`), invoking `runBfmrWorker` in `src/services/bfmrWorker.ts`. Gmail watch and the owned low-level Pub/Sub StreamingPull connection replace periodic history polling. `gmailPushTransport.ts` verifies the OAuth mailbox and pull-subscription/topic configuration, bounds provider reads/leases and emits explicit reconnect continuations without parsing unstable SDK debug messages. `productionGmailIntake.ts` buffers startup deliveries until the ACTIVE run commit, persists accepted/rejected/duplicate notification evidence before ACK, serializes full-history reads and atomically commits classifications/admissions, work, covered notification completion and consumed cursor. Quiet-mailbox timers never read Gmail; watch/lease timers and local maintenance scheduling have distinct purposes.
 
 `postgresGmailIntake.ts` validates the four separately reviewed operational tables in `database/gmail_intake.sql` without DDL and uses ownership-checked serializable transactions. Watch baseline/expiration remain distinct from consumed history; daily renewal cannot reset it. Startup and reconnect continue saved history even without a new message. History errors retain the cursor, and an expired/rejected cursor persists a gap and conservatively stops the worker. Transient triggered reads use bounded backoff and honor valid Retry-After up to 60 seconds; a required longer/invalid delay stops rather than retrying early. No Inbox sweep is implemented. New admissions are independently rechecked at the browser boundary, and interrupted PROCESSING work cannot replay.
 
@@ -169,7 +176,7 @@ The Gmail intake tasks run independently while browser work or its recovery UI i
 
 The 21 October implementation had static/source-review evidence only. On 22 October the user explicitly requested offline intake tests; `npm run test:gmail-intake` now covers adapters, coordinator, actual operational SQL in disposable PGlite and their persistence/ACK integration. Results, coverage and limitations are recorded once in the [intake runbook](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026). No native schema installation/import, actual Gmail watch, Pub/Sub connection, provider action or deployment was invoked. Historical suite results retain their original scope.
 
-**Unimplemented design change retained in v21:** both single and multi new-deal processing must use the same durable per-message/per-reservation state machine and side-effect intent records. The existing `scripts/test_real_email_e2e.ts` returns after supplier evaluation for single-deal mail (`if (!parsed.isMultiDealAnnouncement) return;`), while `multiDealJournal` is created only for multi-deal mail. Removing the return line alone is **unsafe**: extend durable order intent/confirmation/reconciliation to single-deal mail first. Previously processed messages remain tombstoned, not retrospectively purchased.
+**Shared workflow source:** `dealEmailWorkflow.ts` and `dealEmailWorkflowStore.ts` now implement one durable per-message/per-reservation path for both qualifying message types. All announced reservations finish their first pass before evaluation; single-deal mail no longer returns early. SQL PROCESSING identity, immutable source/target evidence, causal action checkpoints and report-first reviewed repair prevent completed-message backfill and uncertain mutation replay. See [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md); behavioral/native/provider acceptance is pending.
 
 ### 3.2 Reservation, supplier evaluation, and cancellation
 
@@ -181,7 +188,7 @@ Startup CAPTCHA reservations remain a separate workflow, confirmed and canceled 
 
 ### 3.3 Amazon ordering and financial policy implementation
 
-The reviewed source has an Amazon purchase path for qualifying multi-new-deal email reservations, plus separate manual test/rehearsal entrypoints. It does not yet route single-deal mail through ordering. The order path uses one supported item and quantity one, a complete-total cap of $100, payout coverage, and the existing-unpaid-exposure-plus-new-total limit of $200. It checks the selected saved address/payment, gift state, free non-Prime delivery, exact checkout line, and stable total. These code paths still depend on unverified real provider contracts and closed policy gates.
+The shared source has the same Amazon purchase path for newly processed single- and multi-new-deal email reservations, plus separate manual test/rehearsal entrypoints. The exact admitted SQL message/source and durable action states precede purchasing. The order path uses one supported item and quantity one, a complete-total cap of $100, payout coverage, and the existing-unpaid-exposure-plus-new-total limit of $200. It checks the selected saved address/payment, gift state, free non-Prime delivery, exact checkout line, and stable total. These code paths still depend on unverified real provider contracts and closed policy gates.
 
 The checkout implementation refuses unrelated cart items rather than removing them. It binds the captured Order # to the thank-you page caused by the current submission, expected ASIN, and verified total; it must not choose the first product/price match in order history after uncertainty. Missing confirmation stops without a second purchase. The 14-day delivery cutoff is approved design, not an implemented feature of the reviewed baseline.
 
@@ -249,13 +256,13 @@ This catalog expands the source map retained from v20. It describes the primary 
 
 | File or directory | Responsibility / limitation |
 |---|---|
-| `scripts/test_real_email_e2e.ts` | Interactive Gmail/BFMR email workflow and current multi-deal purchase loop; single-deal flow returns after supplier evaluation in the reviewed baseline. |
+| `scripts/test_real_email_e2e.ts` | Thin compatibility/test entrypoint; explicitly injects temporary test startup. Production coordination lives in `src/services/bfmrWorker.ts` and `dealEmailWorkflow.ts`. |
 | `scripts/live_test_startup.ts` | Shared startup for designated live-test entrypoints and their startup reservation/cleanup safeguards. |
 | `src/services/browserSession.ts` | Reusable browser-session lifecycle for interactive processing. |
 | `src/services/gmailIntakeQueue.ts` | Legacy private file/fixture queue and shared payload types; not the production writer. |
 | `src/services/gmailPushTransport.ts`, `productionGmailIntake.ts`, `postgresGmailIntake.ts` | Owned push transport, independent coordination and dedicated SQL notification/cursor/work/run store. |
 | `scripts/run_bfmr.ts`, `scripts/import_gmail_intake.ts` | Production worker without test startup reservation; separate default-report/reviewed-hash legacy import. |
-| `src/services/multiDealJournal.ts` | Durable intent and progress for the existing multi-deal workflow; not yet a unified single-/multi-deal journal. |
+| `src/services/multiDealJournal.ts` | Preserved legacy recovery evidence; new shared workflows use append-only SQL per-message/per-reservation checkpoints. |
 | `src/services/emailProvenance.ts` | Gmail-provided sender and routing/authentication evidence checks. |
 | `src/services/emailParser.ts` | Body-based supported new-deal classification, including single and multi-deal messages. |
 | `src/services/bfmrEmailLinks.ts` | Trusted BFMR email-link extraction and supported tracking-link decoding. |
@@ -280,7 +287,7 @@ This catalog expands the source map retained from v20. It describes the primary 
 
 | File or directory | Responsibility / limitation |
 |---|---|
-| `scripts/purchase_reserved_deal.ts` | Amazon purchase flow for an eligible BFMR reservation. |
+| `scripts/purchase_reserved_deal.ts` | Compatibility re-export of `src/services/reservedDealPurchase.ts`, shared guarded checkout orchestration. |
 | `scripts/test_amazon_purchase.ts` | Separate explicitly confirmed fixed-ASIN live purchase test; can place an actual order. |
 | `scripts/test_amazon_checkout.ts` | Separate fixed-ASIN checkout rehearsal that stops before final order submission. |
 | `src/services/amazonCheckoutRehearsal.ts` | Browser checkout preparation, product/cart checks, and order-review safeguards used by the documented Amazon workflows. |
@@ -372,7 +379,7 @@ Older specifications/PDFs are available in Git history. This documentation split
 | `BFMR_INTAKE_MODE` | Default `production`; explicitly `testing` is required to allow the separately configured test sender. |
 | `BFMR_INITIALIZE_GMAIL_QUEUE` | `YES` only for authentic first queue creation; remove immediately afterward. Never use for restoration/replay. |
 | `BFMR_GMAIL_QUEUE_PATH` | Preserved private legacy queue import/hash source; no longer the production writer. Default `~/.local/state/bfmr/gmail-intake.json`. |
-| `BFMR_MULTI_DEAL_STATE_PATH` | Default `~/.local/state/bfmr/multi-deal.json` — durable batch intent/progress. |
+| `BFMR_MULTI_DEAL_STATE_PATH` | Default `~/.local/state/bfmr/multi-deal.json` — preserved legacy batch recovery evidence; new email progress is in SQL. |
 | `BFMR_AMAZON_ORDER_LEDGER_PATH` | Default `~/.local/state/bfmr/amazon-orders.json` — accepted legacy cutover source/hash boundary; standalone manual ledger, not the active email business writer. |
 | `BFMR_STATUS_SNAPSHOT_PATH` | Default `~/.local/state/bfmr/bfmr-status.json` — daily status history/alerts. |
 | `BFMR_POST_RESERVATION_STATE_PATH` | Private post-reservation supplier/cancellation journal (see `scripts/post_reservation.ts`). |
@@ -428,7 +435,7 @@ The runner is not a supervised unattended service. Existing PostgreSQL account o
 
 ### 7.3 Remaining implementation and acceptance gaps
 
-Single-deal automatic purchase expansion, a shared durable single-/multi-deal action workflow and the 14-day latest-delivery cutoff remain unimplemented. Persistence integration does not remove the single-deal early return or expand live action authority.
+The shared single-/multi-deal action workflow and reviewed recovery now have source implementation. Behavioral recovery acceptance and the 14-day latest-delivery cutoff remain unfinished; source presence does not expand live invocation authority.
 
 Relational repositories, exact creation capture, immutable-input source enforcement, atomic sync/conflict evidence, order/shipment persistence, verified-payment recording and controlled cutover are implemented and covered offline. Still pending: native local PostgreSQL/role/guard installation evidence, real historical reconciliation and accepted cutover, backup/restore/service recovery, provider financial/payment/full-tracker contracts and current account/DOM/API evidence. Payment notice recording requires prior authentication/contract validation; automatic live payment-template ingestion is not established.
 
@@ -441,16 +448,17 @@ The following separates source completion from future acceptance. It is not perm
 | Workstream | Current source state | Remaining exit condition |
 |---|---|---|
 | Baseline identity/safety | Existing provenance/account/uncertainty guards preserved | Real account/layout/provenance evidence |
-| Single-deal ordering and delivery cutoff | Not implemented | Durable shared purchase workflow and 14-day boundary regressions, then separate provider acceptance |
+| Shared single-/multi-deal ordering | Durable shared source and reviewed reconciliation/repair implemented | Behavioral crash/recovery and provider acceptance |
+| Latest-delivery cutoff | Not implemented | 14-day rule implementation, boundary regressions and provider acceptance |
 | Relational schema/guard/repositories | Implemented; canonical guarded SQL and transaction paths exercised offline | Native mini-PC PostgreSQL, reviewed non-owning role/grants and actual schema installation |
 | Reconciliation, order/shipment, payments/exposure | Implemented; focused synthetic regressions passed | Verified provider full-read/payment contracts and current DOM/API semantics |
 | Historical cutover | Default report and atomic guarded apply implemented; synthetic import tested | Actual creation/payment proofs, full reviewed report, backup/restore and separately authorized real apply |
-| Operational stores/service | Dedicated SQL push intake source implemented; batch/recovery/status/alert journals remain files | Requested regression evidence, native intake SQL/import, real watch/ACK/reconnect/restore contracts, supervision and notification acceptance |
+| Operational stores/service | SQL push intake and shared per-message/per-reservation checkpoints implemented; legacy recovery/status/alert journals remain files | Requested regression evidence, native intake SQL/import, real watch/ACK/reconnect/restore contracts, supervision and notification acceptance |
 | Documentation/handoff | v22 pair, runbook and registers updated with exact evidence | Keep future evidence dated and tied to concrete revisions; no production-ready claim before acceptance |
 
 ### 8.1 Regression coverage and future scenarios
 
-The 23 relational cases described in Section 2.1 are implemented and passing. Scenarios below retain the broader desired regression scope; single-deal ordering, delivery-cutoff and production recovery scenarios remain future work.
+The 23 relational cases described in Section 2.1 are implemented and passing. Scenarios below retain the broader desired regression scope; behavioral verification of shared single-/multi-deal ordering and recovery, delivery-cutoff scenarios and production acceptance remain future work.
 
 - Single-new-deal email passes full authenticated provenance and, if newly processed and eligible, follows same policy as multi-deal.
 - Multi-new-deal reserves each distinct BFMR deal before supplier/purchase evaluation. Bundles remain single offers.
@@ -481,7 +489,7 @@ This document and [Solution Design Specification v22](BFMR_Solution_Design_Speci
 - **Controlling historical decisions:** [`docs/DECISIONS.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/DECISIONS.md).
 - **Evidence and milestone boundaries:** [`docs/IMPLEMENTATION_PLAN.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/IMPLEMENTATION_PLAN.md) and [`docs/OPEN_ISSUES.md`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/docs/OPEN_ISSUES.md).
 - **Existing database truth:** [`src/db/migrations/002_runtime_state.sql`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/migrations/002_runtime_state.sql), [`src/db/postgresDatabase.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/postgresDatabase.ts); older relational baseline [`001_initial_schema.sql`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/src/db/migrations/001_initial_schema.sql).
-- **Confirmed current single-deal code boundary:** [`scripts/test_real_email_e2e.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/scripts/test_real_email_e2e.ts).
+- **Historical single-deal code boundary (superseded by the shared workflow):** [`scripts/test_real_email_e2e.ts`](https://github.com/z0ned/BFMR-Automation-v2/blob/main/scripts/test_real_email_e2e.ts).
 - **New decisions:** user's explicit design-session instructions/approvals on 16 October 2026, consolidated in Section 3 of the design companion. Their implementation status remains as recorded in v20; this documentation split does not implement them.
 
 The v22 Markdown pair is the maintained documentation source; older versioned specifications and generated PDFs remain available in Git history, rather than being retained in the current tree. v21 is a document version, not an application release. Markdown splitting does not recreate the large-format PDF ERD sheets referenced by v20; the current 16-table field dictionary, reporting SQL and Mermaid relationship source are in the design companion.
@@ -498,7 +506,7 @@ This map records the original split, not current schema or implementation status
 | 2.1 recorded evidence and setup observations | 1.2 evidence distinctions | 2.1 historical evidence; 6.1 environment |
 | 3 decisions; 3.1 delivery examples; 3.2 email chronology | 3 (all decisions and examples retained) | 3.1, 3.3, 7.3 implementation gaps |
 | 4.1 Gmail provenance and classification | 4.1 | 3.1; 5.1 |
-| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 current queue and early-return gap; 4.2 journals |
+| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 shared workflow and queue; 4.2 SQL checkpoints and legacy journals |
 | 4.3 duplicate checks and confirmation | 4.3 | 3.2; 5.2 |
 | 5.1 eligibility; 5.2 rejection/uncertainty policy | 5.1–5.2 | 3.3 existing policy and unimplemented cutoff |
 | 5.3 order identity and retailer constraints | 5.3 | 3.3 |

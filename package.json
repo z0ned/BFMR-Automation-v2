@@ -25,7 +25,8 @@
     "typecheck:all": "tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --esModuleInterop --skipLibCheck scripts/*.ts tests/*.ts",
     "test:relational": "node --import tsx tests/relational_integration.test.ts",
     "test:retailer-accounts": "node --import tsx tests/retailer_account_ranking.test.ts",
-    "test:cutover-start": "node --import tsx tests/fresh_start_cutover.test.ts"
+    "test:cutover-start": "node --import tsx tests/fresh_start_cutover.test.ts",
+    "reconcile-email": "node --import tsx scripts/reconcile_deal_email.ts"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^6.2.0",
