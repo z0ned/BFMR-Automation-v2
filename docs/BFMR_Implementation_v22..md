@@ -11,6 +11,34 @@
 
 **Companion:** [Solution Design Specification v22](BFMR_Solution_Design_Specification_v22.md) owns the business and technical requirements, approved decisions, architecture, adopted 16-table schema, reporting semantics, and unresolved design questions.
 
+## 22 October 2026 — native operator reports and fresh-start source
+
+The operator reports successful PostgreSQL 17 ranking preparation/finalization
+with no pre-existing accounts, private seed and application-role account reads.
+Reported catalog results show integer/non-null/no-default ranking, the composite
+unique key and rank SELECT=true/rank UPDATE=false/CCV SELECT=false. The operator
+reports successful application business-schema/account validation, intake schema
+and SELECT/no-DELETE/no-TRUNCATE checks, and three ownership results: acquire,
+refuse a competitor, release/reacquire. The missing expected-account configuration
+was populated privately before the ownership rerun. These are bounded user
+reports, not assistant-observed native tests, complete permissions/restore
+acceptance or provider evidence.
+
+Reported inventory found no current default journals or business/intake records,
+and no accepted marker; the checked older-container diffs/Windows-profile search
+found no matching files. The operator confirmed no outstanding work and chose
+to exclude prior completed activity. `relationalCutover.ts` now separates
+version-1 historical coverage from a version-2 exact UTC boundary with explicit
+exclusion/no-outstanding-work assertions. `prepare_fresh_start_cutover.ts` writes
+only a private candidate and runs the existing report; runtime reads the accepted
+boundary and blocks older email-triggered reservation preparation. The
+[runbook](RELATIONAL_INTEGRATION.md#explicit-start-from-today-boundary--22-october-2026)
+details refusals and the separate first-watch coverage issue. Subsequent
+user-authorized tests passed; see [fresh-start offline evidence](RELATIONAL_INTEGRATION.md#offline-fresh-start-validation--22-october-2026).
+`npm run typecheck`, `npm run typecheck:all` and whitespace checks passed. No
+operator cutover/provider invocation was performed by the assistant. Earlier
+offline results retain their recorded revision scope.
+
 > **Implementation snapshot — 21 October 2026:** Relational business repositories and runner integration are implemented against the bundled `database/schema.sql`, including the immutable-payout guard. Reservations, orders, shipments, actual payments and retained evidence use SQL; operational Gmail/recovery/status/notification stores remain separate. Across offline runs, 141 tests passed, zero failed and one native PostgreSQL case was skipped; the final relational suite passed 23/23 with disposable PGlite. TypeScript checks passed. Native mini-PC PostgreSQL, installed guard/roles, real cutover and provider/production acceptance remain pending. Single-deal automatic ordering and the 14-day delivery cutoff remain unimplemented.
 
 ## 22 October 2026 — explicit initial Amazon seed source
@@ -358,6 +386,7 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 | `npm run typecheck`, `npm run typecheck:all` | Static checks; recorded current results are in Section 2.1. |
 | `npm test` | Inspect environment first; never target a real DB. Current evidence uses direct per-file execution to expose individual cases. |
 | `npm run test:relational` | Disposable PGlite regression suite using bundled `database/schema.sql`, pinned to its reviewed hash; no private DB URL or external checkout. |
+| `npm run test:cutover-start` | Offline fresh-start scope, private preparation, report/acceptance persistence and old-email guards; see the relational runbook for evidence and limits. |
 | `npm run test:retailer-accounts` | Offline account selection/ranking, staged SQL upgrades and synthetic seed SQL/input checks; native psql/roles remain unverified. |
 | `npm run test:gmail-intake` | Offline intake adapters, coordinator and operational SQL/integration tests; synthetic providers, network guard and disposable PGlite. See the intake runbook for results and limits. |
 | `npx tsx scripts/reconcile_relational_cutover.ts ...` | Default read-only report; actual apply is a separately authorized reviewed-hash/account database write. |

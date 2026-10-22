@@ -38,9 +38,18 @@ Establish the authenticated payment-notice contract and exact reservation/deal, 
 
 ### SETUP-001 Local PostgreSQL and runtime configuration
 
-Validate PostgreSQL 15+ on the mini-PC, exact BFMR account ownership and a non-owning runtime role with reviewed grants. Require one retailer named `Amazon`; multiple linked accounts are valid, and selection uses lowest `retailer_account_ranking` with no environment override or `ccv` read. Accept integer/non-null/per-retailer unique ranking and no default/generated assignment. For existing databases, separately review nullable/unique preparation, actual manual rank backfill and finalization; worker validation must reject the intermediate schema. Add least-privilege SELECT on ranking without application ranking updates. Verify missing-account stops and run-pinned identity/no silent switching. Ranking source remains uninstalled; native schema/role/data acceptance is pending. Install only the applicable reviewed schema/upgrade, never startup DDL. Financial enforcement acceptance is tracked under IMPL-006 below.
+Validate PostgreSQL 15+ on the mini-PC, exact BFMR account ownership and a non-owning runtime role with reviewed grants. Require one retailer named `Amazon`; multiple linked accounts are valid, and selection uses lowest `retailer_account_ranking` with no environment override or `ccv` read. Accept integer/non-null/per-retailer unique ranking and no default/generated assignment. For existing databases, separately review nullable/unique preparation, actual manual rank backfill and finalization; worker validation must reject the intermediate schema. Add least-privilege SELECT on ranking without application ranking updates. Verify missing-account stops and run-pinned identity/no silent switching. The operator reports native ranking/schema/account and lock checks passed;
+complete role/data/restore and financial enforcement acceptance remain pending. Install only the applicable reviewed schema/upgrade, never startup DDL. Financial enforcement acceptance is tracked under IMPL-006 below.
 
 ### SETUP-002 Gmail queue initialization and recovery
+
+The operator chose a version-2 start-from boundary excluding prior completed
+activity after confirming no outstanding work. Validate the new manifest/report,
+acceptance marker, startup/old-email guard and refusal of existing state before
+applying it. Reconcile coverage between the exact boundary and first Gmail watch;
+no baseline reset, historical-row blanket skip or Inbox scan is authorized by
+that choice. Focused offline validation passed; native report/apply and real
+first-watch coverage remain pending.
 
 Verify first-ever SQL initialization versus restoration of an existing queue and the reviewed legacy import/source-hash boundary; the report/apply source is implemented, not applied. Install `database/gmail_intake.sql` separately with reviewed runtime grants. Reconcile interrupted `PROCESSING` work against BFMR/Amazon before operator repair. Preserve expired-history gaps; an alternative recovery scan or purchase backfill needs a separate explicit decision. Missing state must not silently initialize a new mailbox baseline.
 

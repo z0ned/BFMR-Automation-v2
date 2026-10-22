@@ -1,5 +1,20 @@
 # Implementation plan and evidence
 
+## 22 October 2026 — explicit fresh-start cutover source
+
+Added a separate version-2 start-from scope and private candidate/report tool;
+version-1 historical imports retain full-history coverage semantics. Fresh-start
+preparation refuses existing recovery/SQL state and preserves a matching
+candidate timestamp. Acceptance records the boundary; runtime rejects earlier
+email triggers without weakening provider/financial/recovery stops. See the
+[runbook](RELATIONAL_INTEGRATION.md#explicit-start-from-today-boundary--22-october-2026).
+User-authorized focused offline tests and the existing relational regression
+suite passed; both TypeScript checks and whitespace checks passed. Coverage and
+limits are recorded once in the [runbook](RELATIONAL_INTEGRATION.md#offline-fresh-start-validation--22-october-2026).
+No native invocation, operator candidate preparation, cutover apply, Gmail
+initialization or provider action was performed by the assistant. Operator-reported native setup evidence is recorded in the
+implementation reference; it is separate from this new contract's acceptance.
+
 ## 22 October 2026 — requested account-ranking offline validation
 
 Added `npm run test:retailer-accounts` and ran it alongside the existing relational

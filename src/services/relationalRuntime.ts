@@ -25,9 +25,9 @@ export async function openRelationalRuntime() {
     const options = Object.freeze({ retailerId: retailerAccount.retailer_id,
       retailerAccountId: retailerAccount.id, expectedAccountEmail: retailerAccount.email });
     const legacyFile = process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(os.homedir(), '.local/state/bfmr/amazon-orders.json');
-    await assertRelationalCutoverReady(db, { account, legacyOrderLedgerSha256: await hashPrivateFile(legacyFile) });
+    const baselineStartsAt = await assertRelationalCutoverReady(db, { account, legacyOrderLedgerSha256: await hashPrivateFile(legacyFile) });
     return {
-      db, ownership, account, retailerAccount,
+      db, ownership, account, retailerAccount, baselineStartsAt,
       retailerAccountId: retailerAccount.id,
       async verifyRetailerAccount() { await validateRelationalRetailerAccount(db, options); },
       sync: new BfmrRelationalSync(db),

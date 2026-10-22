@@ -100,6 +100,73 @@ Canceled, partial and non-unit historical orders, and unsupported historical ord
 
 ## Controlled cutover
 
+### Explicit start-from-today boundary — 22 October 2026
+
+The operator confirmed no outstanding reservations, related orders or uncertain
+submissions need migration, then chose to leave prior completed activity outside
+this system. This authorizes preparing that scope, not claiming full historical
+coverage. A version-2 manifest records `coverage: { sinceBaseline: true }` and
+`baseline: { mode: 'START_FROM', startsAt: <UTC instant>,
+priorCompletedActivity: 'EXCLUDED', noOutstandingWork: true }`. Its reservation
+and exclusion arrays must be empty and its legacy-ledger hash must be null.
+Version-1 complete-history manifests retain their existing meaning.
+
+The boundary is the exact UTC instant the candidate is prepared, not an inferred
+local midnight. The preparation tool preserves an existing matching candidate
+and its timestamp, creates a new private file exclusively with mode 0600 under
+`~/.local/state/bfmr/cutover-start-from.json`, and invokes only the report tool:
+
+```sh
+node --import tsx scripts/prepare_fresh_start_cutover.ts --confirm-no-outstanding-work
+```
+
+The command refuses existing private journals/ledger/legacy queue, conflicting
+accepted baselines, existing business records or any existing SQL Gmail state.
+It does not create replacement journals, reset a cursor, install SQL, apply an
+acceptance marker, initialize Gmail or invoke providers. A failure can leave the
+private candidate for review; it never overwrites one. Before applying, review
+the exact boundary, confirm the no-outstanding-work assertion still holds and
+review the report/hash. Acceptance remains the existing explicit `--apply` flow
+with that exact manifest hash/account. Prior activity is excluded by scope, not
+recorded as imported or verified absent from history.
+
+The accepted marker retains the version and boundary. Startup validates it and
+email-triggered reservation preparation rejects receipt times before the boundary
+or invalid timestamps. Unknown reservations, unpaid exposure, inconsistent state
+or ambiguous provider evidence still stop work; there is no date-based blanket
+skip of BFMR rows or waiver of financial/identity gates. The boundary is not a
+Gmail cursor or a provider-created-at proof. Real first-watch setup and any gap
+between the boundary and initial watch still need explicit coverage decisions;
+this change neither scans an Inbox nor authorizes unattended operation.
+
+### Offline fresh-start validation — 22 October 2026
+
+The user authorized focused tests followed by commit/push. Run
+`npm run test:cutover-start`: **19/19 passed**, zero failures/skips. The existing
+`npm run test:relational` suite was rerun and passed **23/23**; do not add these
+reruns to historical distinct-case totals. Both TypeScript checks and whitespace
+checks passed.
+
+The new suite blocks network/provider access, clears private service/database
+environment settings and uses synthetic identities, temporary private files and
+disposable PGlite with the actual business/intake schemas. It covers explicit
+coverage/version parsing; required scope/confirmation and time assertions; file
+permissions, stable candidate bytes and source hashes; malformed/conflicting
+candidates; default and configured recovery paths, including dangling or
+uninspectable paths; read-only reporting; atomic/idempotent scoped acceptance;
+refusal to replace historical/other boundaries; duplicate/malformed markers;
+ownership loss; preserved existing reservations, Gmail cursors/history gaps and
+interrupted `PROCESSING` work; and old-email rejection before account/provider
+work or reservation intent.
+
+Preparation was factored into `freshStartCutoverPreparation.ts` so tests load no
+private CLI environment. An override cannot conceal a default journal. Tests do
+not execute the native CLI/database/lock path, contact a provider, establish
+Gmail watch coverage or apply the operator's cutover. Native report review and
+first-watch coverage remain pending.
+
+### Historical reconciliation
+
 Keep the existing writer stopped and preserve backup/source files before planning a real cutover. A missing previously existing journal must be restored/reconciled, not treated as an empty account. The source tool imports database records only and has no Gmail, BFMR, Amazon or browser-action path.
 
 The private version-1 manifest must identify the exact account, approval time, complete reservation/order/actual-payment coverage and legacy ledger SHA-256. Each reservation needs authoritative creation-term evidence. Orders require confirmed identity and retailer-eligibility evidence; shipments must satisfy the one-shipment/tracking-number rule; actual payments require authenticated notice evidence. Standalone orders excluded from BFMR import must be explicit. Unsupported legacy package arrays, missing identities, inconsistent rows or unsubstantiated creation terms keep the report unready.

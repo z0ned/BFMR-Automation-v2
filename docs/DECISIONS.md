@@ -1,5 +1,22 @@
 # Decision register
 
+## 22 October 2026 — start from today; exclude prior completed activity
+
+The user subsequently authorized focused offline validation and committing/pushing
+the fresh-start change. Tests use synthetic state and disposable PGlite; native
+cutover application and live provider/worker actions remain separate. Evidence is
+recorded in the [runbook](RELATIONAL_INTEGRATION.md#offline-fresh-start-validation--22-october-2026).
+
+After reporting no outstanding work and no located recovery files, the operator
+explicitly chose a new operational boundary and excluded prior completed
+activity. Use a version-2 cutover declaration with an exact UTC start instant,
+explicit exclusion and no-outstanding-work assertion; never represent it as
+complete historical coverage. Existing history-mode imports stay unchanged.
+Prepare/report first; do not silently apply a marker, reset Gmail or ignore
+unknown unpaid/provider evidence. The [cutover runbook](RELATIONAL_INTEGRATION.md#explicit-start-from-today-boundary--22-october-2026)
+owns procedure and limitations. This decision does not itself apply a cutover or
+authorize a live worker.
+
 ## 22 October 2026 — focused offline account tests and publication authorized
 
 The user approved adding/running focused offline account-selection, ranking,

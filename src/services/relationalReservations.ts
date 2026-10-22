@@ -6,6 +6,7 @@ import { readRecentReservedRows } from './bfmrTrackerApi';
 import { normalizeTrackerReservation } from './relationalTrackerTerms';
 import { readCanonicalDealTerms } from './relationalDealTerms';
 import { readRelationalAmazonAccount } from './relationalOrderLedger';
+import { assertEmailSinceCutover } from './relationalCutover';
 
 interface TriggerEmail { id: string; subject: string; receivedAt: string; emailType: string }
 export interface PreparedRelationalReservation {
@@ -21,6 +22,7 @@ export interface PreparedRelationalReservation {
 export async function prepareRelationalReservation(runtime: RelationalRuntime, input: {
   dealUrl: string; dealId: string; title: string; email?: TriggerEmail; correlationId?: string;
 }): Promise<PreparedRelationalReservation> {
+  if (input.email) assertEmailSinceCutover(runtime.baselineStartsAt, input.email.receivedAt);
   await runtime.verifyRetailerAccount();
   const deal = await readCanonicalDealTerms(input.dealUrl, input.dealId, input.title);
   const correlationId = input.correlationId ?? randomUUID();
