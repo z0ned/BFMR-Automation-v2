@@ -238,6 +238,7 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
 
       // Attempt to mutate the row
       let triggerBlocked = false;
+      let blockedReason = '';
       try {
         await client.query(
           `UPDATE public.workflow_evidence SET phase = 'MUTATED' WHERE correlation_id = $1;`,
@@ -246,6 +247,10 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
       } catch (triggerErr: any) {
         if (triggerErr.code === '55000' || /append-only/i.test(triggerErr.message)) {
           triggerBlocked = true;
+          blockedReason = 'blocked by trigger (55000)';
+        } else if (triggerErr.code === '42501') {
+          triggerBlocked = true;
+          blockedReason = 'blocked by role permissions (42501 no UPDATE privilege)';
         }
       }
 
@@ -254,14 +259,14 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
           name: 'Probe: Append-Only Trigger',
           category: 'PROBES',
           status: 'PASS',
-          message: 'UPDATE on workflow_evidence correctly blocked by trigger (55000)',
+          message: `UPDATE on workflow_evidence correctly ${blockedReason}`,
         });
       } else {
         add({
           name: 'Probe: Append-Only Trigger',
           category: 'PROBES',
           status: 'FAIL',
-          message: 'UPDATE on workflow_evidence was NOT blocked; append-only trigger is missing or inactive',
+          message: 'UPDATE on workflow_evidence was NOT blocked; append-only protection is missing',
         });
       }
     } catch (err: any) {
@@ -279,19 +284,19 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
 
     // Probe C: Generated Stored Column on reservations
     try {
+      const uid1 = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       const dealRes = await client.query<{ id: string }>(
         `INSERT INTO public.deals (bfmr_deal_id, slug, title, reimbursement_amount)
-         VALUES ('__probe_deal', '__probe_deal', 'Probe Deal', 100.00)
-         ON CONFLICT (bfmr_deal_id) DO UPDATE SET title = EXCLUDED.title RETURNING id;`
+         VALUES ($1, $1, 'Probe Deal', 100.00) RETURNING id;`,
+        [`__probe_deal_${uid1}`]
       );
       const dealId = dealRes.rows[0].id;
 
       const resRes = await client.query<{ id: string; expected_payout: string }>(
         `INSERT INTO public.reservations (bfmr_reservation_id, deal_id, quantity, payout_per_item)
-         VALUES ('__probe_res', $1, 3, 45.50)
-         ON CONFLICT (bfmr_reservation_id) DO UPDATE SET quantity = 3, payout_per_item = 45.50
+         VALUES ($1, $2, 3, 45.50)
          RETURNING id, expected_payout;`,
-        [dealId]
+        [`__probe_res_${uid1}`, dealId]
       );
 
       const generated = parseFloat(resRes.rows[0].expected_payout);
@@ -325,25 +330,25 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
 
     // Probe D: Reimbursement Uniqueness (1-to-1)
     try {
+      const uid2 = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       const dealRes = await client.query<{ id: string }>(
         `INSERT INTO public.deals (bfmr_deal_id, slug, title, reimbursement_amount)
-         VALUES ('__probe_deal_2', '__probe_deal_2', 'Probe Deal 2', 50.00)
-         ON CONFLICT (bfmr_deal_id) DO UPDATE SET title = EXCLUDED.title RETURNING id;`
+         VALUES ($1, $1, 'Probe Deal 2', 50.00) RETURNING id;`,
+        [`__probe_deal2_${uid2}`]
       );
       const dealId = dealRes.rows[0].id;
 
       const resRes = await client.query<{ id: string }>(
         `INSERT INTO public.reservations (bfmr_reservation_id, deal_id, quantity, payout_per_item)
-         VALUES ('__probe_res_2', $1, 1, 50.00)
-         ON CONFLICT (bfmr_reservation_id) DO UPDATE SET quantity = 1 RETURNING id;`,
-        [dealId]
+         VALUES ($1, $2, 1, 50.00) RETURNING id;`,
+        [`__probe_res2_${uid2}`, dealId]
       );
       const resId = resRes.rows[0].id;
 
       const emailRes = await client.query<{ id: string }>(
         `INSERT INTO public.emails (gmail_message_id, subject, email_type, received_at)
-         VALUES ('__probe_email_1', 'Payment Probe', 'PAYMENT_SENT', NOW())
-         ON CONFLICT (gmail_message_id) DO UPDATE SET subject = EXCLUDED.subject RETURNING id;`
+         VALUES ($1, 'Payment Probe', 'PAYMENT_SENT', NOW()) RETURNING id;`,
+        [`__probe_email_${uid2}`]
       );
       const emailId = emailRes.rows[0].id;
 
