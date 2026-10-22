@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Client, type ClientConfig } from 'pg';
 
 export interface CheckResult {
