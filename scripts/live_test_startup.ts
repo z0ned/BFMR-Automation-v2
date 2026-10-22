@@ -12,6 +12,8 @@ import type { PostReservationTask } from '../src/services/postReservation';
 
 export async function runLiveTestStartup(browser: PlaywrightBfmrBrowser, hooks: {
   beforeStartup?(): Promise<void>;
+  beforeMutation?(): Promise<void>;
+  afterNotSubmitted?(deal: StartupDeal): Promise<void>;
   beforeSubmit?(deal: StartupDeal): Promise<void>;
   afterConfirmed?(reference: ReservationReference | undefined): Promise<void>;
   afterCancelled?(reference: ReservationReference | undefined): Promise<void>;
@@ -32,9 +34,10 @@ export async function runLiveTestStartup(browser: PlaywrightBfmrBrowser, hooks: 
     }
     await recoverLivePostReservation(hooks);
     return runStartupReservation({
+      afterNotSubmitted: hooks.afterNotSubmitted,
       afterConfirmed: async (reference) => {
         await hooks.afterConfirmed?.(reference);
-        await finishLiveReservation(reference, 'STARTUP');
+        await finishLiveReservation(reference, 'STARTUP', hooks.beforeMutation);
         await hooks.afterCancelled?.(reference);
       },
       onProvedFailure: async (deal) => sendReservationFailureAlert(`Startup submission definitively failed: ${deal.url}. The startup flow will follow its retry/next-deal rules.`),

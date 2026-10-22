@@ -86,3 +86,7 @@ Implement and cover the approved calendar-day rule: exactly 14 days is allowed; 
 ### Operator repair for uncertain actions and replacements
 
 Complete reviewed restart/repair procedures for uncertain reservation, checkout, BFMR Purchase/Shipment and notification outcomes. Resolve replacement/refund cases within the one-order-per-reservation model without fabricating identities, discarding evidence or silently inserting another order. Recovery must reconcile authoritative outcomes before any separately authorized retry.
+
+### Action-control regression and operational acceptance
+
+The source hardening is implemented; see [ACTION_CONTROL.md](ACTION_CONTROL.md). Add/run explicitly requested offline coverage for strict address/card/account checks, explicit cancellation release (update older fixtures that model disappearance), persistent incident resolution boundaries, recovery inventory corruption/missing files/path changes, orphan intents, failed notifications and shutdown races. Validate native PostgreSQL queries/grants, verified active-account selectors across layouts and crash/restore behavior. The full compiler check currently requires restoring the declared PGlite dependency. Establish the reviewed initial recovery baseline on the real installation only after restoring/reconciling all existing stores. General report/apply repair and safe resolution of blocked incidents remain unfinished; no runtime reset or successful alert may clear them automatically. No software regression or provider/production acceptance is claimed by the implementation.

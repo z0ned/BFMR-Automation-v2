@@ -1,5 +1,9 @@
 # Decision register
 
+## 22 October 2026 — close reviewed action-control gaps
+
+The user requested implementation of the action-control step from the repository review: strict checkout expectations and exact Amazon buying-account evidence, explicit cancellation release proof, persistent incident blocking and production startup recovery audits. Implementation uses existing business evidence tables and preserves approved purchase scope, CON-001 intake and at-most-once mutation rules. A verified account selector and one-time reviewed recovery inventory are additional source gates, not provider acceptance or permission to run the worker. No general incident-reset/repair capability is authorized by source presence. Details and static-check limits are in [ACTION_CONTROL.md](ACTION_CONTROL.md) and the v22 implementation amendment. No software tests or live actions were performed.
+
 ## 22 October 2026 — start from today; exclude prior completed activity
 
 The user subsequently authorized focused offline validation and committing/pushing

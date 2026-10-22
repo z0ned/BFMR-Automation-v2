@@ -12,6 +12,7 @@ export interface StartupAttempt extends StartupDeal {
 export interface StartupReservationDependencies {
   onProvedFailure?(deal: StartupDeal): Promise<void>;
   afterConfirmed?(reference: ReservationReference | undefined): Promise<void>;
+  afterNotSubmitted?(deal: StartupDeal): Promise<void>;
   listDeals(): Promise<string[]>;
   inspectDeal(url: string): Promise<StartupDeal | null>;
   submit(deal: StartupDeal): Promise<ReservationSubmissionResult>;
@@ -76,11 +77,13 @@ export async function runStartupReservation(deps: StartupReservationDependencies
         throw error;
       }
       if (submission.status === 'CLOSED_NO_SLOTS') {
+        await deps.afterNotSubmitted?.(deal);
         await deps.journal.save({ ...attempt, state: 'SKIPPED' });
         deps.log('SKIPPED: startup deal became unavailable before submission; trying the next deal.');
         break;
       }
       if (submission.status === 'AUTH_REQUIRED') {
+        await deps.afterNotSubmitted?.(deal);
         await deps.journal.save({ ...attempt, state: 'SKIPPED' });
         throw new Error('Startup authentication is required; the reservation was not submitted.');
       }

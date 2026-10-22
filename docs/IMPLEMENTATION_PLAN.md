@@ -1,5 +1,16 @@
 # Implementation plan and evidence
 
+## 22 October 2026 — merge action controls with ranked-account and fresh-start work
+
+Resolved the work/main merge while retaining main's ranked PostgreSQL account selection and explicit fresh-start cutover boundary. Amazon browser proof and tracking now receive the runtime's pinned database-selected email directly, without reintroducing removed environment overrides. Mutation readiness also verifies that the ranked selection has not changed. Both branches' decision/evidence entries are retained. Source and strict script TypeScript checks and whitespace checks passed; no software tests or live workflow/database invocation was performed for this merge. Earlier behavioral evidence retains its original revision and scope.
+
+
+## 22 October 2026 — action-control source implementation
+
+Closed source gaps from the project review: reject missing exact checkout expectations; require verified active Amazon buying-account evidence; require explicit exact cancellation status; persist worker incident blocks in append-only SQL evidence; guard financial/provider mutation boundaries; and audit recovery journals, transition-log presence, pending notifications, Gmail PROCESSING work and unresolved relational/provider intents before production startup. Existing inventory detects later loss/path changes; adoption requires a reviewed first baseline. Normal intake cleanup awaits failure recording. Proved non-submissions retain NO_ACTION evidence rather than orphaning creation intent.
+
+`npm run typecheck`, strict script-only TypeScript and `git diff --check` passed. Broader `typecheck:all` is blocked by the missing declared PGlite dependency and resulting fixture typing errors. No software tests were added/run; source implementation does not supersede historical evidence with a new passing behavioral result. No schema, live account, private state, recovery baseline, import, watch or deployment was changed. Next: requested offline regression updates (including the former disappearance-as-release fixtures), native/provider failure acceptance and reviewed operator repair. [ACTION_CONTROL.md](ACTION_CONTROL.md) defines the new controls and remaining acceptance boundaries.
+
 ## 22 October 2026 — explicit fresh-start cutover source
 
 Added a separate version-2 start-from scope and private candidate/report tool;

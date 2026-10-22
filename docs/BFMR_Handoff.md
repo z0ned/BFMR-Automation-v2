@@ -19,6 +19,10 @@ Completed work includes relational business persistence, production push-intake 
 - Single-deal automatic ordering is **approved but unimplemented**: the runner returns after supplier evaluation (`if (!parsed.isMultiDealAnnouncement) return;`). Simply removing this return is unsafe; single-deal mail needs the shared durable ordering/confirmation/reconciliation workflow first.
 - The approved 14-day latest-delivery cutoff is **unimplemented**. The React dashboard is simulated, with no accepted live operations API/service.
 
+## 22 October action-control source update
+
+See [ACTION_CONTROL.md](ACTION_CONTROL.md). The worker now requires exact Amazon account/address/card evidence, explicit cancellation status, persistent incident blocks and startup recovery audits even without the test reservation. Configure only verified account selectors and review/restore all journals before accepting the first recovery inventory. Static source/script checks passed; the full compiler check lacks PGlite. No software tests, provider action or production acceptance was performed. General reviewed repair and native/provider/regression acceptance remain open.
+
 ## Settled rules to preserve
 
 - Only authenticated, body-classified single-new-deal or explicitly supported multiple-new-deal mail qualifies. Subjects/printed samples do not establish qualification or provenance. Production accepts the approved BFMR sender; the separate testing sender requires explicit testing mode. Updates, added slots, payout changes and unsupported/all-open roundups never trigger reservations. Bundles remain one offer. Never backfill completed mail into purchasing.

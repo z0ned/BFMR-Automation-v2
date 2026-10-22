@@ -157,6 +157,7 @@ export async function runDueBfmrStatusCheck(options: {
   notify: (message: string) => Promise<void>;
   readRows?: () => Promise<TrackerReservationRow[]>;
   reconcile?: (rows: TrackerReservationRow[]) => Promise<{ promoted: boolean; issues: string[] }>;
+  onDiscrepancies?: () => Promise<void>;
   now?: () => Date;
 }): Promise<void> {
   const { day, hour } = atlantaDayAndHour(options.now?.() ?? new Date());
@@ -218,6 +219,7 @@ export async function runDueBfmrStatusCheck(options: {
   const snapshot: BfmrStatusSnapshot = { atlantaDay: day, observedAt, openRows: official.open, reservations, discrepancies,
     pendingAlerts: [...unsent, ...alertMessages(day, issues)], nextAlert: 0 };
   await options.store.save(snapshot);
+  if (issues.length) await options.onDiscrepancies?.();
   if (deliveryError) throw deliveryError;
   for (let index = 0; index < snapshot.pendingAlerts.length; index++) {
     await options.notify(snapshot.pendingAlerts[index]);
