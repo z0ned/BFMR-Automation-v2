@@ -30,7 +30,12 @@ const statusStore = bfmrStatusStore(process.env.BFMR_STATUS_SNAPSHOT_PATH || pat
 function admitGmailEmail(email: QueuedEmail): boolean {
   if (!email.inboxAtFetch) return false;
   const parsed = parseIncomingEmail({ ...email, messageId: email.id });
-  if (!((parsed.isSingleDeal && parsed.dealUrl) || parsed.isMultiDealAnnouncement)) return false;
+  const isProcessable =
+    Boolean(parsed.isSingleDeal && parsed.dealUrl) ||
+    Boolean(parsed.isMultiDealAnnouncement) ||
+    Boolean(parsed.isPaymentNotice) ||
+    Boolean(parsed.isInformationalUpdate);
+  if (!isProcessable) return false;
   const mode = intakeMode(process.env.BFMR_INTAKE_MODE);
   const sender = exactSender(email.sender);
   const recognized = sender === 'deals@buyformeretail.com' || mode === 'testing' && sender === 'matt.ward@live.com';

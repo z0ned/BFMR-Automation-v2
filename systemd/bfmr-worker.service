@@ -1,0 +1,30 @@
+[Unit]
+Description=BFMR Automation v2 Background Worker
+After=network.target postgresql.service docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bfmr
+Group=bfmr
+WorkingDirectory=/home/bfmr/BFMR-Automation-v2
+EnvironmentFile=/home/bfmr/BFMR-Automation-v2/.env
+ExecStart=/usr/bin/node --import tsx scripts/supervise_worker.ts
+Restart=on-failure
+RestartSec=10s
+StartLimitIntervalSec=300s
+StartLimitBurst=5
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bfmr-worker
+
+# Sandboxing & security hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/bfmr/.local/state/bfmr /tmp
+
+[Install]
+WantedBy=multi-user.target

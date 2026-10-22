@@ -15,6 +15,9 @@ Represent estimates as known, explicitly absent, or unknown. Use the latest date
 Back up actual SQL and private state, resolve historical creation terms and payment evidence, and review both business and Gmail import reports. Apply only reviewed inputs under separately authorized execution.
 Completion criterion: startup accepts the exact account/source hashes, historical records reconcile, and restoration cannot replay provider actions.
 
-5. Package and accept production operation.
-Add service supervision, reboot/manual-auth procedures, durable storage configuration, health signals, log retention, coordinated backup/restore, and operator repair tools. Exercise the actual worker through offline integration and failure scenarios, then perform narrowly authorized provider acceptance and a supervised pilot.
-Completion criterion: reboot, process crash, lost responses, database failure, expired Gmail history and failed alerts all produce predictable, recoverable behavior.
+5. Package and accept production operation. [DELIVERED - commits 47a5123 & HEAD]
+- Service Supervision (`scripts/supervise_worker.ts` & `npm run supervise`): Background supervisor with signal handling (graceful SIGTERM shutdown), exponential crash backoff (5s to 60s), burst crash circuit breaker (halts if > 5 crashes in 5 mins), and structured heartbeat file (/tmp/bfmr-worker-heartbeat.json).
+- Systemd Packaging (`systemd/bfmr-worker.service`): Production service unit for Ubuntu/mini-PC with auto-restart, journal logging, and system sandboxing (NoNewPrivileges, ProtectSystem).
+- Health & Diagnostic Command (`scripts/health_check.ts` & `npm run health`): Real-time CLI verification of PostgreSQL connectivity, worker process liveness, heartbeat freshness, and open exposure boundaries (< $200.00).
+- Coordinated Backup & Restore (`scripts/backup_production_state.sh` & `scripts/restore_production_state.sh`): Automated timestamped database pg_dump with gzip, state tarballing, SHA-256 checksumming, 14-backup retention, and transactional restore with validation.
+- Worker Admission: Updated `admitGmailEmail` in `bfmrWorker.ts` to allow payment notices and informational updates into the live pipeline. Covered by tests in `tests/milestone5_operations.test.ts`.

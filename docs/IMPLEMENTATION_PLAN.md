@@ -388,3 +388,14 @@ Implemented the terminal CLI database environment verification tool (`commit 6d7
     - CCV privacy: asserts `retailer_accounts.ccv` is protected from runtime access.
 - `package.json`: Added `"validate-db": "tsx scripts/validate_database_environment.ts"`.
 - `tests/database_validator.test.ts`: Created unit tests covering config resolution, catalog inspection, probe expectations, and rollback enforcement. All 2 tests pass.
+
+## 22 October 2026 — Milestone #5: Production Service Supervision & Systemd Packaging
+
+Implemented production supervisor, systemd service configuration, health monitoring CLI, and backup/restore scripts:
+- `scripts/supervise_worker.ts`: Process supervisor executing `scripts/run_bfmr.ts`. Implements signal forwarding (`SIGINT`, `SIGTERM`), graceful shutdown with configurable timeout, exponential backoff restart delay (5s to 60s), burst crash circuit breaker (halts if > 5 crashes within 5 minutes to prevent account churn), and periodic heartbeat writing (`/tmp/bfmr-worker-heartbeat.json`).
+- `systemd/bfmr-worker.service`: Systemd service unit for Ubuntu/mini-PC configuring working directory, environment loading, non-root user execution, systemd journal logging (`SyslogIdentifier=bfmr-worker`), and security sandboxing (`NoNewPrivileges`, `ProtectSystem=full`).
+- `scripts/health_check.ts`: Standalone diagnostic tool runnable via `npm run health`. Checks database connectivity and PostgreSQL version, inspects worker heartbeat status and age, verifies un-reimbursed exposure does not exceed the $200.00 limit, and outputs a formatted terminal report with exit code 0/1.
+- `scripts/backup_production_state.sh` & `scripts/restore_production_state.sh`: Automated backup and restore tooling with native and Docker container `bfmr-postgres` support, gzip compression, state tarballing, SHA-256 integrity verification, and 14-backup retention.
+- `src/services/bfmrWorker.ts`: Updated `admitGmailEmail` to admit verified payment notices and informational update messages into the worker intake pipeline.
+- `package.json`: Added `"start"`, `"supervise"`, and `"health"` scripts.
+- `tests/milestone5_operations.test.ts`: Added 3 unit tests verifying heartbeat writes, stale heartbeat detection, and active healthy worker detection. All 3 tests pass.
