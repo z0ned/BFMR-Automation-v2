@@ -512,18 +512,36 @@ function isMainScript(): boolean {
 
 if (isMainScript()) {
   const config = getDatabaseConfig();
-  const client = new Client(config);
+  let client = new Client(config);
 
-  client.connect()
-    .then(async () => {
+  async function connectWithFallback(): Promise<Client> {
+    try {
+      await client.connect();
+      return client;
+    } catch (err: any) {
+      // If running from host machine outside the Docker network, bfmr-postgres container name
+      // is not in host DNS, but port 5432 is forwarded to localhost.
+      if (err.code === 'ENOTFOUND' && typeof config.connectionString === 'string' && config.connectionString.includes('bfmr-postgres')) {
+        console.log('Host "bfmr-postgres" not found in host DNS; connecting via mapped port on "localhost"...');
+        const fallbackUrl = config.connectionString.replace(/@bfmr-postgres(:|\/)/, '@localhost$1');
+        client = new Client({ connectionString: fallbackUrl });
+        await client.connect();
+        return client;
+      }
+      throw err;
+    }
+  }
+
+  connectWithFallback()
+    .then(async activeClient => {
       try {
-        const summary = await runDatabaseValidation(client);
+        const summary = await runDatabaseValidation(activeClient);
         printValidationReport(summary);
-        await client.end();
+        await activeClient.end();
         process.exit(summary.failed > 0 ? 1 : 0);
       } catch (err: any) {
         console.error(`Validation error: ${err.message}`);
-        await client.end();
+        await activeClient.end();
         process.exit(1);
       }
     })
