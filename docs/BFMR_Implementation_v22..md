@@ -62,7 +62,7 @@ The guard source is in `database/schema.sql`, with its upgrade in `database/migr
 
 | Area | Source as implemented | Remaining gate |
 |---|---|---|
-| Gmail intake | Authenticated history polling and durable private cursor/queue | Actual auth/templates; supervised watch/StreamingPull if required |
+| Gmail intake | Authenticated history polling and durable private cursor/queue; violates production CON-001 | Required watch/StreamingPull, durable PostgreSQL notification-before-ACK/cursor recovery, actual auth/templates and supervision |
 | Reservations | Normal Playwright form, exact confirmation, SQL intent/creation capture and guarded recovery | Real creation/deal field contracts, account alignment and accepted historical evidence |
 | Amazon purchasing | Existing multi-deal path, fixed-item manual test and SQL pre-submit intent/order ledger | Single-deal shared purchase workflow and 14-day delivery cutoff; current DOM contracts |
 | Orders/shipments | Typed SQL rows through the ledger interface; one shipment/tracking number per order; retained review/exclusion evidence | Real retailer tracking and BFMR Purchase/Shipment contracts |
@@ -104,7 +104,9 @@ During the setup discussion recorded in v20, the user reported a working non-roo
 
 ### 3.1 Email intake and the single-deal implementation boundary
 
-The interactive entrypoint is `scripts/test_real_email_e2e.ts`, with shared startup in `scripts/live_test_startup.ts` and reusable browser-session handling in `src/services/browserSession.ts`. Gmail provenance and classification are separated into `emailProvenance.ts`, `emailParser.ts`, `bfmrEmailLinks.ts`, and `bfmrUrl.ts`. The existing path uses authenticated Gmail API history polling, not an accepted production watch/StreamingPull service.
+The interactive entrypoint is `scripts/test_real_email_e2e.ts`, with shared startup in `scripts/live_test_startup.ts` and reusable browser-session handling in `src/services/browserSession.ts`. Gmail provenance and classification are separated into `emailProvenance.ts`, `emailParser.ts`, `bfmrEmailLinks.ts`, and `bfmrUrl.ts`. The existing path polls authenticated Gmail history every 15 seconds (`POLL_INTERVAL_MS = 15_000`). **This violates production CON-001; it is not an approved intake alternative.** Production requires Gmail watch plus Pub/Sub StreamingPull, notification-triggered history reads, durable PostgreSQL persistence before ACK, serialized cursor/work commits, daily watch renewal and startup/reconnect continuation. Watch baseline/expiration must not overwrite the consumed cursor. No periodic Gmail polling or Inbox sweep is permitted.
+
+`scripts/auth_gmail_oauth.ts` and `scripts/wait_for_real_email.ts` contain watch setup/listener-related code, but those separate paths are not an integrated accepted production worker; their existence or IMAP fallback does not close this gap. `.env.example` lists required production mailbox, OAuth, Pub/Sub topic/subscription and credential configuration separately from legacy utilities. Supplying those values does not change the polling runner into push intake.
 
 `src/services/gmailIntakeQueue.ts` persists mailbox, history cursor, fetched payloads, dedupe tombstones and history gap in an atomically replaced fsynced private JSON file. Cursor and queued messages are committed together. Startup requires explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES` for *first ever* initialization, then remove it. If a prior queue is missing, recover it; do not silently initialize from a new baseline. Interrupted `PROCESSING` entries require manual BFMR/Amazon reconciliation. Gmail history expiration/404 is a **persistent gap and stop**, not permission to sweep Inbox or reprocess older email. History polling is not a deployed watch/StreamingPull service.
 
@@ -318,7 +320,10 @@ Older specifications/PDFs are available in Git history. This documentation split
 | `BFMR_AMAZON_POLICY_APPROVED` | Additional unattended purchasing policy flag; keep **unset** until configured and reviewed. |
 | `AMAZON_EXPECTED_DELIVERY_FRAGMENT`, `AMAZON_EXPECTED_CARD_LAST4` | Optional nonsecret partial identity checks for saved account selections. |
 | `AMAZON_DEFAULT_CARD` | Existing code uses this for CVV under a recognized challenge; treat as secret and never log. |
-| `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` | OAuth credentials; private configuration only. |
+| `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` | Required mailbox OAuth credentials for designed production intake; private configuration only. |
+| `GMAIL_ACCOUNT_EMAIL` | Required intended production mailbox; verify against the authenticated Gmail account. The current interactive runner does not implement this production configuration contract. |
+| `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_SUBSCRIPTION` | Required full resource names for production watch/StreamingPull intake. Integrated worker/ACK/recovery acceptance remains pending. |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Private container-visible credential-file path for Pub/Sub, unless a separately configured and verified Application Default Credentials identity supplies access. Credential access is required; this file-path mechanism is not the only identity source. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Private alert delivery configuration; not proof of durable delivery. |
 
 Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_FILE`, repository `.env`, `~/.env.bfmr_automation`, `~/.env` to fill unset values; inspect its current source. Never include actual values in docs, screenshots, a Git issue or a PDF. Use filesystem ACLs and secrets management appropriate to the future supervised service.
@@ -354,7 +359,7 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 
 ### 7.2 Operational and release gaps
 
-The runner is not a supervised unattended service. Existing PostgreSQL account ownership is valuable but does not make Gmail queue, Amazon ledger, multi-deal state, BFMR update intent and Telegram alerts one atomic storage system. Before production: durable private mounted storage in Docker, verified restore/reconciliation of stale backups, account namespace, failed-notification gating, browser desktop/MFA operator procedure, restart after crash and lock loss, real Pub/Sub watch/StreamingPull architecture if required, logs/secrets access controls, monitoring, rollback plan and formal evidence-based acceptance.
+The runner is not a supervised unattended service. Existing PostgreSQL account ownership is valuable but does not make Gmail queue, Amazon ledger, multi-deal state, BFMR update intent and Telegram alerts one atomic storage system. Before production: durable private mounted storage in Docker, verified restore/reconciliation of stale backups, account namespace, failed-notification gating, browser desktop/MFA operator procedure, restart after crash and lock loss, the required Pub/Sub watch/StreamingPull architecture, logs/secrets access controls, monitoring, rollback plan and formal evidence-based acceptance.
 
 ### 7.3 Remaining implementation and acceptance gaps
 
@@ -375,7 +380,7 @@ The following separates source completion from future acceptance. It is not perm
 | Relational schema/guard/repositories | Implemented; canonical guarded SQL and transaction paths exercised offline | Native mini-PC PostgreSQL, reviewed non-owning role/grants and actual schema installation |
 | Reconciliation, order/shipment, payments/exposure | Implemented; focused synthetic regressions passed | Verified provider full-read/payment contracts and current DOM/API semantics |
 | Historical cutover | Default report and atomic guarded apply implemented; synthetic import tested | Actual creation/payment proofs, full reviewed report, backup/restore and separately authorized real apply |
-| Operational stores/service | Durable private stores behind interfaces; no integrated SQL queue/outbox migration | Supervision, restart/uncertainty recovery, monitoring and notification acceptance |
+| Operational stores/service | Durable private stores behind interfaces; no integrated SQL queue/outbox migration | Required no-poll Gmail watch/StreamingPull, PostgreSQL notifications before ACK, cursor/reconnect/watch recovery, supervision and notification acceptance |
 | Documentation/handoff | v22 pair, runbook and registers updated with exact evidence | Keep future evidence dated and tied to concrete revisions; no production-ready claim before acceptance |
 
 ### 8.1 Regression coverage and future scenarios

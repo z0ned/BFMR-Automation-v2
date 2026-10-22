@@ -98,7 +98,7 @@ The persistence contract is the adopted 16-table PostgreSQL schema in Section 8,
 
 ### 2.3 Operational requirements
 
-Before unattended production operation, provide supervised execution, durable private storage, account ownership and loss handling, backup/restore and stale-state reconciliation, restart recovery, notification delivery controls, monitoring, and an operator procedure for browser login/MFA. Production Gmail watch/StreamingPull, if required, must be implemented and accepted separately from history polling. An expired Gmail history cursor must preserve a gap and stop; there is no authorized blanket Inbox scan or silent cursor reset.
+Before unattended production operation, provide supervised execution, durable private storage, account ownership and loss handling, backup/restore and stale-state reconciliation, restart recovery, notification delivery controls, monitoring, and an operator procedure for browser login/MFA. **CON-001 requires Gmail watch and Pub/Sub StreamingPull intake. No periodic Gmail polling or Inbox sweep is permitted.** The current history-polling runner is an implementation gap, not an approved production alternative. An expired Gmail history cursor must preserve a gap and stop; there is no authorized blanket Inbox scan or silent cursor reset.
 
 ## 3. Approved design decisions and v22 amendments
 
@@ -147,6 +147,10 @@ One multi-new-deal email (`E100`) can announce BFMR deal IDs `D101`, `D102`, `D1
 - Validate/locally decode approved BFMR email tracking links; do not navigate arbitrary tracking destinations. Allow only approved HTTPS BFMR detail origins. Establish actual canonical detail page, offer and title, then resolve the **slug** using `GET /api/v2/deals/{slug}` to obtain authoritative `deal.deal_id`.
 
 ### 4.2 Durable intake and restart requirements
+
+**Production intake contract (CON-001, restored 21 October 2026):** establish/renew an INBOX Gmail watch and receive outbound Pub/Sub StreamingPull notifications; no public webhook or tunnel is required. Persist each notification durably in PostgreSQL before ACK, serialize consumed-history-cursor advancement, and commit corresponding message work and cursor progress together. The existing private JSON queue is an implementation fact, not acceptance of the required PostgreSQL notification/ACK path.
+
+Maintain watch baseline, expiration and the durable consumed cursor as distinct facts. Renew the watch daily without replacing the consumed cursor. Continue saved history once at startup and once on reconnect, then read history in response to notifications; do not poll a quiet mailbox. Authentic first-ever initialization uses the initial watch baseline, not a historical Inbox sweep. Missing prior state and expired/rejected history preserve a recovery fault/gap and stop new work. Required configuration is the exact Gmail mailbox/OAuth identity, Pub/Sub topic/subscription and a verified Pub/Sub credential identity; see implementation section 6.2 and `.env.example`.
 
 Persist mailbox identity, history cursor, queued message payloads, deduplication tombstones, and history-gap state durably. Commit the intake cursor and corresponding queued messages together. Initialization is permitted only for the authentic first queue; a missing existing queue must be restored and reconciled rather than silently reset. Interrupted processing requires BFMR/Amazon reconciliation before resuming.
 

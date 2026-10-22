@@ -46,7 +46,7 @@ Define and verify first-ever initialization versus restoration of an existing qu
 
 ### SETUP-003 Supervised service, scheduling and notifications
 
-Provide and accept startup/reboot supervision, headed-browser/manual-auth access, ownership-loss shutdown, scheduled tracking/status checks, monitoring, log retention and durable notification-delivery recovery. Define and implement Gmail watch/StreamingPull if required by the intended service. Existing SQL and private operational stores need coordinated recovery; migration of all operational state into PostgreSQL is separate work.
+Provide and accept startup/reboot supervision, headed-browser/manual-auth access, ownership-loss shutdown, scheduled tracking/status checks, monitoring, log retention and durable notification-delivery recovery. Implement and accept the REQUIRED Gmail watch/Pub/Sub StreamingPull path under CON-001: no periodic Gmail polling or Inbox sweep, durable PostgreSQL notifications before ACK, serialized work/cursor commits, daily watch renewal with baseline/expiration distinct from the consumed cursor, and startup/reconnect history continuation. The current 15-second polling runner violates this constraint. Verify mailbox/OAuth identity, configured topic/subscription and Pub/Sub credentials. The separate listener/IMAP fallback is not production acceptance. Existing SQL and private operational stores need coordinated recovery; migration of all operational state into PostgreSQL is separate work.
 
 ### SETUP-004 Actual historical reconciliation and cutover
 

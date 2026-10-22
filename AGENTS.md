@@ -11,6 +11,8 @@
 
 ## Current authorized product scope
 
+- Production Gmail intake must use Gmail watch/Pub/Sub StreamingPull under CON-001. No periodic Gmail polling or Inbox sweep. Persist notifications durably in PostgreSQL before ACK; preserve the consumed cursor independently of watch baseline/expiration. Startup/reconnect history continuation is allowed. The current polling runner is an implementation gap, not an approved alternative.
+
 - Process authenticated BFMR single- and supported body-announced multiple-new-deal messages from the live runner. For multiple deals, reserve each deal quantity one before eligibility evaluation. Bundles remain one BFMR offer. Additional-slot/reservations-added notices, unsupported roundups, updates and unrelated messages do not qualify.
 - After an exact new reservation is confirmed, check its BFMR supplier evidence for Amazon. Preserve or cancel only the exact new reservation under the current v22 rules. Startup CAPTCHA reservations are a separate test workflow and are canceled after confirmation without supplier evaluation.
 - The specifically approved multi-deal Amazon path is limited to one supported Amazon item per reservation: complete order total <=$100; BFMR payout >= that complete total; existing unpaid BFMR expected payouts plus proposed Amazon total <=$200. Gift selection and free non-Prime delivery are required. Uncertainty or unknown evidence stops; never repeat a possibly submitted reservation/order/write. A failed verified rule cancels only the exact newly confirmed reservation and requires exact release readback.

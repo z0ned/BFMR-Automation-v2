@@ -11,7 +11,12 @@ Node.js/TypeScript command-line scripts process authenticated Gmail new-deal
 messages, create and verify exact BFMR reservations, evaluate supplier evidence,
 and run the approved Amazon quantity-one workflow under its financial and
 checkout safeguards. Tracking and BFMR reconciliation run through the active
-worker. Provider contracts and supervised production acceptance remain gates.
+worker. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull, with no
+periodic Gmail polling or Inbox sweep. The current 15-second polling runner
+violates that requirement. Required production mailbox/OAuth, topic/subscription
+and Pub/Sub credential settings are in .env.example; the durable PostgreSQL
+notification-before-ACK, cursor/watch/reconnect path remains incomplete.
+Provider contracts and supervised production acceptance remain gates.
 
 PERSISTENCE
 The canonical business schema and upgrades live under database/. Relational

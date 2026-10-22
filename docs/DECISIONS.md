@@ -1,5 +1,13 @@
 # Decision register
 
+## 21 October 2026 — restore required no-poll Gmail intake (CON-001)
+
+Restored the original CON-001 requirement from the v1.5 design: **"Gmail watch and Pub/Sub-driven intake. No periodic Gmail polling or Inbox sweep."** The user confirmed this remains controlling. Later "if required" descriptions and optional production Pub/Sub template entries were documentation drift, not an authorized design change.
+
+Production requires watch renewal, StreamingPull, durable PostgreSQL notifications before ACK, serialized cursor/work commits and event-driven history reads. A startup/reconnect continuation from the saved cursor is allowed; watch baseline/expiration remain distinct, and gaps/missing existing state stop for reconciliation. The current 15-second polling runner is an implementation gap. Required configuration includes mailbox/OAuth identity, topic/subscription and verified Pub/Sub credentials; a credential file or a separately verified ADC identity can supply the latter. Separate legacy listener/IMAP code is not accepted production intake.
+
+Provenance: `docs/BFMR_Solution_Design_Specification_v1.5.pdf` at historical commit `ffe0cc9`, CON-001 and the Gmail startup/reconnect/ACK sections. Current design, implementation, handoff, registers, overview, README and `.env.example` were corrected. This is documentation/template work only: no runtime code, provider configuration, live workflow or production acceptance changed.
+
 ## 21 October 2026 — dependency and specification artifacts
 
 Use npm with `package-lock.json` as the sole maintained dependency lock. The user authorized deleting `bun.lock` and the v1.6–v1.8 generated specification PDFs in `output/pdf/`. Maintain the v22 Markdown design/implementation pair; historical specifications and generated PDFs remain accessible through Git history. Parser email/PDF samples are retained. Earlier PDF-generation evidence below describes its original checkpoint, not an artifact maintained in the current tree.

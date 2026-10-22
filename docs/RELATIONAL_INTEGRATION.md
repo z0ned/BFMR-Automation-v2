@@ -114,7 +114,7 @@ These results do not verify a native mini-PC PostgreSQL installation, real provi
 - Real creation/deal payout fields, full tracker retention/completeness, payment evidence, account alignment and current retailer/BFMR DOM/API contracts remain release gates. Keep contract flags unset until their meanings are verified.
 - Installing the schema/guard, accepting an actual legacy import, runtime role provisioning, mini-PC startup/reboot supervision, backup/restore and production recovery have not been performed by this work.
 - Single-new-deal automatic purchasing still has its existing early-return boundary, and the separate 14-day latest-delivery cutoff remains unimplemented. Neither behavior is broadened by persistence integration.
-- Gmail watch/StreamingPull, an integrated operational queue/outbox migration, and a supervised service remain separate work. No deployment or new live invocation is authorized by source presence.
+- Gmail watch/Pub/Sub StreamingPull with durable PostgreSQL notification-before-ACK and cursor/watch recovery is REQUIRED by CON-001 and still incomplete; the current periodic Gmail polling violates that constraint. Broader operational queue/outbox integration and a supervised service also remain unfinished. No deployment or new live invocation is authorized by source presence.
 
 ## Documentation QA — 21 October 2026
 

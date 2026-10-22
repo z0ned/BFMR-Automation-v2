@@ -42,6 +42,8 @@ The dedicated PostgreSQL integration test requires a disposable `BFMR_TEST_DATAB
 
 ## Configuration and private data
 
+Use [.env.example](.env.example) as the configuration template, merging missing entries into an existing private `.env` without replacing credentials. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull; periodic Gmail polling and Inbox sweeps are forbidden. Configure the exact Gmail mailbox/OAuth identity, Pub/Sub topic/subscription and a verified Pub/Sub credential identity. The current interactive runner still polls every 15 seconds and does not meet this requirement; setting these variables does not implement the missing durable notification-before-ACK/cursor/watch/reconnect path. IMAP and local inbound-listener utilities are not production substitutes.
+
 Environment loading is described in the v22 implementation reference. Keep credentials, browser profiles, OAuth files, message content, Amazon order/tracking details, PostgreSQL data and runtime journals out of Git and logs. First-time Gmail queue creation requires an explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES`; never use it to replace a lost existing queue.
 
 Sample PDFs under `docs/sample_emails/from_bfmr` are parser reference material only. They are not authentication evidence and do not authorize live reservation, cancellation, ordering or tracking actions.

@@ -1,5 +1,11 @@
 # Implementation plan and evidence
 
+## 21 October 2026 — no-poll production intake documentation correction
+
+Restored CON-001 across current references and `.env.example`: required Gmail watch/Pub/Sub StreamingPull, no periodic Gmail polling or Inbox sweep, PostgreSQL notification-before-ACK, separate watch/consumed cursors, daily renewal and startup/reconnect continuation. Mailbox/OAuth, topic/subscription and a verified Pub/Sub credential identity are required production settings, not optional utilities. The existing 15-second polling runner remains a documented implementation/release gap. Broader operational-store migration remains separate work.
+
+Evidence class: documentation/template correction only. Checked variable-name coverage, duplicate entries, dotenv syntax, gates, current-reference consistency, Markdown fences and whitespace. No software tests, runtime/provider configuration or live actions were run; no implementation milestone or acceptance gate was closed.
+
 **Current baseline:** [v22 solution design](BFMR_Solution_Design_Specification_v22.md) and [v22 implementation reference](BFMR_Implementation_v22..md). [OPEN_ISSUES.md](OPEN_ISSUES.md) lists only unfinished work; this plan retains dated implementation/evidence history. Mark code completion separately from provider acceptance and production deployment. A passing synthetic fixture does not prove live BFMR/Amazon behavior.
 
 ## 21 October 2026 — EV-001 diagnostic prepared; live proof pending
@@ -37,7 +43,7 @@ Updated `BFMR_Solution_Design_Specification_v22.md` and `BFMR_Implementation_v22
 |---|---|---|
 | M0 Fresh project/bootstrap | Code complete | Node.js/TypeScript automation project, package lock, scripts and instructions exist. Historical clean-checkout evidence should not be mistaken for deployment. |
 | M1 Durable orchestration and ownership | Partial | Relational live-runner business repositories and atomic reconciliation; separate JSONB engine; cross-process advisory ownership and explicit operational stores. Need real cutover/schema/role acceptance, service lifecycle and backup/restore proof. |
-| M2 Gmail and Pub/Sub intake | Partial | Live runner uses authenticated Gmail API history plus durable private queue/cursor/dedupe, restart continuation and explicit gap. It still polls history; no deployed Gmail watch/StreamingPull/Pub/Sub ACK service or production long-outage recovery. |
+| M2 Gmail and Pub/Sub intake | Partial | Live runner uses authenticated Gmail API history plus durable private queue/cursor/dedupe, restart continuation and explicit gap. Its 15-second history polling violates CON-001; required watch/StreamingPull, PostgreSQL notification-before-ACK and cursor/watch/reconnect recovery remain incomplete. |
 | M3 BFMR read contracts | Partial / live blocked | Trusted URL/deal API resolver, exact-ID My Tracker reads, shared status rules, account evidence gate and supplier check. Actual DOM selectors, account alignment, provider schema/status/payout/supplier coverage and immediate visibility need evidence. |
 | M4 Reservation and side-effect controls | Partial | Live interactive runner, quantity-one website reservations, post-reservation evaluation/cancellation, Amazon checks/order path, journals, retailer tracking, BFMR writes and daily discrepancy alerts. Amazon layouts and BFMR side-effect contracts are not fully validated live; operator recovery and production notification gates remain incomplete. |
 | M5 Deployment/operations | Not accepted | No supervised deployment, backup/restore proof, health/watch monitoring, operational runbook or complete acceptance report. |
@@ -72,7 +78,7 @@ Validation recorded 21 October 2026: 142 distinct offline tests across runs, 141
 2. **Validate My Tracker read contract:** deal-ID mapping, row IDs, pagination completeness, retention/date behavior, all statuses, quantities, offer IDs, amounts paid, payouts and immediate visibility. Validate supplier-list data. Keep all purchase and cancellation gates closed for unknown values.
 3. **Validate Amazon order path read-only/fixtures first:** authenticated Business account choices, cart line boundaries, free non-Prime shipping, gift persistence, order total, exact thank-you Order # and order-history/package tracking cards. Do not repeat an order to debug identity; inspect Orders after any uncertain action.
 4. **Validate BFMR Purchase/Shipment APIs with a separately authorized, exact test reservation:** capture safe intent/reconciliation evidence; never retry unknown writes until readback resolves them. Confirm actual field values/statuses and local journal behavior.
-5. **Integrate durable service semantics:** database transactions and account ownership are code; integrate Gmail queue, side-effect journals, notification outbox, command attempts and orderly shutdown/recovery. Implement production watch/StreamingPull if required, boot supervision, persistent storage, backup and restore. Consider migration of separate JSON state only with explicit recovery and evidence.
+5. **Integrate durable service semantics:** database transactions and account ownership are code; integrate Gmail queue, side-effect journals, notification outbox, command attempts and orderly shutdown/recovery. Implement required no-poll production Gmail watch/StreamingPull with PostgreSQL notification-before-ACK and cursor/watch/reconnect recovery, boot supervision, persistent storage, backup and restore. Consider migration of separate JSON state only with explicit recovery and evidence.
 6. **Operational acceptance:** perform test reservations/cancellations and retailer actions only under the user's explicit live instruction, then record date, code version, test account scope, outcome and limitation. No automatic unattended rollout until all evidence gates and manual recovery procedures work.
 
 ## Current verification snapshot (recorded 12 October 2026)
