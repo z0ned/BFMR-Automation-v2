@@ -372,3 +372,19 @@ Implemented informational email ingestion, database linking, and checkout-time l
 - `src/services/relationalDealTerms.ts`: Added `fetchLiveBfmrDealPayout(slug)` calling BFMR Deal API `GET /api/v2/deals/{slug}`.
 - `src/services/relationalReservations.ts`: Updated `readLockedPurchaseEvidence` to call `fetchLiveBfmrDealPayout` at the checkout screen, update `reservations.payout_per_item` in the database, record audit evidence in `workflow_evidence`, and evaluate Amazon checkout review against this fresh live payout.
 - `tests/informational_and_checkout_payout.test.ts`: Created a 5-case test suite covering informational classification (payout increase, closing, slots), live BFMR Deal API payout retrieval, database updating, and checkout evidence injection. All 5 tests pass.
+
+## 22 October 2026 — Milestone #3: Standalone Native PostgreSQL & Role Validator Script
+
+Implemented the terminal CLI database environment verification tool (`commit 6d78e86`):
+- `scripts/validate_database_environment.ts`: Standalone validator script runnable via `npm run validate-db`. Reads standard PG connection variables (`PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGPASSWORD`, or `DATABASE_URL`).
+  - Checks server version $\ge 150000$.
+  - Checks runtime role privileges: non-superuser, non-createdb, non-createrole.
+  - Verifies public schema and 16 business tables are present and owned by a dedicated owner role (e.g. `bfmr_owner`), confirming `bfmr_app` is non-owning.
+  - Active Probes (inside an unconditionally rolled-back transaction):
+    - DDL rejection: asserts `CREATE TABLE` under runtime role fails with `42501` (`insufficient_privilege`).
+    - Append-only trigger: asserts `UPDATE` on `workflow_evidence` throws `55000` (append-only trigger active).
+    - Generated stored column: verifies PostgreSQL calculates `expected_payout = (quantity * payout_per_item)`.
+    - Reimbursement uniqueness: verifies duplicate insert for same `reservation_id` throws `23505` (`unique_violation`).
+    - CCV privacy: asserts `retailer_accounts.ccv` is protected from runtime access.
+- `package.json`: Added `"validate-db": "tsx scripts/validate_database_environment.ts"`.
+- `tests/database_validator.test.ts`: Created unit tests covering config resolution, catalog inspection, probe expectations, and rollback enforcement. All 2 tests pass.
