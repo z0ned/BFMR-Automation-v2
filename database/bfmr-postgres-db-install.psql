@@ -4,14 +4,12 @@ BEGIN;
 
 DO $$
 BEGIN
-    IF EXISTS (SELECT FROM pg_database WHERE datname = 'bfmr')
-       OR EXISTS (
-           SELECT FROM pg_roles
-           WHERE rolname IN ('bfmr_owner', 'bfmr_app')
-       )
+    IF EXISTS (
+        SELECT FROM pg_roles
+        WHERE rolname IN ('bfmr_owner', 'bfmr_app')
+    )
     THEN
-        RAISE EXCEPTION
-            'Existing BFMR database or roles found; inspect before proceeding.';
+        RAISE EXCEPTION 'Existing BFMR roles found; inspect before proceeding.';
     END IF;
 END
 $$;
@@ -26,12 +24,14 @@ CREATE ROLE bfmr_app
 
 COMMIT;
 
-CREATE DATABASE bfmr OWNER bfmr_owner TEMPLATE template0;
+ALTER DATABASE bfmr OWNER TO bfmr_owner;
 
 REVOKE ALL ON DATABASE bfmr FROM PUBLIC;
 GRANT CONNECT ON DATABASE bfmr TO bfmr_app;
 
 \connect bfmr
+
+ALTER SCHEMA public OWNER TO bfmr_owner;
 
 SET ROLE bfmr_owner;
 
