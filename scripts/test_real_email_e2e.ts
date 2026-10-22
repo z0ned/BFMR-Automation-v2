@@ -114,6 +114,7 @@ async function reserveEmailDeal(
     dealUrl: (await browser.init()).url(), dealId, title: visibleDealTitle, email, correlationId,
   });
   await runtime.ownership.verifyOwnership();
+  await runtime.verifyRetailerAccount();
   assertIntakeReady();
   console.log('[Live BFMR E2E] Submitting one unit through the deal page.');
   const submission = await browser.submitReservation(dealUrl, dealId);
@@ -217,6 +218,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
       console.error(`[Live BFMR E2E] Amazon product link or exact payout is missing or ambiguous for reservation ${reference.reserveId}; reservation retained for review.`);
       continue;
     }
+    await runtime.verifyRetailerAccount();
     if (progress) { progress.orderStarted.push(reference.reserveId); await batchJournal.save(progress); }
     const purchase = await purchaseReservedDeal(browser, reference, evidence.productUrl, evidence.payoutCents,
       async () => {
@@ -237,6 +239,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
               evidence: { bfmr_reservation_id: reference.reserveId, bfmr_deal_id: reference.dealId } });
           });
           await runtime.ownership.verifyOwnership();
+          await runtime.verifyRetailerAccount();
           assertIntakeReady();
         } });
     if (purchase.status === 'INELIGIBLE') {

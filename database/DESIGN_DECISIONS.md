@@ -23,6 +23,39 @@ psql -X --set=ON_ERROR_STOP=1 --dbname=bfmr --file=schema.sql
 - `orders.id` is the internal primary key. `orders.order_id` is the retailer's order number. `(retailer_id, order_id)` is unique because order numbers are unique within a retailer.
 - `shipments.id` is the internal primary key. Tracking number and shipping company are separate text fields. Tracking numbers are not globally unique because carriers may overlap or reuse them.
 
+## Application amendment: explicit retailer-account ranking
+
+The retailer/account relationship is one-to-many. Multiple accounts for one
+retailer are valid; the worker chooses the account with the lowest explicit
+`retailer_accounts.retailer_account_ranking` and pins that account for the run.
+It must not infer priority from IDs, email addresses or database return order.
+
+The rank is a required `integer` with no default. Negative values, zero and
+positive values are allowed: the approved rule is numeric ordering, not a
+positive-only or consecutive sequence. The unique key
+`(retailer_id, retailer_account_ranking)` prevents tied priorities within one
+retailer while allowing the same rank under another retailer. Existing
+`(retailer_id, email)` uniqueness, account/retailer consistency keys and historical
+order account references remain unchanged. No new table is introduced.
+
+Fresh installation uses the completed `NOT NULL` contract in `schema.sql`.
+Existing installations use the separately reviewed preparation and finalization
+sources under `migrations/20261022_retailer_account_ranking_*.sql`. Preparation
+adds a nullable column and the unique constraint; it deliberately supplies no
+ranks. An operator must review and explicitly populate the intended priority
+for every account before finalization validates the baseline and enforces
+`NOT NULL`. No migration fabricates preference from row numbers or account IDs.
+Keep the worker stopped between stages; runtime must reject nullable/incomplete
+ranking rather than choose an account from partial data.
+
+The worker reads the ranking field but does not manage account/rank records.
+Give its non-owning role the required `SELECT` access; administrator-only
+backfill/rank changes do not justify worker INSERT/UPDATE grants on
+`retailer_accounts`. No existing database has been upgraded or real ranks assigned. Subsequent
+user-authorized synthetic tests are recorded in the
+[database guide](README.md#offline-account-ranking-validation--22-october-2026).
+Earlier validation records below retain their original source/date scope.
+
 ## Order purchase details
 
 `orders` also stores these purchase details:

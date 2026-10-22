@@ -1,5 +1,27 @@
 # Implementation plan and evidence
 
+## 22 October 2026 — requested account-ranking offline validation
+
+Added `npm run test:retailer-accounts` and ran it alongside the existing relational
+suite against disposable PGlite. Current results, coverage, synthetic seed
+adaptation and native-psql limits are recorded once in the
+[database guide](../database/README.md#offline-account-ranking-validation--22-october-2026).
+No installed database, provider action, cutover or deployment was invoked.
+
+## 22 October 2026 — initial Amazon seed integrated into creation installer
+
+Added [seed_amazon_account.psql](../database/seed_amazon_account.psql) for the requested initial Amazon retailer/account at rank **1**, preserving required CCV and finalized ranking constraints. CCV arrives privately through `BFMR_INITIAL_ACCOUNT_CCV` and client-side COPY into a temporary table, with no tracked secret literal. It does not assign ranks to existing accounts or grant worker CCV reads.
+
+[bfmr-postgres-db-install.psql](../database/bfmr-postgres-db-install.psql) now includes the seed after both schemas under `bfmr_owner` and grants application SELECT on ranking without CCV/account writes. Existing installer ownership/password controls are preserved. Installer changes remain uninstalled; seed SQL/private-input checks have [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026). No installed database/provider actions or deployment occurred; earlier evidence retains its original scope. The [database guide](../database/README.md) owns installation instructions.
+
+## 22 October 2026 — ranked database-selected Amazon account
+
+The worker requires exactly one `retailers` row where `name = 'Amazon'`, then selects its account by `ORDER BY retailer_account_ranking ASC LIMIT 1`. Multiple accounts are valid; zero linked accounts stop startup. Schema source adds integer/non-null ranking unique within each retailer, without defaults/generated values or automatic assignment. Database rows supply IDs/email/rank without environment overrides or `ccv` reads. Pin the selected account for the run; changed selection stops rather than switches. Existing homepage/provider/checkout guards remain.
+
+Existing databases require reviewed nullable/unique preparation, operator-assigned rank backfill, then `NOT NULL` finalization; worker validation rejects the intermediate schema. Existing least-privilege roles need SELECT on ranking, without application rank updates. Ranking source remains uninstalled; see [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026) for current tests. Earlier evidence below retains its original schema/source scope. No installed database, provider, cutover or deployment action occurred.
+
+Current ledger/tracking automation covers one selected account per run. Existing orders retain original account associations; review outstanding orders on other accounts before changing priorities. Multi-account tracking and acceptance remain open rather than implied by 1:M account storage.
+
 ## 22 October 2026 — requested offline intake validation
 
 Added dedicated adapter, SQL-store, coordinator and integration tests under `npm run test:gmail-intake`. Synthetic providers and disposable embedded PostgreSQL exercise failure/recovery behavior without a native database or live provider. Current results, scope and remaining acceptance are recorded in [GMAIL_PRODUCTION_INTAKE.md](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026). Historical test totals below retain their original revisions and are not combined with these cases.

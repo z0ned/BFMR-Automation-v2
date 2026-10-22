@@ -55,6 +55,7 @@ CREATE TABLE retailers (
 CREATE TABLE retailer_accounts (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     retailer_id bigint NOT NULL,
+    retailer_account_ranking integer NOT NULL,
     email text NOT NULL,
     -- Text preserves leading zeros. Retention was explicitly requested for automation.
     ccv text NOT NULL,
@@ -62,6 +63,8 @@ CREATE TABLE retailer_accounts (
         CHECK (ccv ~ '^[0-9]{3,4}$'),
     CONSTRAINT retailer_accounts_retailer_email_uk
         UNIQUE (retailer_id, email),
+    CONSTRAINT retailer_accounts_retailer_ranking_uk
+        UNIQUE (retailer_id, retailer_account_ranking),
     -- Required target key for the orders account/retailer consistency FK.
     CONSTRAINT retailer_accounts_id_retailer_uk
         UNIQUE (id, retailer_id),
@@ -472,6 +475,8 @@ COMMENT ON COLUMN reimbursements.amount IS
     'Actual USD payment amount from the authoritative payment-sent email.';
 COMMENT ON COLUMN retailer_accounts.ccv IS
     'Card verification code retained for automation at user request; see DESIGN_DECISIONS.md.';
+COMMENT ON COLUMN retailer_accounts.retailer_account_ranking IS
+    'Explicit integer preference within the retailer; lowest rank is selected. No default or inferred backfill.';
 COMMENT ON TABLE email_deals IS
     'Email/deal associations only; a link does not authorize a reservation or purchase.';
 COMMENT ON TABLE reimbursements IS

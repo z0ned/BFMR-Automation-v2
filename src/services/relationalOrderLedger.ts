@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { RelationalDatabase } from '../db/relationalDatabase';
 import { numericToCents, type BusinessRepositories } from '../db/relationalRepositories';
-import type { DbId, JsonObject, JsonValue, OrderRecord, WorkflowRecord } from '../db/relationalTypes';
+import type { BusinessQueryable, DbId, JsonObject, JsonValue, OrderRecord, WorkflowRecord } from '../db/relationalTypes';
 import { AMAZON_ASIN, AMAZON_ORDER_ID, validateAmazonOrderRecord, type AmazonOrderLedger, type AmazonOrderRecord, type LedgerUpdateSource } from './amazonOrderLedger';
 
 export const AMAZON_ORDER_STATE_ACTION = 'AMAZON_ORDER_STATE';
@@ -14,7 +14,9 @@ export interface RelationalOrderLedgerOptions {
   retailerId?: DbId;
 }
 
-interface RetailerAccountIdentity { id: DbId; retailer_id: DbId; email: string; name: string; primary_url: string }
+interface RetailerAccountIdentity {
+  id: DbId; retailer_id: DbId; email: string; retailer_account_ranking: number; name: string; primary_url: string;
+}
 
 function text(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is missing; review required.`);
@@ -83,31 +85,53 @@ export function amazonOrderCoherenceProblem(order: {
   return null;
 }
 
-async function accountIdentity(tx: BusinessRepositories, options: RelationalOrderLedgerOptions): Promise<RetailerAccountIdentity> {
-  if (!/^[1-9]\d*$/.test(options.retailerAccountId) || !options.expectedAccountEmail?.trim()) {
-    throw new Error('An exact retailer account ID and expected account email are required.');
-  }
-  // Deliberately select no card security code or other payment data.
-  const result = await tx.query<RetailerAccountIdentity>(
-    `SELECT a.id::text, a.retailer_id::text, a.email, r.name, r.primary_url
-       FROM public.retailer_accounts a JOIN public.retailers r ON r.id=a.retailer_id
-      WHERE a.id=$1::bigint`, [options.retailerAccountId]);
-  if (result.rows.length !== 1) throw new Error('Configured retailer account is missing or ambiguous.');
-  const row = result.rows[0];
+/** Resolve the retailer independently: a join could hide a duplicate Amazon
+ * retailer with no accounts. Accounts are 1:M; the unique, required ranking
+ * selects the lowest one. Caller supplies a schema-validated transaction.
+ * Identity/ranking columns only; the worker has no need or grant to read ccv.
+ */
+export async function readRelationalAmazonAccount(tx: BusinessQueryable): Promise<RetailerAccountIdentity> {
+  const retailers = await tx.query<Pick<RetailerAccountIdentity, 'id' | 'name' | 'primary_url'>>(
+    'SELECT id::text, name, primary_url FROM public.retailers WHERE name=$1', ['Amazon']);
+  if (retailers.rows.length === 0) throw new Error('Amazon retailer is missing; provision it in the database before starting the worker.');
+  if (retailers.rows.length !== 1) throw new Error('Amazon retailer is ambiguous; exactly one database row named Amazon is required.');
+  const retailer = retailers.rows[0];
+  if (!/^[1-9]\d*$/.test(retailer.id) || retailer.name !== 'Amazon') throw new Error('Amazon retailer identity is invalid.');
   let homepage: URL;
-  try { homepage = new URL(row.primary_url); } catch { throw new Error('Configured retailer URL is invalid.'); }
-  if (row.email !== options.expectedAccountEmail.trim() ||
-      (options.retailerId !== undefined && row.retailer_id !== options.retailerId) ||
-      !/^amazon(?:\.com)?$/i.test(row.name.trim()) || homepage.protocol !== 'https:' ||
+  try { homepage = new URL(retailer.primary_url); } catch { throw new Error('Amazon retailer URL is invalid.'); }
+  if (homepage.protocol !== 'https:' ||
       !['amazon.com', 'www.amazon.com'].includes(homepage.hostname.toLowerCase()) ||
       homepage.username || homepage.password || homepage.port) {
+    throw new Error('Amazon retailer URL does not match the approved HTTPS site.');
+  }
+  const accounts = await tx.query<Pick<RetailerAccountIdentity, 'id' | 'retailer_id' | 'email' | 'retailer_account_ranking'>>(
+    `SELECT id::text, retailer_id::text, email, retailer_account_ranking
+       FROM public.retailer_accounts WHERE retailer_id=$1::bigint
+       ORDER BY retailer_account_ranking ASC LIMIT 1`, [retailer.id]);
+  if (accounts.rows.length === 0) throw new Error('Amazon retailer account is missing; provision it in the database before starting the worker.');
+  const account = accounts.rows[0];
+  if (!/^[1-9]\d*$/.test(account.id) || account.retailer_id !== retailer.id || typeof account.email !== 'string'
+      || account.email !== account.email.trim() || !/^[^\s@]+@[^\s@]+$/.test(account.email)
+      || !Number.isInteger(account.retailer_account_ranking) || account.retailer_account_ranking < -2147483648
+      || account.retailer_account_ranking > 2147483647) {
+    throw new Error('Amazon retailer account identity is invalid.');
+  }
+  return { ...account, name: retailer.name, primary_url: retailer.primary_url };
+}
+
+async function accountIdentity(tx: BusinessRepositories, options?: RelationalOrderLedgerOptions): Promise<RetailerAccountIdentity> {
+  const row = await readRelationalAmazonAccount(tx);
+  // Pin the identity read from SQL at startup. Re-resolve on each operation so
+  // a different top-ranked account stops work instead of switching a live run.
+  if (options && (row.id !== options.retailerAccountId || row.email !== options.expectedAccountEmail
+      || (options.retailerId !== undefined && row.retailer_id !== options.retailerId))) {
     throw new Error('Configured Amazon retailer/account identity does not match; no business data changed.');
   }
   return row;
 }
 
-/** Validate configured mapping before opening any provider/browser workflow. */
-export function validateRelationalRetailerAccount(db: RelationalDatabase, options: RelationalOrderLedgerOptions) {
+/** Resolve the database mapping before opening any provider/browser workflow. */
+export function validateRelationalRetailerAccount(db: RelationalDatabase, options?: RelationalOrderLedgerOptions) {
   return db.withTransaction(tx => accountIdentity(tx, options));
 }
 

@@ -5,6 +5,7 @@ import { readAmazonPurchaseEvidence } from './amazonEvaluation';
 import { readRecentReservedRows } from './bfmrTrackerApi';
 import { normalizeTrackerReservation } from './relationalTrackerTerms';
 import { readCanonicalDealTerms } from './relationalDealTerms';
+import { readRelationalAmazonAccount } from './relationalOrderLedger';
 
 interface TriggerEmail { id: string; subject: string; receivedAt: string; emailType: string }
 export interface PreparedRelationalReservation {
@@ -20,6 +21,7 @@ export interface PreparedRelationalReservation {
 export async function prepareRelationalReservation(runtime: RelationalRuntime, input: {
   dealUrl: string; dealId: string; title: string; email?: TriggerEmail; correlationId?: string;
 }): Promise<PreparedRelationalReservation> {
+  await runtime.verifyRetailerAccount();
   const deal = await readCanonicalDealTerms(input.dealUrl, input.dealId, input.title);
   const correlationId = input.correlationId ?? randomUUID();
   await runtime.db.withTransaction(async tx => {
@@ -80,13 +82,16 @@ export async function recordVerifiedAmazonSupplier(runtime: RelationalRuntime, r
     const reservation = await tx.reservations.findByBfmrId(reference.reserveId);
     const deal = await tx.deals.findByBfmrId(reference.dealId);
     if (!reservation || !deal || reservation.deal_id !== deal.id) throw new Error('Supplier result has no matching stored reservation.');
-    const account = await tx.query<{ retailer_id: string }>('SELECT retailer_id FROM public.retailer_accounts WHERE id=$1', [runtime.retailerAccountId]);
-    if (account.rows.length !== 1) throw new Error('Configured retailer account is missing.');
-    await tx.deals.ensureRetailer(deal.id, account.rows[0].retailer_id);
+    const account = await readRelationalAmazonAccount(tx);
+    if (account.id !== runtime.retailerAccount.id || account.retailer_id !== runtime.retailerAccount.retailer_id
+        || account.email !== runtime.retailerAccount.email) {
+      throw new Error('Amazon retailer/account identity changed during this run; review required.');
+    }
+    await tx.deals.ensureRetailer(deal.id, account.retailer_id);
     await tx.evidence.appendWorkflow({ reservationId: reservation.id, correlationId: randomUUID(),
       actionType: 'SUPPLIER_EVALUATION', phase: 'CONFIRMED', outcome: 'AMAZON_PRESENT',
       evidence: { bfmr_reservation_id: reference.reserveId, bfmr_deal_id: reference.dealId,
-        retailer_id: account.rows[0].retailer_id, exact_supplier_read: true } });
+        retailer_id: account.retailer_id, exact_supplier_read: true } });
   });
 }
 

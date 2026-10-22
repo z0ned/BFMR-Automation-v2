@@ -34,6 +34,7 @@ export function relationalStartupHooks(runtime: RelationalRuntime) {
     async beforeSubmit(deal: StartupDeal) {
       prepared = await prepareRelationalReservation(runtime, { dealUrl: deal.url, dealId: deal.id, title: deal.title });
       await runtime.ownership.verifyOwnership();
+      await runtime.verifyRetailerAccount();
     },
     async afterConfirmed(reference: ReservationReference | undefined) {
       if (!reference) throw new Error('Startup confirmation omitted exact reservation identity.');

@@ -43,6 +43,7 @@ ALTER DEFAULT PRIVILEGES
 
 \i /tmp/bfmr-schema.sql
 \i /tmp/bfmr-gmail-intake.sql
+\i /tmp/bfmr-seed-amazon-account.psql
 
 BEGIN;
 
@@ -69,7 +70,7 @@ GRANT SELECT ON
     public.gmail_intake_work
 TO bfmr_app;
 
-GRANT SELECT (id, retailer_id, email)
+GRANT SELECT (id, retailer_id, email, retailer_account_ranking)
     ON public.retailer_accounts TO bfmr_app;
 
 -- Insert only the columns written by the current application.

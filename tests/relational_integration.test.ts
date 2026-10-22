@@ -46,7 +46,7 @@ const paymentNotice = (amountCents = 8000): VerifiedPaymentNotice => ({
 async function amazonAccount(f: Awaited<ReturnType<typeof createRelationalFixture>>) {
   return f.db.withTransaction(async tx => {
     const retailer = (await tx.query<{ id: string }>("INSERT INTO public.retailers(name,primary_url) VALUES('Amazon','https://amazon.com') RETURNING id")).rows[0];
-    const account = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv) VALUES($1,'synthetic@example.invalid',repeat('0',3)) RETURNING id", [retailer.id])).rows[0];
+    const account = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv,retailer_account_ranking) VALUES($1,'synthetic@example.invalid',repeat('0',3),1) RETURNING id", [retailer.id])).rows[0];
     await tx.deals.ensureRetailer((await tx.deals.findByBfmrId('D101'))!.id, retailer.id);
     return { retailerAccountId: account.id, expectedAccountEmail: 'synthetic@example.invalid' };
   });
@@ -230,7 +230,7 @@ test('orders use relational identity and allow the same account/deal across sepa
   const account = await f.db.withTransaction(async tx => {
     const retailer = (await tx.query<{ id: string }>("INSERT INTO public.retailers(name,primary_url) VALUES('Amazon','https://www.amazon.com') RETURNING id")).rows[0];
     // Synthetic placeholder required by the current DDL; no actual card data is used or selected.
-    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv) VALUES($1,'synthetic@example.invalid',repeat('0',3)) RETURNING id", [retailer.id])).rows[0];
+    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv,retailer_account_ranking) VALUES($1,'synthetic@example.invalid',repeat('0',3),1) RETURNING id", [retailer.id])).rows[0];
     const deal = await tx.deals.findByBfmrId('D101');
     await tx.deals.ensureRetailer(deal!.id, retailer.id);
     return { retailerId: retailer.id, retailerAccountId: value.id, expectedAccountEmail: 'synthetic@example.invalid' };
@@ -257,7 +257,7 @@ test('shipment conflicts remain review evidence and never add or overwrite autho
   await capture(f);
   const options = await f.db.withTransaction(async tx => {
     const retailer = (await tx.query<{ id: string }>("INSERT INTO public.retailers(name,primary_url) VALUES('Amazon','https://amazon.com') RETURNING id")).rows[0];
-    const account = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv) VALUES($1,'synthetic@example.invalid',repeat('0',3)) RETURNING id", [retailer.id])).rows[0];
+    const account = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv,retailer_account_ranking) VALUES($1,'synthetic@example.invalid',repeat('0',3),1) RETURNING id", [retailer.id])).rows[0];
     await tx.deals.ensureRetailer((await tx.deals.findByBfmrId('D101'))!.id, retailer.id);
     return { retailerAccountId: account.id, expectedAccountEmail: 'synthetic@example.invalid' };
   });
@@ -464,7 +464,7 @@ test('cutover preserves historical canceled and non-unit status without manufact
   const f = await fixture(t);
   const account = await f.db.withTransaction(async tx => {
     const retailer = (await tx.query<{ id: string }>("INSERT INTO public.retailers(name,primary_url) VALUES('Amazon','https://amazon.com') RETURNING id")).rows[0];
-    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv) VALUES($1,'synthetic@example.invalid',repeat('0',3)) RETURNING id", [retailer.id])).rows[0];
+    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv,retailer_account_ranking) VALUES($1,'synthetic@example.invalid',repeat('0',3),1) RETURNING id", [retailer.id])).rows[0];
     return { retailerId: retailer.id, retailerAccountId: value.id, expectedAccountEmail: 'synthetic@example.invalid' };
   });
   const item = (id: string, quantity: number, statusId: string, canceledQuantity: number) => ({
@@ -500,7 +500,7 @@ test('cutover keeps active orders with unsupported Amazon identities outside the
   const f = await fixture(t);
   const account = await f.db.withTransaction(async tx => {
     const retailer = (await tx.query<{ id: string }>("INSERT INTO public.retailers(name,primary_url) VALUES('Amazon','https://amazon.com') RETURNING id")).rows[0];
-    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv) VALUES($1,'synthetic@example.invalid',repeat('0',3)) RETURNING id", [retailer.id])).rows[0];
+    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv,retailer_account_ranking) VALUES($1,'synthetic@example.invalid',repeat('0',3),1) RETURNING id", [retailer.id])).rows[0];
     return { retailerId: retailer.id, retailerAccountId: value.id, expectedAccountEmail: 'synthetic@example.invalid' };
   });
   const item = (id: string, orderId: string, productIdentifier: string) => ({
@@ -542,7 +542,7 @@ test('cutover reports incoherent order and shipment states before any acceptance
   const f = await fixture(t);
   const account = await f.db.withTransaction(async tx => {
     const retailer = (await tx.query<{ id: string }>("INSERT INTO public.retailers(name,primary_url) VALUES('Amazon','https://amazon.com') RETURNING id")).rows[0];
-    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv) VALUES($1,'synthetic@example.invalid',repeat('0',3)) RETURNING id", [retailer.id])).rows[0];
+    const value = (await tx.query<{ id: string }>("INSERT INTO public.retailer_accounts(retailer_id,email,ccv,retailer_account_ranking) VALUES($1,'synthetic@example.invalid',repeat('0',3),1) RETURNING id", [retailer.id])).rows[0];
     return { retailerId: retailer.id, retailerAccountId: value.id };
   });
   const shipment = { trackingNumber: '1Z0000000000000001', shippingCompany: 'UPS', quantity: 1,

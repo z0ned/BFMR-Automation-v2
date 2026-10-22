@@ -1,5 +1,31 @@
 # Decision register
 
+## 22 October 2026 — focused offline account tests and publication authorized
+
+The user approved adding/running focused offline account-selection, ranking,
+upgrade and seed tests, followed by committing and pushing the completed work.
+Use synthetic identities and disposable PGlite; private-input shell checks use
+only synthetic environment values. This does not authorize an installed database
+upgrade, real rank backfill, live provider action or deployment. See the
+[database guide](../database/README.md#offline-account-ranking-validation--22-october-2026)
+for evidence and limits.
+
+## 22 October 2026 — explicit initial Amazon retailer/account seed
+
+The user requested the initial Amazon retailer/account in the creation workflow with rank **1**, retaining required CCV. [The seed source](../database/seed_amazon_account.psql) keeps the requested initial identity in that file and receives CCV only through private `BFMR_INITIAL_ACCOUNT_CCV` and client-side COPY into a temporary table. Never commit a CCV literal or print its value. Worker CCV reads remain forbidden; fresh integer/non-null/unique ranking and reviewed existing-account backfill remain required. An explicit seed is not a rank default or general autofill.
+
+[The creation installer](../database/bfmr-postgres-db-install.psql) includes the seed under `bfmr_owner` after both schemas and grants worker SELECT on ranking, preserving existing ownership/password controls and withholding CCV/account writes. Source changes remain uninstalled; [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026) records synthetic validation without installed database/provider actions or deployment. See [database/README.md](../database/README.md) for the operator boundary.
+
+## 22 October 2026 — ranked database selection of the Amazon account
+
+The user clarified that a retailer has multiple accounts. Require exactly one `retailers` row where `name = 'Amazon'`, then select its account using `ORDER BY retailer_account_ranking ASC LIMIT 1`. Multiple accounts are valid; zero linked accounts stop startup. Add integer `retailer_account_ranking NOT NULL` and `UNIQUE (retailer_id, retailer_account_ranking)`, without default/generated values or automatic assignment. No positivity or consecutive-rank requirement was added. This supersedes the interim exactly-one-account interpretation.
+
+IDs, stored email and rank come only from the database, without environment overrides or a `ccv` read. Pin the chosen account for the worker run; changed selection stops work, never silently switches. Existing provider/checkout/homepage guards remain independent. Existing least-privilege roles need SELECT on ranking, without application permission to update it.
+
+The current worker handles one selected account per run, not multi-account tracking. Keep existing orders tied to their original account; review outstanding orders on other accounts before reprioritizing because they may be outside the next run's selected ledger projection. No tracking redesign is implied by the selection change.
+
+Existing-database upgrade source is two-stage: nullable ranking plus uniqueness, then reviewed manual backfill, then `NOT NULL` finalization. No inferred/default ranks; runtime schema validation refuses the unfinished contract. This authorizes source/schema/template/documentation changes, not installing SQL, backfilling an actual database, provider actions, cutover or deployment. Ranking source remains uninstalled; subsequent user-authorized [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026) records the focused tests. Earlier dated results retain their original schema/source scope.
+
 ## 22 October 2026 — offline intake testing authorized
 
 The user explicitly requested adding and running offline intake tests. Use synthetic provider adapters and disposable PGlite with the actual operational SQL; block network access and private provider/database configuration in these suites. Optional typed persistence injection preserves production defaults. This authorizes offline verification, not native installation, legacy cutover, provider configuration, a live worker or deployment. Evidence is recorded in [GMAIL_PRODUCTION_INTAKE.md](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026).

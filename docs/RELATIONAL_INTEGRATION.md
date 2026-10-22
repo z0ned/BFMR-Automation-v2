@@ -1,6 +1,6 @@
 # Relational business persistence — 20 October 2026
 
-This runbook describes the application integration source authorized on 20 October 2026. PostgreSQL is intended to run locally on the mini-PC. The authoritative 16-table contract now lives in [database/schema.sql](../database/schema.sql) in this repository, including `deal_retailers` and the immutable-payout guard. Both upgrades and the preserved design notes are beside it; [database/README.md](../database/README.md) records provenance and installation boundaries. Consolidation on 21 October 2026 copied those files without changes from the former `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`, after the guard merge. No second checkout is required. The current v22 design/implementation pair describes this contract and the source/offline evidence; older conceptual fields and order-linked multiple-payment examples are superseded.
+This runbook describes the application integration source authorized on 20 October 2026, with the 22 October ranked-account selection amendment below. PostgreSQL is intended to run locally on the mini-PC. The authoritative 16-table contract lives in [database/schema.sql](../database/schema.sql), including `deal_retailers`, the immutable-payout guard and required account ranking. Upgrades and preserved design notes are beside it; [database/README.md](../database/README.md) records current/historical hashes and installation boundaries. Consolidation on 21 October copied the original files unchanged from former `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`; the ranking source now changes that schema and adds a two-stage upgrade. No second checkout is required. The current v22 pair describes this contract; older conceptual fields and order-linked multiple-payment examples are superseded.
 
 The application does not install that schema, apply migrations, or import historical records at startup. A deployed schema/cutover and provider-contract acceptance remain separate from source implementation. No live provider or production database was invoked for this work. User-authorized offline results are recorded below, dated 21 October 2026.
 
@@ -13,7 +13,7 @@ The application does not install that schema, apply migrations, or import histor
 | `src/db/relationalRepositories.ts` | Parameterized reservation, order, shipment, reimbursement, email/deal, observation, workflow-evidence and sync-run operations; exact idempotency checks; integer-cent conversion. |
 | `src/db/relationalDatabase.ts` | Read-only schema-contract inspection and single-client serializable business transactions; account ownership verification; no automatic DDL or transaction retry. |
 | `src/db/postgresDatabase.ts` | Dedicated `PostgresAccountOwnership` advisory-lock path plus the separately retained legacy orchestration aggregate implementation. |
-| `src/services/relationalRuntime.ts` | Startup validation of schema, account ownership, accepted cutover/source hash, and the exact configured Amazon retailer account. |
+| `src/services/relationalRuntime.ts` | Startup validation of schema, account ownership, accepted cutover/source hash, and the uniquely selected database Amazon retailer/account. |
 | `src/services/relationalDealTerms.ts`, `relationalTrackerTerms.ts`, `relationalReservations.ts` | Independently observed current deal terms, exact new-reservation financial capture, durable reservation intent/confirmation, supplier eligibility and confirmed cancellation evidence. |
 | `src/services/bfmrRelationalSync.ts`, `relationalExposure.ts` | Complete-read reconciliation and retained conflicts; immutable creation payouts; fresh provider/payment coverage before exposure calculation. |
 | `src/services/relationalOrderLedger.ts` | Relational order/shipment records exposed through the existing ledger interface; append-only operational snapshots and exact provider IDs. |
@@ -34,22 +34,42 @@ These stores remain behind explicit store interfaces. They are not one database 
 1. Install/review the schema and payout guard separately on the local PostgreSQL database. The startup validator checks required columns/types, keys, relevant checks, lookup mappings, the stored generated payout expression and the enabled `ALWAYS` immutable-input trigger. Missing or altered contract objects stop startup; there is no automatic repair.
 2. Use a non-owning application role with the required read/insert/permitted-update grants. Do not grant schema/trigger management, reservation deletion/truncation, or reservation identity reassignment. Provisioning roles and grants is outside the startup code.
 3. Reconcile historical records and accept a cutover manifest through the controlled path below. Startup requires exactly one matching `RELATIONAL_CUTOVER` / `CONFIRMED` / `ACCEPTED` workflow marker, including account and legacy ledger hash. Missing/multiple/conflicting markers or changed source bytes stop the writer.
-4. Configure the existing Amazon retailer/account row. Startup verifies the account ID, exact expected email, retailer identity and approved HTTPS Amazon homepage. It does not create an account or read its card-security-code field.
+4. Require exactly one `retailers` row where `name = 'Amazon'`, then select its account with `WHERE retailer_id = <selected retailer ID> ORDER BY retailer_account_ranking ASC LIMIT 1`. Multiple accounts are valid; zero linked accounts stop startup. The database supplies IDs, stored email and rank without retailer-account environment values. Startup validates required integer/non-null/per-retailer unique ranking with no default/generated value, and the approved HTTPS Amazon homepage. Selection reads only account `id`, `retailer_id`, `email` and `retailer_account_ranking`; it neither creates accounts/assigns ranks nor selects `ccv`. Existing provider/browser identity guards remain independent.
 5. Preserve the dedicated account advisory lock. Ownership loss stops processing and closes the controlled browser. All provider identity, provenance and layout contracts remain independent release gates.
 
 | Variable | Meaning |
 | --- | --- |
 | `DATABASE_URL` | Private connection configuration for the intended local mini-PC PostgreSQL database. Do not log or commit it. |
 | `BFMR_EXPECTED_ACCOUNT` | Existing exact BFMR account identity; normalized for account-lock/cutover association. Browser/API alignment must still be proved. |
-| `BFMR_RETAILER_ACCOUNT_ID` | Existing `retailer_accounts.id` for the approved Amazon account. |
-| `BFMR_RETAILER_ACCOUNT_EMAIL` | Exact expected stored retailer-account email; no inferred account selection. |
 | `BFMR_CREATION_TERMS_CONTRACT_VALIDATED` | Leave unset until the canonical deal and newly confirmed reservation financial-field contracts are verified. Only `YES` enables the creation-term adapter. |
 | `BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED` | Existing gate, unchanged: only `YES` permits action-driving exposure after verified full tracker/payment semantics. |
 | `BFMR_AMAZON_ORDER_LEDGER_PATH` | Existing private legacy order file used as a cutover source/hash boundary. Preserve its accepted bytes; it is not the active email runner's business writer after cutover. |
 
 Existing Gmail queue, batch, status, browser, notification and credential configuration remains required. None of these variables grants authority to invoke a purchase, reservation, cancellation or provider update.
 
+**22 October 2026 selection update:** The ranked database lookup replaces the former environment-selected identity and the interim exactly-one-account requirement. Startup pins the selected account for the run; ledger operations, supplier associations, reservation submissions and Amazon checkout revalidate it and stop if the chosen identity changes, without switching to another account. Stop the worker before changing accounts/ranks: these checks do not make SQL reads and provider actions atomic. Ranking source remains uninstalled; [offline ranking evidence](../database/README.md#offline-account-ranking-validation--22-october-2026) records user-authorized synthetic tests without installed database/provider actions. The dated offline evidence below applies to its recorded schema/source revision.
+
+The worker automates one selected account per run, not tracking across every account. After a priority change and restart, orders on the previously selected account can be outside the current ledger projection. Existing orders retain their original retailer-account identity; never relabel them to the new selection. Before changing priorities, review and reconcile outstanding orders on every affected account and establish how their continuing tracking will be handled. Multi-account tracking and acceptance remain open.
+
 The creation adapter uses the canonical trusted `GET /api/v2/deals/{slug}` read, matching deal ID, slug when present, and the normalized visible title. Supported current per-item payout aliases are `reimbursement_amount`, `payout_price` and `payout`; all supplied values must agree. Current deal terms and reservation creation terms are independent facts. The tracker normalizer checks quantity/status aliases, unit payout and whole-reservation totals for agreement. Unsupported or ambiguous fields stop capture; it does not substitute today's deal rate for missing legacy creation terms.
+
+## Retailer account ranking upgrade — 22 October 2026
+
+`retailer_accounts.retailer_account_ranking` is an integer, `NOT NULL`, with `UNIQUE (retailer_id, retailer_account_ranking)`. The lowest value wins; ranks need not be positive or consecutive, and different retailers may reuse a rank. Multiple accounts per retailer are supported. There is no default, generated rank, ID-based inference or automatic assignment.
+
+For a fresh database, review the current full schema before separately authorized installation; account provisioning must supply actual reviewed ranks. For an existing database, stop the worker, preserve backups and review the actual baseline before these separately authorized stages:
+
+1. Apply [20261022_retailer_account_ranking_prepare.sql](../database/migrations/20261022_retailer_account_ranking_prepare.sql): add nullable ranking plus per-retailer uniqueness. This does not assign any priorities.
+2. Review every existing account and explicitly backfill its intended integer priority through operator maintenance. Resolve every NULL and within-retailer duplicate; preserve exact historical account/order associations.
+3. Apply [20261022_retailer_account_ranking_finalize.sql](../database/migrations/20261022_retailer_account_ranking_finalize.sql): refuse unresolved NULLs and enforce `NOT NULL`. Worker schema validation refuses startup until this final contract is installed.
+
+Existing least-privilege application roles additionally need `SELECT (retailer_account_ranking)` on `retailer_accounts`. Keep account/rank maintenance outside the application role; do not grant it permission to update rankings or select `ccv`. Installed roles, constraints and reviewed account/rank data still need separately scoped acceptance. Neither these instructions nor source presence applies SQL or authorizes a live worker.
+
+For an existing application role named `bfmr_app`, the additional reviewed grant is below; adapt the role name to the actual installation before separately authorized application:
+
+```sql
+GRANT SELECT (retailer_account_ranking) ON public.retailer_accounts TO bfmr_app;
+```
 
 ## Creation, reconciliation and payments
 
