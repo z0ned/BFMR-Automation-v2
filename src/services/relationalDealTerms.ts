@@ -33,3 +33,38 @@ export async function readCanonicalDealTerms(dealUrl: string, expectedDealId: st
   if (!amounts.length || amounts.some(value => value !== amounts[0])) throw new Error('Current deal payout is missing or conflicting.');
   return { slug, title: normalize(row.title), currentPayoutCents: amounts[0] };
 }
+
+/** Calls BFMR Deal API /api/v2/deals/{slug} to retrieve the live, up-to-date payout_price in cents. */
+export async function fetchLiveBfmrDealPayout(
+  slug: string,
+  request: typeof fetch = fetch,
+): Promise<number> {
+  const key = process.env.BFMR_API_KEY, secret = process.env.BFMR_API_SECRET;
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (key && secret) {
+    headers['API-KEY'] = key;
+    headers['API-SECRET'] = secret;
+  }
+  const cleanSlug = encodeURIComponent(slug.trim());
+  const response = await request(`https://api.bfmr.com/api/v2/deals/${cleanSlug}`, {
+    headers,
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    throw new Error(`BFMR Deal API error (HTTP ${response.status}) fetching payout for slug "${slug}"`);
+  }
+  const payload: unknown = await response.json();
+  const deal = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? ((payload as Record<string, unknown>).deal ?? payload) : null;
+  if (!deal || typeof deal !== 'object' || Array.isArray(deal)) {
+    throw new Error(`Canonical deal terms missing in API response for slug "${slug}"`);
+  }
+  const row = deal as Record<string, unknown>;
+  const amounts = [row.reimbursement_amount, row.payout_price, row.payout]
+    .filter(value => value !== undefined && value !== null).map(usdToCents);
+  if (!amounts.length) {
+    throw new Error(`Current deal payout is missing in API response for slug "${slug}"`);
+  }
+  return amounts[0];
+}

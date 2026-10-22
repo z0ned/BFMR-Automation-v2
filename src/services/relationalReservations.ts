@@ -4,7 +4,7 @@ import type { ReservationReference } from './amazonEvaluation';
 import { readAmazonPurchaseEvidence } from './amazonEvaluation';
 import { readRecentReservedRows } from './bfmrTrackerApi';
 import { normalizeTrackerReservation } from './relationalTrackerTerms';
-import { readCanonicalDealTerms } from './relationalDealTerms';
+import { readCanonicalDealTerms, fetchLiveBfmrDealPayout } from './relationalDealTerms';
 import { readRelationalAmazonAccount } from './relationalOrderLedger';
 import { assertEmailSinceCutover } from './relationalCutover';
 
@@ -117,18 +117,47 @@ export async function recordConfirmedCancellation(runtime: RelationalRuntime, re
   });
 }
 
-export async function readLockedPurchaseEvidence(runtime: RelationalRuntime, reference: ReservationReference) {
-  const observed = await readAmazonPurchaseEvidence(reference);
-  const locked = await runtime.sync.readLockedPayoutCents(reference);
-  if (!observed || observed.payoutCents !== locked) {
-    await runtime.db.withTransaction(async tx => {
-      const reservation = await tx.reservations.findByBfmrId(reference.reserveId);
-      await tx.evidence.appendWorkflow({ reservationId: reservation?.id, correlationId: randomUUID(),
-        actionType: 'CHECKOUT_PAYOUT', phase: 'REVIEW', outcome: 'PROVIDER_PAYOUT_CONFLICT',
-        evidence: { bfmr_reservation_id: reference.reserveId, locked_payout_cents: locked,
-          observed_payout_cents: observed?.payoutCents ?? null } });
-    });
-    throw new Error('Provider payout is missing or conflicts with locked creation terms; reservation retained for review.');
-  }
-  return { ...observed, payoutCents: locked };
+export async function readLockedPurchaseEvidence(
+  runtime: RelationalRuntime,
+  reference: ReservationReference,
+  dependencies: {
+    fetchLivePayout?: typeof fetchLiveBfmrDealPayout;
+    readAmazonEvidence?: typeof readAmazonPurchaseEvidence;
+  } = {},
+) {
+  const observed = await (dependencies.readAmazonEvidence ?? readAmazonPurchaseEvidence)(reference);
+  if (!observed) throw new Error('Live Amazon purchase evidence could not be read.');
+  let livePayoutCents: number | null = null;
+
+  await runtime.db.withTransaction(async tx => {
+    const reservation = await tx.reservations.findByBfmrId(reference.reserveId);
+    if (!reservation) throw new Error('Checkout reservation is missing in database.');
+    const deal = await tx.deals.findByBfmrId(reference.dealId);
+    if (!deal) throw new Error('Checkout deal is missing in database.');
+
+    try {
+      const fetcher = dependencies.fetchLivePayout ?? fetchLiveBfmrDealPayout;
+      livePayoutCents = await fetcher(deal.slug);
+      await tx.reservations.updatePayout(reservation.id, livePayoutCents);
+      await tx.evidence.appendWorkflow({
+        reservationId: reservation.id,
+        correlationId: randomUUID(),
+        actionType: 'CHECKOUT_PAYOUT',
+        phase: 'CONFIRMED',
+        outcome: 'PAYOUT_REFRESHED',
+        evidence: {
+          bfmr_reservation_id: reference.reserveId,
+          bfmr_deal_id: reference.dealId,
+          slug: deal.slug,
+          previous_payout_cents: Math.round(Number(reservation.payout_per_item) * 100),
+          live_payout_cents: livePayoutCents,
+        },
+      });
+    } catch {
+      // Fall back to stored payout if live network call fails
+      livePayoutCents = Math.round(Number(reservation.payout_per_item) * 100);
+    }
+  });
+
+  return { ...observed, payoutCents: livePayoutCents ?? observed.payoutCents };
 }

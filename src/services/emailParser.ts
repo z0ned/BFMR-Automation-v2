@@ -169,8 +169,27 @@ export function parseIncomingEmail(raw: {
     };
   }
 
-  const isSingleDeal = !isPaymentNotice && isNewDealAnnouncement && deals.size === 1 && !isMultiDeal && !isAdditionalSlotNotice;
-  const isMultiDealAnnouncement = !isPaymentNotice && isNewDealAnnouncement && isMultiDeal && !isAdditionalSlotNotice &&
+  const isPayoutUpdate =
+    /\b(?:we increased our payout|payout increase|increased our payout|above retail)\b/i.test(readableBody) ||
+    /\bpayout increase\b/i.test(subject);
+
+  const isDealClosing =
+    /\b(?:closing\s*-\s*|deal deadline|deal closing|closing soon)\b/i.test(readableBody) ||
+    /\bclosing\b/i.test(subject);
+
+  const isInformationalUpdate =
+    !isPaymentNotice && (bodyIsUpdate || isPayoutUpdate || isDealClosing || isAdditionalSlotNotice);
+
+  let informationalType: IntakeEmail['informationalType'] = undefined;
+  if (isInformationalUpdate) {
+    if (isPayoutUpdate) informationalType = 'PAYOUT_INCREASE';
+    else if (isAdditionalSlotNotice) informationalType = 'ADDITIONAL_SLOTS';
+    else if (isDealClosing) informationalType = 'CLOSING';
+    else informationalType = 'DEAL_UPDATE';
+  }
+
+  const isSingleDeal = !isPaymentNotice && !isInformationalUpdate && isNewDealAnnouncement && deals.size === 1 && !isMultiDeal && !isAdditionalSlotNotice;
+  const isMultiDealAnnouncement = !isPaymentNotice && !isInformationalUpdate && isNewDealAnnouncement && isMultiDeal && !isAdditionalSlotNotice &&
     deals.size >= 2 && announcedCount === deals.size;
 
   // Only an explicit body field is enough to identify the retailer. Retailer
@@ -199,10 +218,12 @@ export function parseIncomingEmail(raw: {
     rawBody: body,
     isSingleDeal,
     isAdditionalSlotNotice,
-    isMultiDeal: !isPaymentNotice && isMultiDeal,
+    isMultiDeal: !isPaymentNotice && !isInformationalUpdate && isMultiDeal,
     isMultiDealAnnouncement,
     isPaymentNotice,
     paymentNotice,
+    isInformationalUpdate,
+    informationalType,
     deals: [...deals.values()].map(deal => ({ canonicalDealId: deal.id, dealUrl: deal.url, ...(deal.title ? { dealTitle: deal.title } : {}) })),
     dealUrl,
     canonicalDealId,

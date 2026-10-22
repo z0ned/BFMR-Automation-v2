@@ -26,4 +26,6 @@ export type IntakeEmail = {
     paidAt: string;
     paymentReference?: string;
   };
+  isInformationalUpdate?: boolean;
+  informationalType?: 'PAYOUT_INCREASE' | 'ADDITIONAL_SLOTS' | 'CLOSING' | 'DEAL_UPDATE';
 };

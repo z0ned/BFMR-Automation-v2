@@ -103,6 +103,36 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
     return;
   }
 
+  if (parsed.isInformationalUpdate) {
+    await runtime.db.withTransaction(async tx => {
+      const emailRecord = await tx.emails.upsert({
+        gmailMessageId: email.id,
+        subject: email.subject,
+        emailType: parsed.informationalType || 'DEAL_UPDATE',
+        receivedAt: email.receivedAt,
+      });
+      for (const d of parsed.deals) {
+        const dealRecord = await tx.deals.findByBfmrId(d.canonicalDealId);
+        if (dealRecord) {
+          await tx.emails.linkDeal(emailRecord.id, dealRecord.id, parsed.informationalType || 'DEAL_UPDATE');
+        }
+      }
+      await tx.evidence.appendWorkflow({
+        emailId: emailRecord.id,
+        correlationId: randomUUID(),
+        actionType: 'INFORMATIONAL_EMAIL_INGESTION',
+        phase: 'CONFIRMED',
+        outcome: parsed.informationalType || 'DEAL_UPDATE',
+        evidence: {
+          schemaVersion: 1,
+          subject: email.subject,
+          dealsCount: parsed.deals.length,
+        },
+      });
+    });
+    return;
+  }
+
   if (!parsed.isSingleDeal && !parsed.isMultiDealAnnouncement) throw new Error('Unsupported new-deal announcement.');
   const store = new DealEmailWorkflowStore(runtime.db, runtime.account);
   let checkpoint = await store.claim(email, parsed.isMultiDealAnnouncement ? 'MULTI_DEAL' : 'SINGLE_DEAL',

@@ -157,6 +157,14 @@ export class BusinessRepositories implements BusinessQueryable {
       if (!row) throw new BusinessConflictError('Cannot update a missing reservation.');
       return row;
     },
+    updatePayout: async (reservationId: DbId, payoutPerItemCents: number): Promise<ReservationRecord> => {
+      const row = await this.one<ReservationRecord>(
+        'UPDATE public.reservations SET payout_per_item=$2::numeric WHERE id=$1 RETURNING *',
+        [id(reservationId), centsToNumeric(payoutPerItemCents)]
+      );
+      if (!row) throw new BusinessConflictError('Cannot update payout of a missing reservation.');
+      return row;
+    },
   };
 
   readonly orders = {
