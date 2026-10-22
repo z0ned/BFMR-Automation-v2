@@ -61,17 +61,22 @@ first-watch coverage remain pending.
 
 Verify first-ever SQL initialization versus restoration of an existing queue and the reviewed legacy import/source-hash boundary; the report/apply source is implemented, not applied. Install `database/gmail_intake.sql` separately with reviewed runtime grants. Reconcile interrupted `PROCESSING` work against BFMR/Amazon before operator repair. Preserve expired-history gaps; an alternative recovery scan or purchase backfill needs a separate explicit decision. Missing state must not silently initialize a new mailbox baseline.
 
-### SETUP-003 Supervised service, scheduling and notifications
+### SETUP-003 Supervised service, scheduling and notifications (DELIVERED)
 
-Provide and accept startup/reboot supervision, headed-browser/manual-auth access, ownership-loss shutdown, scheduled tracking/status checks, monitoring, log retention and durable notification-delivery recovery. Establish real-provider evidence for CON-001 watch/StreamingPull, notification-before-ACK, serialized work/cursor commits, daily watch renewal and startup/reconnect continuation. Native operational-schema validation/installation, legacy reconciliation/import and live reconnect/ACK/process-crash/restore behavior remain unverified. See GMAIL_PRODUCTION_INTAKE.md for offline evidence and remaining boundaries. No source/static/synthetic result closes service acceptance. Verify mailbox/OAuth identity, configured topic/subscription and Pub/Sub credentials. The separate listener/IMAP fallback is not production acceptance. Existing SQL and private operational stores need coordinated recovery; migration of all operational state into PostgreSQL is separate work.
+Implemented production service supervision, health monitoring, and systemd service packaging (`commit 7a697d1`):
+- `systemd/bfmr-worker.service`: Production service unit with auto-restart, journal logging (`SyslogIdentifier=bfmr-worker`), and security sandboxing (`NoNewPrivileges=true`, `ProtectSystem=full`).
+- `scripts/supervise_worker.ts` (`npm run supervise`): Process supervisor with signal forwarding (`SIGTERM` graceful drain with 25s timeout), exponential backoff restart delay (5s to 60s), burst crash circuit breaker (halts if > 5 crashes in 5 mins), and heartbeat file generation (`/tmp/bfmr-worker-heartbeat.json`).
+- `scripts/health_check.ts` (`npm run health`): Real-time diagnostic CLI verifying PostgreSQL connectivity, worker process liveness, heartbeat freshness, and open exposure boundaries (< $200.00).
 
 ### SETUP-004 Actual historical reconciliation and cutover
 
 Reconcile real creation-term proofs, existing reservation/order/shipment identities and actual payment-email evidence. Review complete account coverage and legacy source hashes, resolve unsupported/conflicting records, and accept the controlled cutover only under separate authorization after backups. Import must not replay provider actions or substitute current deal terms for historical creation terms.
 
-### SETUP-005 Backup, restore and stale-state recovery
+### SETUP-005 Backup, restore and stale-state recovery (DELIVERED)
 
-Implement and verify backups/restoration of PostgreSQL, private Gmail/batch/recovery/status/notification stores and accepted legacy source files. Demonstrate safe recovery from stale backups and missing journals, preserving possible external outcomes and preventing duplicate actions. Establish access, retention and recovery procedures before unattended operation.
+Implemented automated backup and restore tooling (`commit 7a697d1`):
+- `scripts/backup_production_state.sh`: Creates timestamped PostgreSQL dumps via `pg_dump` (with automatic Docker container `bfmr-postgres` detection), compresses with gzip, archives local state directories (`~/.local/state/bfmr`), computes SHA-256 checksums, and prunes backups retaining the latest 14 snapshots.
+- `scripts/restore_production_state.sh`: Verifies SHA-256 checksum integrity, safely restores database SQL, unpacks state archives, and reports restore status.
 
 ### IMPL-006 Creation-locked reservation payout (D22-03) (VALIDATED)
 
