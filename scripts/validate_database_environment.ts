@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client, type ClientConfig } from 'pg';
 
 // Automatically load local .env if present without requiring external package
@@ -497,8 +499,18 @@ export function printValidationReport(summary: ValidationSummary): void {
   }
 }
 
-// Direct execution entry point
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainScript(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    const executed = path.resolve(process.argv[1]).toLowerCase();
+    const current = fileURLToPath(import.meta.url).toLowerCase();
+    return executed === current;
+  } catch {
+    return true;
+  }
+}
+
+if (isMainScript()) {
   const config = getDatabaseConfig();
   const client = new Client(config);
 
