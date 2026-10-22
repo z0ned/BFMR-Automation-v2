@@ -1,0 +1,182 @@
+\set ON_ERROR_STOP on
+
+BEGIN;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_database WHERE datname = 'bfmr')
+       OR EXISTS (
+           SELECT FROM pg_roles
+           WHERE rolname IN ('bfmr_owner', 'bfmr_app')
+       )
+    THEN
+        RAISE EXCEPTION
+            'Existing BFMR database or roles found; inspect before proceeding.';
+    END IF;
+END
+$$;
+
+CREATE ROLE bfmr_owner
+    NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
+    NOREPLICATION NOBYPASSRLS;
+
+CREATE ROLE bfmr_app
+    LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
+    NOREPLICATION NOBYPASSRLS;
+
+COMMIT;
+
+CREATE DATABASE bfmr OWNER bfmr_owner TEMPLATE template0;
+
+REVOKE ALL ON DATABASE bfmr FROM PUBLIC;
+GRANT CONNECT ON DATABASE bfmr TO bfmr_app;
+
+\connect bfmr
+
+SET ROLE bfmr_owner;
+
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO bfmr_app;
+
+ALTER DEFAULT PRIVILEGES
+    REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
+\i /tmp/bfmr-schema.sql
+\i /tmp/bfmr-gmail-intake.sql
+
+BEGIN;
+
+-- Read access, excluding the card-security-code column.
+GRANT SELECT ON
+    public.reservation_status,
+    public.order_status,
+    public.shipment_status,
+    public.retailers,
+    public.deals,
+    public.deal_retailers,
+    public.emails,
+    public.email_deals,
+    public.reservations,
+    public.orders,
+    public.shipments,
+    public.reimbursements,
+    public.workflow_evidence,
+    public.sync_runs,
+    public.provider_observations,
+    public.gmail_intake_state,
+    public.gmail_intake_runs,
+    public.gmail_intake_notifications,
+    public.gmail_intake_work
+TO bfmr_app;
+
+GRANT SELECT (id, retailer_id, email)
+    ON public.retailer_accounts TO bfmr_app;
+
+-- Insert only the columns written by the current application.
+GRANT INSERT (gmail_message_id, subject, email_type, received_at)
+    ON public.emails TO bfmr_app;
+
+GRANT INSERT (email_id, deal_id, reference_type)
+    ON public.email_deals TO bfmr_app;
+
+GRANT INSERT
+    (bfmr_deal_id, slug, title, reimbursement_amount, description)
+    ON public.deals TO bfmr_app;
+
+GRANT INSERT (deal_id, retailer_id)
+    ON public.deal_retailers TO bfmr_app;
+
+GRANT INSERT
+    (bfmr_reservation_id, deal_id, source_email_id,
+     quantity, payout_per_item, reservation_status_id)
+    ON public.reservations TO bfmr_app;
+
+GRANT INSERT
+    (order_id, reservation_id, deal_id, retailer_id,
+     retailer_account_id, status_id, quantity, canceled_quantity,
+     total_cost, purchase_date, product_identifier,
+     order_time_estimated_delivery_date)
+    ON public.orders TO bfmr_app;
+
+GRANT INSERT
+    (order_id, tracking_number, shipping_company, quantity, status_id)
+    ON public.shipments TO bfmr_app;
+
+GRANT INSERT
+    (reservation_id, payment_email_id, amount, paid_at, payment_reference)
+    ON public.reimbursements TO bfmr_app;
+
+GRANT INSERT
+    (email_id, reservation_id, order_id, correlation_id,
+     action_type, phase, outcome, evidence, recorded_at)
+    ON public.workflow_evidence TO bfmr_app;
+
+GRANT INSERT
+    (email_id, deal_id, reservation_id, order_id, shipment_id,
+     reimbursement_id, sync_run_id, provider, resource_type,
+     observed_at, is_complete, response_data)
+    ON public.provider_observations TO bfmr_app;
+
+GRANT INSERT
+    (provider, scope, target_order_id, started_at, completed_at,
+     status, records_received, is_complete, error_message)
+    ON public.sync_runs TO bfmr_app;
+
+GRANT INSERT (account_namespace, mailbox, subscription, topic)
+    ON public.gmail_intake_state TO bfmr_app;
+
+GRANT INSERT (id, account_namespace, state)
+    ON public.gmail_intake_runs TO bfmr_app;
+
+GRANT INSERT
+    (subscription, message_id, account_namespace, run_id,
+     payload_sha256, history_id, rejection, state, consumed_at)
+    ON public.gmail_intake_notifications TO bfmr_app;
+
+GRANT INSERT
+    (account_namespace, gmail_message_id, state,
+     payload, payload_sha256, received_at)
+    ON public.gmail_intake_work TO bfmr_app;
+
+-- Updates are restricted to the columns used by current code.
+GRANT UPDATE (slug, title, reimbursement_amount, description)
+    ON public.deals TO bfmr_app;
+
+GRANT UPDATE (reservation_status_id)
+    ON public.reservations TO bfmr_app;
+
+GRANT UPDATE (status_id, canceled_quantity)
+    ON public.orders TO bfmr_app;
+
+GRANT UPDATE (status_id)
+    ON public.shipments TO bfmr_app;
+
+GRANT UPDATE
+    (status, records_received, completed_at, is_complete, error_message)
+    ON public.sync_runs TO bfmr_app;
+
+GRANT UPDATE
+    (consumed_cursor, history_gap, watch_baseline,
+     watch_expires_at, watch_renewed_at, updated_at,
+     legacy_source_sha256, legacy_import_fingerprint)
+    ON public.gmail_intake_state TO bfmr_app;
+
+GRANT UPDATE (state, activated_at, stopped_at)
+    ON public.gmail_intake_runs TO bfmr_app;
+
+GRANT UPDATE (state, consumed_at)
+    ON public.gmail_intake_notifications TO bfmr_app;
+
+GRANT UPDATE (state, payload, updated_at)
+    ON public.gmail_intake_work TO bfmr_app;
+
+COMMIT;
+
+RESET ROLE;
+
+ALTER ROLE bfmr_app IN DATABASE bfmr
+    SET search_path = pg_catalog, public;
+
+-- Enter the application password privately at the prompts.
+SET password_encryption = 'scram-sha-256';
+\password bfmr_app
