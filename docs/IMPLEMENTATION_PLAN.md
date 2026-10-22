@@ -362,3 +362,13 @@ Implemented carrier tracking ID resolution and idempotent reimbursement recordin
 - `src/services/relationalPayments.ts`: Added `recordPaymentByTrackingNumber` enforcing the relational resolution chain: `tracking_number -> shipments -> orders -> reservations -> reimbursements`. Records reimbursements idempotently, updates reservation status to `'3'` (Reimbursed) when fully paid, and quarantines unmapped tracking numbers in `workflow_evidence` (`UNRESOLVED_PAYMENT_TRACKING`).
 - `src/services/dealEmailWorkflow.ts`: Wired payment handling into `processEmail`, committing the intake cursor and bypassing the purchase flow.
 - `tests/payment_intake.test.ts`: Created a 5-case test suite covering multi-carrier parsing, tracking resolution, idempotent re-runs, and quarantine handling. All 5 tests pass.
+
+## 22 October 2026 — Milestone #2 (Slice 2): Informational email ingestion & checkout live payout update
+
+Implemented informational email ingestion, database linking, and checkout-time live payout price retrieval (`commit 7681678`):
+- `src/types/intakeEmail.ts` & `src/services/emailParser.ts`: Added `isInformationalUpdate` and `informationalType` (`PAYOUT_INCREASE`, `ADDITIONAL_SLOTS`, `CLOSING`, `DEAL_UPDATE`). Enforces that informational notices never trigger new reservations or purchasing loops.
+- `src/services/dealEmailWorkflow.ts`: Wired informational email intake to persist in `emails`, link to matching deals in `email_deals`, commit the Gmail history intake cursor, and exit cleanly without purchasing.
+- `src/db/relationalRepositories.ts`: Added `reservations.updatePayout(reservationId, payoutPerItemCents)` to update `reservations.payout_per_item`, which automatically recalculates the generated stored column `expected_payout = (quantity * payout_per_item)`. Confirmed `reservations` as the single source of truth for payout rates.
+- `src/services/relationalDealTerms.ts`: Added `fetchLiveBfmrDealPayout(slug)` calling BFMR Deal API `GET /api/v2/deals/{slug}`.
+- `src/services/relationalReservations.ts`: Updated `readLockedPurchaseEvidence` to call `fetchLiveBfmrDealPayout` at the checkout screen, update `reservations.payout_per_item` in the database, record audit evidence in `workflow_evidence`, and evaluate Amazon checkout review against this fresh live payout.
+- `tests/informational_and_checkout_payout.test.ts`: Created a 5-case test suite covering informational classification (payout increase, closing, slots), live BFMR Deal API payout retrieval, database updating, and checkout evidence injection. All 5 tests pass.
