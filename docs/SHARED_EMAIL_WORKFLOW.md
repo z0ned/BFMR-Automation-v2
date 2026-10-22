@@ -31,6 +31,23 @@ Normal writes compare the expected previous snapshot ID and validate permitted t
 
 Messages are `RUNNING`, `PAUSED`, `READY` after reviewed repair, or `COMPLETE`. Exceptions preserve the last durable boundary and pause without automatic replay. A failed snapshot cannot erase an earlier committed intent. The legacy multi-deal and post-reservation journals remain backup/recovery evidence and startup gates; email processing no longer overwrites them. Test-startup cleanup retains its own existing journal.
 
+## Payment Notice Ingestion Path
+
+When an incoming email is parsed as a payment notice (`isPaymentNotice: true`), `processEmail` branches before deal claims:
+1. Extracts carrier tracking numbers, paid amounts in cents, timestamps, and payment references.
+2. Resolves the reservation through the relational hierarchy: `tracking_number -> shipments -> orders -> reservations -> reimbursements`.
+3. Records the reimbursement idempotently via `recordPaymentByTrackingNumber`, updating reservation status to `'3'` (Reimbursed) when fully paid.
+4. If tracking numbers are unmapped in local shipments, stores `UNRESOLVED_PAYMENT_TRACKING` in `workflow_evidence` for subsequent reconciliation without data loss.
+5. Commits the intake cursor and terminates without entering deal reservation or purchasing loops.
+
+## Fourteen-Day Delivery Cutoff Policy
+
+During checkout review, the delivery estimate is evaluated against the 14-calendar-day policy in `America/New_York`:
+- Calendar dates $\le 14$ days from the order placement date pass.
+- Calendar dates $> 14$ days trigger rejection: `rejectCheckout()` navigates to the cart, executes `removePreparedAmazonCartItem` asserting an empty cart, and returns `{ status: 'INELIGIBLE', cartCleared: true }`.
+- The workflow catches `INELIGIBLE`, initiates `cancelConfirmedReservation` with explicit My Tracker readback, and leaves no lingering items in the cart.
+- Unreadable or conflicting delivery estimates quarantine the workflow for operator review without speculative cancellation.
+
 ## No historical purchase backfill
 
 New Gmail workflows require the exact SQL `PROCESSING` payload, matching source fingerprint and accepted fresh-start time boundary. Existing DONE tombstones, missing queue state, altered payloads and previously recorded emails without a new workflow cannot be enrolled into purchasing. Completed workflow snapshots return without purchase work; a completion-to-DONE acknowledgement gap can be repaired to DONE only. The reviewed repair path never transitions DONE mail to PENDING or changes the consumed history cursor.

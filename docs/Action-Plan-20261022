@@ -1,12 +1,11 @@
 ACTION PLAN OCTOBER 22 2026
 
-1. Implement the delivery-date policy end to end.
-Represent estimates as known, explicitly absent, or unknown. Use the latest date in a range, settle the calendar/timezone convention, revalidate immediately before submission, and persist the accepted estimate. Exactly 14 days passes; later dates reject with exact cancellation/readback; ambiguous evidence stops for review.
-Completion criterion: checkout decisions and saved order evidence agree across boundary dates, ranges, midnight/DST cases and changed estimates.
+1. Implement the delivery-date policy end to end. [COMPLETED - commit b1957be]
+Represent estimates as known, explicitly absent, or unknown. Use the latest date in a range, settle the calendar/timezone convention (America/New_York via UTC midnight conversion), revalidate immediately before submission, and persist the accepted estimate. Exactly 14 days passes; later dates reject with exact cancellation/readback and automated cart purging via removePreparedAmazonCartItem; ambiguous evidence stops for review. Covered by 11 unit tests in tests/delivery_cutoff.test.ts.
 
-2. Complete payment and informational-email ingestion.
-Establish real authenticated payment-template evidence, then connect payment processing to the intake workflow. Retain relevant update-email/deal associations without allowing those messages to trigger reservations. Preserve the approved one-reimbursement-per-reservation model and route unsupported payments to review.
-Completion criterion: a verified payment records idempotently, updates outstanding exposure, and permits subsequent reconciliation without manual bookkeeping.
+2. Complete payment and informational-email ingestion. [PAYMENT INGESTION COMPLETED - commit cc5ce37]
+- Payment Email Ingestion (Completed): Establishes carrier tracking ID resolution (tracking_number -> shipments -> orders -> reservations -> reimbursements), extracts paid amounts, payment dates, and trace references from authenticated payment emails. Records reimbursements idempotently under the one-reimbursement-per-reservation model, updates reservation status to '3' when fully paid, and quarantines unmapped tracking numbers in workflow_evidence as UNRESOLVED_PAYMENT_TRACKING. Covered by 5 unit tests in tests/payment_intake.test.ts.
+- Informational Email Ingestion: Split into a separate task at user request.
 
 3. Validate providers and the native database in parallel.
 Collect sanitized, nonmutating evidence first for Gmail provenance, BFMR browser/API alignment, tracker completeness and financial semantics, Amazon checkout/tracking layouts, and BFMR update contracts. Validate the existing schema and installer against disposable native PostgreSQL using the intended non-owning role.

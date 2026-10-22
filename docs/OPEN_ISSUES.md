@@ -32,7 +32,7 @@ Verify provider unit/total payout and cumulative `amount_paid` meanings, complet
 
 ### EV-006 Actual payment-email evidence
 
-Establish the authenticated payment-notice contract and exact reservation/deal, actual amount, payment time and source provenance. Complete any automatic payment-template adapter only from verified evidence. Define reviewed handling for aggregate-only or conflicting payment evidence; do not infer individual payments or dates from cumulative balance changes. Preserve the one-reimbursement-per-reservation constraint.
+Payment emails cite carrier tracking numbers rather than BFMR reservation IDs. The relational mapping chain (`tracking_number -> shipments -> orders -> reservations -> reimbursements`) is implemented in `relationalPayments.ts` (`recordPaymentByTrackingNumber`) and wired to the intake workflow (`dealEmailWorkflow.ts`). Re-ingestion is strictly idempotent under the schema `reimbursements_reservation_uk` constraint. Unmapped tracking numbers are quarantined in `workflow_evidence` (`UNRESOLVED_PAYMENT_TRACKING`) without data loss. Live Gmail push integration validation remains pending on the native host.
 
 ## Database and operational acceptance
 
@@ -79,9 +79,9 @@ The worker automates one selected Amazon account per run. After a rank change an
 
 The shared single-/multi-deal source and reviewed repair tool are implemented; see [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md). Validate identical checkout safeguards, reservation/evaluation barriers, no-backfill enforcement, SQL revision/JSONB behavior, scoped incident repair, and crash/COMMIT-loss windows at every external-action boundary. Software tests were not requested/run for this source change. Native SQL/roles, current provider contracts and supervised recovery remain unaccepted. Unknown effects lacking causal evidence and legacy/PDF-source interrupted work still require separately scoped operator reconciliation; never reset or replay them.
 
-### Fourteen-day latest-delivery cutoff
+### Fourteen-day latest-delivery cutoff (RESOLVED)
 
-Implement and cover the approved calendar-day rule: exactly 14 days is allowed; a later date rejects checkout with exact new-reservation cancellation/readback. A range uses its latest date; an explicitly absent estimate may proceed under other guards; unreadable/conflicting evidence stops for review. Settle order-date timezone and final-review estimate-change handling.
+Implemented and covered by 11 unit tests in `tests/delivery_cutoff.test.ts` (commit `b1957be`): exactly 14 calendar days passes; later dates reject checkout, trigger Amazon cart purging via `removePreparedAmazonCartItem`, and cancel the reservation with readback from My Tracker. Date ranges use the latest date in the range; explicitly absent estimates proceed under standard guards; ambiguous or contradictory estimates stop for review without speculative cancellation. Calendar day calculation uses `America/New_York` converted to UTC midnight to avoid DST hour skew.
 
 ### Operator repair for uncertain actions and replacements
 

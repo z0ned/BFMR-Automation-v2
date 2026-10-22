@@ -344,3 +344,21 @@ Following the browser evaluation fix, the user reported that the complete purcha
 ## 12 October 2026 review corrections
 
 Implemented review items 1–6 and 9–12 with offline regression coverage: exact reservation identity and lifecycle matching, Gmail provenance/mode, account-evidence gate, durable Gmail queue/cursor, shared unpaid exposure rules, reservation history/discrepancies, uncertain outcomes, incident-specific blocks, isolated test transactions plus durable PostgreSQL/account locking, and explicit acceptance evidence. Standard and extended TypeScript checks pass. Offline suite: 118 pass, zero fail; PostgreSQL integration runs separately against a disposable cluster. Live account selectors/auth-header fixtures remain a release gate, not completed integration evidence. Current setup and limits are in the v22 implementation reference.
+
+## 22 October 2026 — Milestone #1: Fourteen-day latest-delivery cutoff & cart cleanup
+
+Implemented the strict 14-calendar-day delivery cutoff policy across Amazon evaluation and rehearsal (`commit b1957be`):
+- `src/services/amazonEvaluation.ts`: Added `parseAmazonDeliveryEstimate` to extract single dates, cross-month/same-month date ranges, relative words ("Today", "Tomorrow"), and explicitly absent estimates. Added `evaluateDeliveryCutoff` with calendar day calculations in `America/New_York` using UTC midnight conversions to prevent daylight saving time hour skew. Enforces: $\le 14$ calendar days passes; $> 14$ days rejects; date ranges evaluated by latest date; absent estimates pass under standard limits; unparseable estimates halt for review.
+- `src/services/amazonCheckoutRehearsal.ts`: Added `extractAmazonDeliveryEstimate` to extract delivery text from selected radio options and review summary; populated in `readAmazonOrderReview`.
+- `src/services/reservedDealPurchase.ts`: Integrated cutoff evaluation. When rejected, executes `rejectCheckout()` which calls `removePreparedAmazonCartItem` to assert an empty Amazon cart, followed by `cancelConfirmedReservation` with My Tracker readback in `dealEmailWorkflow.ts`.
+- `tests/delivery_cutoff.test.ts`: Created an 11-case test suite covering boundary dates (Day 13, 14, 15), DST transitions, absent notices, and malformed inputs. All 11 tests pass.
+
+## 22 October 2026 — Milestone #2 (Slice 1): Payment email ingestion via carrier tracking ID resolution
+
+Implemented carrier tracking ID resolution and idempotent reimbursement recording in the intake queue (`commit cc5ce37`):
+- `src/types/intakeEmail.ts`: Added `isPaymentNotice` and `paymentNotice` metadata structure (`trackingNumbers`, `amountCents`, `paidAt`, `paymentReference`).
+- `src/services/emailParser.ts`: Implemented extraction of carrier tracking numbers (`TBA...`, `1Z...`, `9400...`, `\d{12,15}`), dollar amounts into cents, timestamps, and references from authenticated payment emails. Prevents payment emails from triggering deal reservations.
+- `src/db/relationalRepositories.ts`: Added `shipments.findByTrackingNumber` (using index `shipments_tracking_number_idx`) and `deals.findById`.
+- `src/services/relationalPayments.ts`: Added `recordPaymentByTrackingNumber` enforcing the relational resolution chain: `tracking_number -> shipments -> orders -> reservations -> reimbursements`. Records reimbursements idempotently, updates reservation status to `'3'` (Reimbursed) when fully paid, and quarantines unmapped tracking numbers in `workflow_evidence` (`UNRESOLVED_PAYMENT_TRACKING`).
+- `src/services/dealEmailWorkflow.ts`: Wired payment handling into `processEmail`, committing the intake cursor and bypassing the purchase flow.
+- `tests/payment_intake.test.ts`: Created a 5-case test suite covering multi-carrier parsing, tracking resolution, idempotent re-runs, and quarantine handling. All 5 tests pass.
