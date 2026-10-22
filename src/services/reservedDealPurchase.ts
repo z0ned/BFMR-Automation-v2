@@ -1,6 +1,6 @@
 import { PlaywrightBfmrBrowser } from '../adapters/playwrightBrowser';
 import { requireAmazonAccountIdentity } from './amazonAccountIdentity';
-import { readAmazonPurchaseEvidence, type ReservationReference } from './amazonEvaluation';
+import { readAmazonPurchaseEvidence, type ReservationReference, evaluateDeliveryCutoff } from './amazonEvaluation';
 import {
   amazonProductAsin,
   ensureAmazonFreeNonPrimeDeliverySelected,
@@ -71,6 +71,17 @@ export async function purchaseReservedDeal(
   if (!review) throw new Error('Amazon final review is missing; no order was submitted.');
   if (review.totalCents > maxTotalCents || review.totalCents > payoutCents) {
     return rejectCheckout();
+  }
+  if (review.deliveryEstimate) {
+    const deliveryEvaluation = evaluateDeliveryCutoff(review.deliveryEstimate);
+    if (deliveryEvaluation.status === 'REJECT') {
+      log(`Delivery date policy violation: ${deliveryEvaluation.reason}`);
+      return rejectCheckout();
+    }
+    if (deliveryEvaluation.status === 'UNKNOWN') {
+      throw new Error(`Unreadable or conflicting delivery estimate (${review.deliveryEstimate.rawText}); manual review required.`);
+    }
+    log(`Delivery estimate validated: ${deliveryEvaluation.reason}`);
   }
   for (let attempt = 0; attempt < 3; attempt++) {
     const current = await readAmazonOrderReview(page, asin, title, { requireGift: true, requireFreeNonPrimeDelivery: true });

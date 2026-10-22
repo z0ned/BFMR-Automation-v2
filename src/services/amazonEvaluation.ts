@@ -102,3 +102,223 @@ export async function readAmazonPurchaseEvidence(reference: ReservationReference
   return amazonPurchaseEvidenceFromReservation(await response.json(), reference);
 }
 
+export const BFMR_OPERATIONAL_TIMEZONE = 'America/New_York';
+
+export type DeliveryEstimateType = 'KNOWN' | 'ABSENT' | 'UNKNOWN';
+
+export interface DeliveryEstimate {
+  type: DeliveryEstimateType;
+  rawText: string;
+  earliestDate?: Date;
+  latestDate?: Date;
+}
+
+export interface DeliveryCutoffResult {
+  eligible: boolean;
+  status: 'PASS' | 'REJECT' | 'UNKNOWN';
+  reason: string;
+  calendarDays?: number;
+  orderDateNY?: string;
+  deliveryDateNY?: string;
+}
+
+const MONTHS: Record<string, number> = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
+
+const WEEKDAY_NAMES = /^(?:mon|monday|tue|tuesday|wed|wednesday|thu|thursday|fri|friday|sat|saturday|sun|sunday)$/i;
+
+export function getCalendarDateNY(date: Date, timeZone: string = BFMR_OPERATIONAL_TIMEZONE): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+export function calendarDaysBetween(
+  startDate: Date,
+  endDate: Date,
+  timeZone: string = BFMR_OPERATIONAL_TIMEZONE
+): number {
+  const [sY, sM, sD] = getCalendarDateNY(startDate, timeZone).split('-').map(Number);
+  const [eY, eM, eD] = getCalendarDateNY(endDate, timeZone).split('-').map(Number);
+  const startUtc = Date.UTC(sY, sM - 1, sD);
+  const endUtc = Date.UTC(eY, eM - 1, eD);
+  return Math.round((endUtc - startUtc) / 86_400_000);
+}
+
+/**
+ * Parses Amazon delivery estimates from option labels or review summaries.
+ * Handles absent/pending, single dates, date ranges (same month or cross-month),
+ * and relative dates (today/tomorrow).
+ */
+export function parseAmazonDeliveryEstimate(
+  rawText: string,
+  referenceDate: Date = new Date(),
+  timeZone: string = BFMR_OPERATIONAL_TIMEZONE
+): DeliveryEstimate {
+  if (!rawText || typeof rawText !== 'string') {
+    return { type: 'UNKNOWN', rawText: String(rawText ?? '') };
+  }
+  const text = rawText.trim();
+  if (!text) {
+    return { type: 'UNKNOWN', rawText: text };
+  }
+
+  // 1. Explicitly absent / pending delivery estimates
+  if (/(?:we(?:\x27|\x22|’)?ll email you when available|delivery date pending|temporarily out of stock|order now and we(?:\x27|\x22|’)?ll deliver|delivery date to be determined|usually ships within)/i.test(text)) {
+    return { type: 'ABSENT', rawText: text };
+  }
+
+  const [refY, refM] = getCalendarDateNY(referenceDate, timeZone).split('-').map(Number);
+  const refYear = refY;
+  const refMonth = refM - 1; // 0-indexed
+
+  // 2. Relative: Today
+  if (/\b(?:free\s+)?delivery(?:\s+by\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?\s+today\b/i.test(text) || /\barriving\s+today\b/i.test(text)) {
+    return { type: 'KNOWN', rawText: text, earliestDate: referenceDate, latestDate: referenceDate };
+  }
+
+  // 3. Relative: Tomorrow
+  if (/\b(?:free\s+)?delivery(?:\s+by\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?\s+tomorrow\b/i.test(text) || /\barriving\s+tomorrow\b/i.test(text)) {
+    const tomorrow = new Date(referenceDate.getTime() + 86_400_000);
+    return { type: 'KNOWN', rawText: text, earliestDate: tomorrow, latestDate: tomorrow };
+  }
+
+  // 4. Two different months range: e.g. "Oct 28 - Nov 2" or "Nov 2 - Nov 6"
+  const rangeTwoMonths = text.match(/\b([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\s*(?:-|–|—|to|and)\s*([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i);
+  if (rangeTwoMonths && !WEEKDAY_NAMES.test(rangeTwoMonths[1]) && !WEEKDAY_NAMES.test(rangeTwoMonths[3])) {
+    const m1 = MONTHS[rangeTwoMonths[1].toLowerCase()];
+    const d1 = Number(rangeTwoMonths[2]);
+    const m2 = MONTHS[rangeTwoMonths[3].toLowerCase()];
+    const d2 = Number(rangeTwoMonths[4]);
+    if (m1 !== undefined && m2 !== undefined && d1 >= 1 && d1 <= 31 && d2 >= 1 && d2 <= 31) {
+      let y1 = rangeTwoMonths[5] ? Number(rangeTwoMonths[5]) : refYear;
+      if (m1 < refMonth) y1++;
+      let y2 = y1;
+      if (m2 < m1) y2 = y1 + 1;
+      return {
+        type: 'KNOWN',
+        rawText: text,
+        earliestDate: new Date(Date.UTC(y1, m1, d1, 12, 0, 0)),
+        latestDate: new Date(Date.UTC(y2, m2, d2, 12, 0, 0)),
+      };
+    }
+  }
+
+  // 5. Same month range: e.g. "Nov 12 - 18"
+  const rangeSameMonth = text.match(/\b([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\s*(?:-|–|—|to|and)\s*(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/i);
+  if (rangeSameMonth && !WEEKDAY_NAMES.test(rangeSameMonth[1])) {
+    const m = MONTHS[rangeSameMonth[1].toLowerCase()];
+    const d1 = Number(rangeSameMonth[2]);
+    const d2 = Number(rangeSameMonth[3]);
+    if (m !== undefined && d1 >= 1 && d1 <= 31 && d2 >= 1 && d2 <= 31) {
+      let y = rangeSameMonth[4] ? Number(rangeSameMonth[4]) : refYear;
+      if (m < refMonth) y++;
+      return {
+        type: 'KNOWN',
+        rawText: text,
+        earliestDate: new Date(Date.UTC(y, m, d1, 12, 0, 0)),
+        latestDate: new Date(Date.UTC(y, m, d2, 12, 0, 0)),
+      };
+    }
+  }
+
+  // 6. Single date: e.g. "Tuesday, Nov 4" or "Nov 4, 2026"
+  const matches = [...text.matchAll(/\b([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{4}))?\b/gi)];
+  for (const match of matches) {
+    const word = match[1].toLowerCase();
+    if (WEEKDAY_NAMES.test(word)) continue;
+    const m = MONTHS[word];
+    const d = Number(match[2]);
+    if (m !== undefined && d >= 1 && d <= 31) {
+      let y = match[3] ? Number(match[3]) : refYear;
+      if (m < refMonth) y++;
+      const date = new Date(Date.UTC(y, m, d, 12, 0, 0));
+      return {
+        type: 'KNOWN',
+        rawText: text,
+        earliestDate: date,
+        latestDate: date,
+      };
+    }
+  }
+
+  return { type: 'UNKNOWN', rawText: text };
+}
+
+/**
+ * Evaluates whether a delivery estimate satisfies the <= 14 calendar day cutoff policy
+ * in the America/New_York timezone.
+ */
+export function evaluateDeliveryCutoff(
+  estimate: DeliveryEstimate,
+  orderDate: Date = new Date(),
+  maxDays: number = 14,
+  timeZone: string = BFMR_OPERATIONAL_TIMEZONE
+): DeliveryCutoffResult {
+  if (estimate.type === 'ABSENT') {
+    return {
+      eligible: true,
+      status: 'PASS',
+      reason: `Explicitly absent delivery estimate (${estimate.rawText}) permitted under standard guards.`,
+    };
+  }
+
+  if (estimate.type === 'UNKNOWN' || !estimate.latestDate) {
+    return {
+      eligible: false,
+      status: 'UNKNOWN',
+      reason: `Delivery estimate could not be deterministically determined (${estimate.rawText}); manual review required.`,
+    };
+  }
+
+  const days = calendarDaysBetween(orderDate, estimate.latestDate, timeZone);
+  const orderDateNY = getCalendarDateNY(orderDate, timeZone);
+  const deliveryDateNY = getCalendarDateNY(estimate.latestDate, timeZone);
+
+  if (days < 0) {
+    return {
+      eligible: false,
+      status: 'UNKNOWN',
+      reason: `Calculated delivery date (${deliveryDateNY}) precedes order date (${orderDateNY}); ambiguous evidence.`,
+      calendarDays: days,
+      orderDateNY,
+      deliveryDateNY,
+    };
+  }
+
+  if (days <= maxDays) {
+    return {
+      eligible: true,
+      status: 'PASS',
+      reason: `Delivery within policy (${days} calendar days <= ${maxDays} limit, arriving by ${deliveryDateNY}).`,
+      calendarDays: days,
+      orderDateNY,
+      deliveryDateNY,
+    };
+  }
+
+  return {
+    eligible: false,
+    status: 'REJECT',
+    reason: `Delivery exceeds policy window (${days} calendar days > ${maxDays} limit, arriving ${deliveryDateNY}). Refusing order and releasing reservation.`,
+    calendarDays: days,
+    orderDateNY,
+    deliveryDateNY,
+  };
+}
+

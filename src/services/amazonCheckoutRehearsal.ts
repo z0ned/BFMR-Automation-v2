@@ -1,4 +1,5 @@
 import type { Locator, Page } from 'playwright';
+import { type DeliveryEstimate, parseAmazonDeliveryEstimate } from './amazonEvaluation';
 
 export const AMAZON_TEST_PRODUCT = 'https://www.amazon.com/dp/B09JQMJHXY';
 const AMAZON_TEST_PRODUCT_TITLE = 'Apple AirPods Pro (1st Generation) with MagSafe Charging Case';
@@ -249,6 +250,7 @@ export interface AmazonOrderReviewEvidence {
   totalCents: number;
   giftSelected: boolean;
   freeNonPrimeDeliverySelected: boolean;
+  deliveryEstimate?: DeliveryEstimate;
 }
 
 interface FreeNonPrimeDeliveryOption {
@@ -603,7 +605,22 @@ export async function readAmazonOrderReview(
     (options.requireGift && !giftSelected) || (options.requireFreeNonPrimeDelivery && !freeNonPrimeDeliverySelected)) {
     throw new Error(`Order-review screen reached, but evidence was incomplete (single expected-ASIN line verified; USD order total=${totalUsd !== null}; gift selected=${giftSelected}; free non-Prime delivery selected=${freeNonPrimeDeliverySelected}). No order was placed.`);
   }
-  return { totalUsd, totalCents: Math.round(totalUsd * 100), giftSelected, freeNonPrimeDeliverySelected };
+  const deliveryEstimate = await extractAmazonDeliveryEstimate(page);
+  return { totalUsd, totalCents: Math.round(totalUsd * 100), giftSelected, freeNonPrimeDeliverySelected, deliveryEstimate };
+}
+
+export async function extractAmazonDeliveryEstimate(page: Page): Promise<DeliveryEstimate> {
+  assertAmazon(page);
+  try {
+    const options = await freeNonPrimeDeliveryOptions(page);
+    const checked = options.find(option => option.checked);
+    if (checked && checked.label) {
+      const estimate = parseAmazonDeliveryEstimate(checked.label);
+      if (estimate.type !== 'UNKNOWN') return estimate;
+    }
+  } catch { /* proceed to body check */ }
+  const body = await page.locator('body').innerText().catch(() => '');
+  return parseAmazonDeliveryEstimate(body);
 }
 
 /** Unattended orders require configured, visible checkout identity evidence. */
