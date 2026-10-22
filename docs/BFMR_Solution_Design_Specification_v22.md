@@ -38,7 +38,7 @@ The proposed system would manage that process from beginning to end:
 
 The source now integrates relational business persistence, creation-locked payouts, reconciliation, orders/shipments, verified-payment recording and controlled cutover. Unified single-/multi-deal purchasing now has source implementation; behavioral recovery acceptance, the 14-day delivery cutoff and production operations still require work. Source completion and offline regression results do not establish live provider contracts or unattended readiness.
 
-> **Design status — 21 October 2026:** The adopted database contract is the 16-table `database/schema.sql` in this repository, including the immutable-payout guard. This supersedes the earlier 15-entity conceptual dictionary, order-linked multiple-payment illustrations and generic metadata-column proposal. Application integration is implemented and tested offline; native PostgreSQL installation, real cutover and provider/production acceptance remain pending. Single-deal automatic purchasing and the 14-day delivery cutoff remain unimplemented. This document grants no live action authority.
+> **Design status — 22 October 2026:** The adopted database contract is the 16-table `database/schema.sql` in this repository, including the immutable-payout guard. This supersedes the earlier 15-entity conceptual dictionary, order-linked multiple-payment illustrations and generic metadata-column proposal. Application integration is implemented and tested offline; native PostgreSQL installation, real cutover and provider/production acceptance remain pending. Shared single-/multi-deal automatic purchasing and reviewed recovery are source-implemented; behavioral recovery acceptance remains pending. The 14-day delivery cutoff remains unimplemented. This document grants no live action authority.
 
 **21 October 2026 — repository artifacts:** Dependencies are managed with npm and `package-lock.json`; install with `npm ci`. The redundant `bun.lock` and obsolete v1.6–v1.8 specification PDFs under `output/pdf/` have been removed. This housekeeping changes no business behavior, schema or runtime authority.
 
@@ -530,7 +530,7 @@ This map describes the original split. Current schema, SQL and implementation su
 | 2.1 recorded evidence and setup observations | 1.2 evidence distinctions | 2.1 historical evidence; 6.1 environment |
 | 3 decisions; 3.1 delivery examples; 3.2 email chronology | 3 (all decisions and examples retained) | 3.1, 3.3, 7.3 implementation gaps |
 | 4.1 Gmail provenance and classification | 4.1 | 3.1; 5.1 |
-| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 current queue and early-return gap; 4.2 journals |
+| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 shared workflow and queue; 4.2 SQL checkpoints and legacy journals |
 | 4.3 duplicate checks and confirmation | 4.3 | 3.2; 5.2 |
 | 5.1 eligibility; 5.2 rejection/uncertainty policy | 5.1–5.2 | 3.3 existing policy and unimplemented cutoff |
 | 5.3 order identity and retailer constraints | 5.3 | 3.3 |

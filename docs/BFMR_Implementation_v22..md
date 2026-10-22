@@ -379,7 +379,7 @@ Older specifications/PDFs are available in Git history. This documentation split
 | `BFMR_INTAKE_MODE` | Default `production`; explicitly `testing` is required to allow the separately configured test sender. |
 | `BFMR_INITIALIZE_GMAIL_QUEUE` | `YES` only for authentic first queue creation; remove immediately afterward. Never use for restoration/replay. |
 | `BFMR_GMAIL_QUEUE_PATH` | Preserved private legacy queue import/hash source; no longer the production writer. Default `~/.local/state/bfmr/gmail-intake.json`. |
-| `BFMR_MULTI_DEAL_STATE_PATH` | Default `~/.local/state/bfmr/multi-deal.json` — durable batch intent/progress. |
+| `BFMR_MULTI_DEAL_STATE_PATH` | Default `~/.local/state/bfmr/multi-deal.json` — preserved legacy batch recovery evidence; new email progress is in SQL. |
 | `BFMR_AMAZON_ORDER_LEDGER_PATH` | Default `~/.local/state/bfmr/amazon-orders.json` — accepted legacy cutover source/hash boundary; standalone manual ledger, not the active email business writer. |
 | `BFMR_STATUS_SNAPSHOT_PATH` | Default `~/.local/state/bfmr/bfmr-status.json` — daily status history/alerts. |
 | `BFMR_POST_RESERVATION_STATE_PATH` | Private post-reservation supplier/cancellation journal (see `scripts/post_reservation.ts`). |
@@ -448,16 +448,17 @@ The following separates source completion from future acceptance. It is not perm
 | Workstream | Current source state | Remaining exit condition |
 |---|---|---|
 | Baseline identity/safety | Existing provenance/account/uncertainty guards preserved | Real account/layout/provenance evidence |
-| Single-deal ordering and delivery cutoff | Not implemented | Durable shared purchase workflow and 14-day boundary regressions, then separate provider acceptance |
+| Shared single-/multi-deal ordering | Durable shared source and reviewed reconciliation/repair implemented | Behavioral crash/recovery and provider acceptance |
+| Latest-delivery cutoff | Not implemented | 14-day rule implementation, boundary regressions and provider acceptance |
 | Relational schema/guard/repositories | Implemented; canonical guarded SQL and transaction paths exercised offline | Native mini-PC PostgreSQL, reviewed non-owning role/grants and actual schema installation |
 | Reconciliation, order/shipment, payments/exposure | Implemented; focused synthetic regressions passed | Verified provider full-read/payment contracts and current DOM/API semantics |
 | Historical cutover | Default report and atomic guarded apply implemented; synthetic import tested | Actual creation/payment proofs, full reviewed report, backup/restore and separately authorized real apply |
-| Operational stores/service | Dedicated SQL push intake source implemented; batch/recovery/status/alert journals remain files | Requested regression evidence, native intake SQL/import, real watch/ACK/reconnect/restore contracts, supervision and notification acceptance |
+| Operational stores/service | SQL push intake and shared per-message/per-reservation checkpoints implemented; legacy recovery/status/alert journals remain files | Requested regression evidence, native intake SQL/import, real watch/ACK/reconnect/restore contracts, supervision and notification acceptance |
 | Documentation/handoff | v22 pair, runbook and registers updated with exact evidence | Keep future evidence dated and tied to concrete revisions; no production-ready claim before acceptance |
 
 ### 8.1 Regression coverage and future scenarios
 
-The 23 relational cases described in Section 2.1 are implemented and passing. Scenarios below retain the broader desired regression scope; single-deal ordering, delivery-cutoff and production recovery scenarios remain future work.
+The 23 relational cases described in Section 2.1 are implemented and passing. Scenarios below retain the broader desired regression scope; behavioral verification of shared single-/multi-deal ordering and recovery, delivery-cutoff scenarios and production acceptance remain future work.
 
 - Single-new-deal email passes full authenticated provenance and, if newly processed and eligible, follows same policy as multi-deal.
 - Multi-new-deal reserves each distinct BFMR deal before supplier/purchase evaluation. Bundles remain single offers.
@@ -505,7 +506,7 @@ This map records the original split, not current schema or implementation status
 | 2.1 recorded evidence and setup observations | 1.2 evidence distinctions | 2.1 historical evidence; 6.1 environment |
 | 3 decisions; 3.1 delivery examples; 3.2 email chronology | 3 (all decisions and examples retained) | 3.1, 3.3, 7.3 implementation gaps |
 | 4.1 Gmail provenance and classification | 4.1 | 3.1; 5.1 |
-| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 current queue and early-return gap; 4.2 journals |
+| 4.2 queue/restart implementation and new unified pipeline | 4.2 durable requirements | 3.1 shared workflow and queue; 4.2 SQL checkpoints and legacy journals |
 | 4.3 duplicate checks and confirmation | 4.3 | 3.2; 5.2 |
 | 5.1 eligibility; 5.2 rejection/uncertainty policy | 5.1–5.2 | 3.3 existing policy and unimplemented cutoff |
 | 5.3 order identity and retailer constraints | 5.3 | 3.3 |
