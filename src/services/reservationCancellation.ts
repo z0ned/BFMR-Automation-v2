@@ -5,12 +5,19 @@ import type { ReservationReference } from './amazonEvaluation';
 export function cancellationTargetState(rows: TrackerReservationRow[], reference: ReservationReference): 'RESERVED' | 'RELEASED' {
   if (!reference.reserveId || !reference.dealId) throw new Error('Cancellation requires exact reservation and deal IDs.');
   const matches = rows.filter(row => String(row.reserve_id ?? '') === reference.reserveId);
-  if (matches.length === 0) return 'RELEASED';
+  if (matches.length === 0) throw new Error('Cancellation target is missing; absence does not prove release. Reconcile authoritative evidence before any retry.');
   if (matches.length !== 1) throw new Error('Cancellation target has multiple tracker rows; manual review required.');
   const row = matches[0];
   if (reservationReference(row)?.dealId !== reference.dealId) throw new Error('Cancellation target deal identity changed.');
-  const status = row.status ?? row.item_status ?? row.reservation_status;
-  if (typeof status !== 'string') throw new Error('Cancellation target status is unknown.');
+  const statuses = [row.status, row.item_status, row.reservation_status]
+    .filter(value => value !== undefined && value !== null);
+  if (!statuses.length || statuses.some(value => typeof value !== 'string') ||
+      new Set(statuses.map(value => String(value).trim().toLowerCase())).size !== 1 ||
+      Number(row.qty ?? row.quantity) !== 1 ||
+      (row.qty != null && row.quantity != null && Number(row.qty) !== Number(row.quantity))) {
+    throw new Error('Cancellation target status or quantity is unknown or conflicting.');
+  }
+  const status = String(statuses[0]);
   if (/^cancelled$|^canceled$/i.test(status.trim())) return 'RELEASED';
   if (!/^reserved$/i.test(status.trim()) || Number(row.qty ?? row.quantity) !== 1) {
     throw new Error('Cancellation target is no longer a quantity-one Reserved row; manual review required.');
@@ -22,6 +29,7 @@ export interface CancellationDependencies {
   readRows(): Promise<TrackerReservationRow[]>;
   request: typeof fetch;
   wait(ms: number): Promise<void>;
+  beforeMutation?(): Promise<void>;
 }
 
 const defaults: CancellationDependencies = {
@@ -40,6 +48,7 @@ export async function cancelConfirmedReservation(reference: ReservationReference
   const secret = process.env.BFMR_API_SECRET;
   if (!key || !secret) throw new Error('BFMR API credentials are required for cancellation.');
   let responseStatus: number | undefined;
+  await dependencies.beforeMutation?.();
   try {
     const response = await dependencies.request('https://api.bfmr.com/api/v2/my-tracker/reservation/cancel', {
       method: 'POST',

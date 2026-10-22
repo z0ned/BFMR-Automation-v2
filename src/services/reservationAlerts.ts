@@ -38,7 +38,7 @@ export async function sendTrackingFailureAlert(orderId: string, request: typeof 
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
-        text: `Amazon tracking check needs review for order ${orderId}. Inspect Amazon Orders and the local order ledger. New-deal intake continues.`,
+        text: `Amazon tracking check needs review for order ${orderId}. Inspect Amazon Orders and the local order ledger. Reconcile uncertain outcomes before any retry.`,
         link_preview_options: { is_disabled: true },
       }),
       redirect: 'error',
@@ -65,7 +65,7 @@ export async function sendBfmrStatusAlert(message: string, request: typeof fetch
     const payload = await response.json() as { ok?: boolean; result?: { message_id?: number } };
     if (!response.ok || payload.ok !== true || !Number.isInteger(payload.result?.message_id)) throw new Error('Telegram rejected the alert.');
   } catch {
-    throw new Error('Telegram BFMR status alert was not delivered; the durable alert remains pending.');
+    throw new Error('Telegram BFMR status alert was not delivered; inspect durable recovery and incident state before continuing.');
   }
 }
 

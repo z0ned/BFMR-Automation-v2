@@ -14,6 +14,13 @@ export interface PreparedRelationalReservation {
   email?: TriggerEmail;
 }
 
+/** Only for adapter results that prove the website action was never attempted. */
+export async function recordReservationNotAttempted(runtime: RelationalRuntime, prepared: PreparedRelationalReservation): Promise<void> {
+  await runtime.db.withTransaction(tx => tx.evidence.appendWorkflow({ correlationId: prepared.correlationId,
+    actionType: 'RESERVATION_CREATION', phase: 'NO_ACTION', outcome: 'NOT_SUBMITTED',
+    evidence: { bfmr_deal_id: prepared.dealId } }));
+}
+
 /** Persist intent before the provider form action. Deal and reservation rates
  * are independent facts; an email payout is never used as creation evidence.
  */

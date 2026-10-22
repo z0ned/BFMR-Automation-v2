@@ -1,5 +1,10 @@
 # BFMR Automation v2 — Solution Design Specification
 
+## 22 October 2026 — action-control implementation amendment
+
+The worker now requires exact configured Amazon address/card expectations and contract-gated visible active-account proof; cancellation requires an explicit exact canceled row rather than disappearance. Account-scoped incidents persist in append-only SQL evidence and stop new work across restarts. Production startup audits recovery journals, transition-log presence, pending alerts and unresolved SQL/provider intents independently of the temporary test reservation. A reviewed first-adoption recovery inventory is required; it never proves missing history safe. See [action-control runbook](ACTION_CONTROL.md) for exact configuration, evidence and repair boundaries. No new schema or purchasing scope is adopted. This is source implementation and static checking, not software regression, provider or production acceptance. The single-deal and 14-day delivery gaps remain.
+
+
 **VERSION 22 | Business requirements, technical requirements, decisions, and target architecture**
 
 **Prepared:** 19 October 2026  

@@ -103,6 +103,8 @@ async function hasAccessChallenge(page: Page): Promise<boolean> {
 }
 
 export class PlaywrightBfmrBrowser {
+  private actionGuard: (() => Promise<void>) | undefined;
+  public setActionGuard(guard: () => Promise<void>): void { this.actionGuard = guard; }
   private context: BrowserContext | null = null;
   private connectedBrowser: Browser | null = null;
   private page: Page | null = null;
@@ -542,6 +544,7 @@ export class PlaywrightBfmrBrowser {
       }
 
       console.log('👉 [Playwright] Clicking Reserve Quantity for one unit...');
+      await this.actionGuard?.();
       await reserveButton.click();
 
       // Check for modal confirmation or toast
@@ -549,6 +552,7 @@ export class PlaywrightBfmrBrowser {
       const confirmModalBtn = await page.$('div[role="dialog"] button:has-text("Confirm"), div[role="dialog"] button:has-text("Reserve"), button:has-text("Yes, Reserve")');
       if (confirmModalBtn) {
         console.log('[Playwright] Confirming reservation in popup dialog...');
+        await this.actionGuard?.();
         await confirmModalBtn.click();
       }
 

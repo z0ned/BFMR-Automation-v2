@@ -1,5 +1,12 @@
 # Implementation plan and evidence
 
+## 22 October 2026 — action-control source implementation
+
+Closed source gaps from the project review: reject missing exact checkout expectations; require verified active Amazon buying-account evidence; require explicit exact cancellation status; persist worker incident blocks in append-only SQL evidence; guard financial/provider mutation boundaries; and audit recovery journals, transition-log presence, pending notifications, Gmail PROCESSING work and unresolved relational/provider intents before production startup. Existing inventory detects later loss/path changes; adoption requires a reviewed first baseline. Normal intake cleanup awaits failure recording. Proved non-submissions retain NO_ACTION evidence rather than orphaning creation intent.
+
+`npm run typecheck`, strict script-only TypeScript and `git diff --check` passed. Broader `typecheck:all` is blocked by the missing declared PGlite dependency and resulting fixture typing errors. No software tests were added/run; source implementation does not supersede historical evidence with a new passing behavioral result. No schema, live account, private state, recovery baseline, import, watch or deployment was changed. Next: requested offline regression updates (including the former disappearance-as-release fixtures), native/provider failure acceptance and reviewed operator repair. [ACTION_CONTROL.md](ACTION_CONTROL.md) defines the new controls and remaining acceptance boundaries.
+
+
 ## 22 October 2026 — requested offline intake validation
 
 Added dedicated adapter, SQL-store, coordinator and integration tests under `npm run test:gmail-intake`. Synthetic providers and disposable embedded PostgreSQL exercise failure/recovery behavior without a native database or live provider. Current results, scope and remaining acceptance are recorded in [GMAIL_PRODUCTION_INTAKE.md](GMAIL_PRODUCTION_INTAKE.md#offline-validation--22-october-2026). Historical test totals below retain their original revisions and are not combined with these cases.

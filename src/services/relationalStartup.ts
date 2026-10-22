@@ -5,6 +5,7 @@ import type { PostReservationTask } from './postReservation';
 import { captureRelationalReservation, prepareRelationalReservation, recordConfirmedCancellation,
   recordVerifiedAmazonSupplier, type PreparedRelationalReservation } from './relationalReservations';
 import { readTrackerWithFailureEvidence } from './relationalReservations';
+import { recordReservationNotAttempted } from './relationalReservations';
 
 /** The startup CAPTCHA workflow still cancels without supplier evaluation.
  * Recovery can use existing locked terms, but must never recreate them from
@@ -13,6 +14,11 @@ import { readTrackerWithFailureEvidence } from './relationalReservations';
 export function relationalStartupHooks(runtime: RelationalRuntime) {
   let prepared: PreparedRelationalReservation | undefined;
   return {
+    async beforeMutation() { await runtime.ownership.verifyOwnership(); },
+    async afterNotSubmitted(deal: StartupDeal) {
+      if (!prepared || prepared.dealId !== deal.id) throw new Error('Startup non-submission intent is missing.');
+      await recordReservationNotAttempted(runtime, prepared);
+    },
     async beforeStartup() {
       const result = await runtime.sync.reconcile(await readTrackerWithFailureEvidence(runtime), {
         complete: true, accountValidated: true,

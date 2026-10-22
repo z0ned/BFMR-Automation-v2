@@ -58,6 +58,7 @@ function confirmedPurchase(row: TrackerReservationRow, order: AmazonOrderRecord)
 async function confirmBfmrPurchase(orderId: string, ledger: Ledger, dependencies: {
   readRows?: () => Promise<TrackerReservationRow[]>;
   request?: typeof fetch;
+  beforeMutation?: () => Promise<void>;
 } = {}): Promise<void> {
   const readRows = dependencies.readRows ?? readRecentReservedRows;
   const request = dependencies.request ?? fetch;
@@ -78,6 +79,7 @@ async function confirmBfmrPurchase(orderId: string, ledger: Ledger, dependencies
   }
   if (order.bfmrPurchaseIntentAt) throw new Error('Previous BFMR purchase update is unresolved. No repeat POST; inspect My Tracker.');
   await ledger.update({ ...order, bfmrPurchaseIntentAt: new Date().toISOString() }, 'OPERATIONAL');
+  await dependencies.beforeMutation?.();
   let postError: unknown;
   try {
     await postTrackerUpdate({ reserve_id: order.reserveId, purchase_id: null, shipment_id: null,
@@ -96,6 +98,7 @@ async function confirmBfmrPurchase(orderId: string, ledger: Ledger, dependencies
 async function confirmBfmrTracking(orderId: string, ledger: Ledger, dependencies: {
   readRows?: () => Promise<TrackerReservationRow[]>;
   request?: typeof fetch;
+  beforeMutation?: () => Promise<void>;
 } = {}): Promise<void> {
   const readRows = dependencies.readRows ?? readRecentReservedRows;
   const request = dependencies.request ?? fetch;
@@ -124,6 +127,7 @@ async function confirmBfmrTracking(orderId: string, ledger: Ledger, dependencies
   }
   if (order.bfmrShipmentIntent) throw new Error('Previous BFMR shipment update is unresolved. No repeat POST; inspect My Tracker.');
   await ledger.update({ ...order, bfmrShipmentIntent: { trackingNumber, at: new Date().toISOString() } }, 'OPERATIONAL');
+  await dependencies.beforeMutation?.();
   let postError: unknown;
   try {
     await postTrackerUpdate({ reserve_id: order.reserveId, purchase_id: purchaseId, shipment_id: null,
@@ -142,6 +146,7 @@ async function confirmBfmrTracking(orderId: string, ledger: Ledger, dependencies
 type TrackingDependencies = {
   readRows?: () => Promise<TrackerReservationRow[]>;
   request?: typeof fetch;
+  beforeMutation?: () => Promise<void>;
 };
 
 async function withRetainedReview(orderId: string, ledger: Ledger, action: 'PURCHASE' | 'SHIPMENT',

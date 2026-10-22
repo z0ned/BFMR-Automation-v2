@@ -33,6 +33,7 @@ export interface AmazonRehearsalOptions {
   manual(message: string): Promise<void>;
   log(message: string): void;
   accessTimeoutMs?: number;
+  beforeCartMutation?: () => Promise<void>;
 }
 
 async function settle(page: Page) {
@@ -608,7 +609,7 @@ export async function readAmazonOrderReview(
 /** Unattended orders require configured, visible checkout identity evidence. */
 export async function verifyAmazonCheckoutSelections(page: Page, addressFragment?: string, cardLast4?: string): Promise<boolean> {
   assertAmazon(page);
-  if (cardLast4 && !/^\d{4}$/.test(cardLast4)) return false;
+  if (!addressFragment?.trim() || !cardLast4 || !/^\d{4}$/.test(cardLast4)) return false;
   const body = await page.locator('body').innerText();
   const normalized = body.replace(/\s+/g, ' ').trim().toLowerCase();
   const address = addressFragment?.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -617,12 +618,12 @@ export async function verifyAmazonCheckoutSelections(page: Page, addressFragment
   const addressMatches = addressLabels.filter(match => {
     if (match.index === undefined) return false;
     const section = normalized.slice(match.index + match[0].length, match.index + 300);
-    return address ? section.includes(address) : section.length >= 20 && !/^(?:select|add|choose)\s+(?:a\s+)?(?:delivery\s+)?address\b/.test(section);
+    return section.includes(address!);
   });
   const paymentMatches = paymentLabels.filter(match => {
     if (match.index === undefined) return false;
     const section = normalized.slice(match.index, match.index + 300);
-    const cardPattern = cardLast4 || '\\d{4}';
+    const cardPattern = cardLast4;
     return new RegExp(`(?:ending in|ending with|[•*x]{2,})\\s*${cardPattern}\\b`, 'i').test(section);
   });
   return addressMatches.length === 1 && paymentMatches.length === 1;
@@ -633,7 +634,8 @@ export async function isAmazonOrderReview(page: Page, expectedAsin: string, expe
 }
 
 /** Complete a post-submit card-security prompt only when it is visibly present. */
-async function completeAmazonCvvChallenge(page: Page, cvv: string | undefined): Promise<'NONE' | 'COMPLETED' | 'UNCERTAIN'> {
+async function completeAmazonCvvChallenge(page: Page, cvv: string | undefined,
+  beforeMutation?: () => Promise<void>): Promise<'NONE' | 'COMPLETED' | 'UNCERTAIN'> {
   const visible = page.locator(':visible');
   const inputs = page.locator([
     'input[autocomplete="cc-csc"]',
@@ -661,6 +663,7 @@ async function completeAmazonCvvChallenge(page: Page, cvv: string | undefined): 
   if (await actions.count() !== 1 || !await actions.isEnabled()) return 'UNCERTAIN';
   // This is the completion of the already-authorized order flow after Amazon
   // explicitly requested the card security code. Never retry this action.
+  await beforeMutation?.();
   try {
     await actions.click({ timeout: 15000 });
   } catch {
@@ -678,6 +681,7 @@ async function completeAmazonDuplicateOrderWarning(
   expectedAsin: string,
   expectedTitle: string | null,
   confirmedTotalCents: number,
+  beforeMutation?: () => Promise<void>,
 ): Promise<'NONE' | 'COMPLETED' | 'UNCERTAIN'> {
   assertAmazon(page);
   if (!/^\/checkout\/[^?#]*\/duplicateOrder\/?$/i.test(new URL(page.url()).pathname)) return 'NONE';
@@ -694,6 +698,7 @@ async function completeAmazonDuplicateOrderWarning(
   const button = page.getByRole('button', { name: /^place your order$/i })
     .or(page.getByRole('link', { name: /^place your order$/i })).and(page.locator(':visible'));
   if (await button.count() !== 1 || !await button.isEnabled()) return 'NONE';
+  await beforeMutation?.();
   try {
     await button.click({ timeout: 15000 });
   } catch {
@@ -710,7 +715,8 @@ export async function submitAmazonOrderOnce(
   expectedAsin: string,
   expectedTitle: string | null,
   amazonDefaultCardCvv?: string,
-  limits?: { maxTotalCents: number; confirmedTotalCents: number; allowDuplicateWarning?: boolean; log?: (message: string) => void },
+  limits?: { maxTotalCents: number; confirmedTotalCents: number; allowDuplicateWarning?: boolean; log?: (message: string) => void;
+    beforeClick?: () => Promise<void>; beforeContinuation?: () => Promise<void> },
 ): Promise<'PLACED' | 'UNCERTAIN'> {
   submissionConfirmations.delete(page);
   assertAmazon(page);
@@ -740,6 +746,15 @@ export async function submitAmazonOrderOnce(
   // but never click again or complete another purchase action after uncertainty.
   let actionsUncertain = false;
   await requireSingleAmazonCheckoutLine(page, expectedAsin);
+  // This callback is outside the uncertain-click catch: failed authorization
+  // must never be interpreted as a submitted order or permit a continuation.
+  await limits.beforeClick?.();
+  const finalReview = await readAmazonOrderReview(page, expectedAsin, expectedTitle, {
+    requireGift: true, requireFreeNonPrimeDelivery: true,
+  });
+  if (!finalReview || finalReview.totalCents !== limits.confirmedTotalCents || finalReview.totalCents > limits.maxTotalCents) {
+    throw new Error('Checkout changed during final authorization; no order was submitted.');
+  }
   try {
     await primaryPlaceOrder.click({ timeout: 15000 });
   } catch {
@@ -779,7 +794,7 @@ export async function submitAmazonOrderOnce(
       if (!actionsUncertain) {
         if (/\/duplicateOrder\/?$/i.test(state.path)) {
           if (limits.allowDuplicateWarning !== false && !duplicateAttempted) {
-            const result = await completeAmazonDuplicateOrderWarning(page, expectedAsin, expectedTitle, limits.confirmedTotalCents);
+            const result = await completeAmazonDuplicateOrderWarning(page, expectedAsin, expectedTitle, limits.confirmedTotalCents, limits.beforeContinuation);
             if (result !== 'NONE') duplicateAttempted = true;
             if (result === 'COMPLETED') limits.log?.('Duplicate-order warning confirmed; clicked Place your order once. Waiting for confirmation.');
             if (result === 'UNCERTAIN') {
@@ -788,7 +803,7 @@ export async function submitAmazonOrderOnce(
             }
           }
         } else if (!cvvAttempted) {
-          const result = await completeAmazonCvvChallenge(page, amazonDefaultCardCvv);
+          const result = await completeAmazonCvvChallenge(page, amazonDefaultCardCvv, limits.beforeContinuation);
           if (result !== 'NONE') cvvAttempted = true;
           if (result === 'UNCERTAIN') actionsUncertain = true;
         }
@@ -850,6 +865,7 @@ export async function runAmazonCheckoutRehearsal(page: Page, productUrl: string,
   await openWithAccess(page, product, options);
   if (amazonProductAsin(page.url()) !== asin) throw new Error('Amazon product identity changed; no cart action taken.');
   const expectedTitle = await readRequestedProductTitle(page, asin);
+  await options.beforeCartMutation?.();
   const add = page.locator('#add-to-cart-button:visible');
   if (await add.count() !== 1) {
     const availability = await page.locator('body').innerText().catch(() => '');

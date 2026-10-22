@@ -16,6 +16,8 @@ A separate daily process in the active runner checks Amazon Order History after 
 
 The worker source uses relational PostgreSQL business repositories with dedicated account ownership and a separate SQL Gmail intake store. Batch/recovery, daily status and alert-delivery journals remain private files. The older JSONB engine remains a separate compatibility/model path. Account selectors, Gmail auth-header arrangements, provider field contracts, native PostgreSQL/schema/cutover acceptance, backup/restore and supervised deployment remain open. Do not call the project production-ready.
 
+The worker now enforces [action controls](docs/ACTION_CONTROL.md): exact configured checkout expectations and contract-gated active Amazon account identity, explicit cancellation status, persistent SQL incident blocks, and recovery audits before startup. First adoption requires a reviewed recovery-file baseline; never initialize it over lost state. No software regression or live acceptance of these new guards is claimed.
+
 ## Database source
 
 The authoritative 16-table schema is [database/schema.sql](database/schema.sql), with [upgrade migrations](database/migrations/) and [design notes](database/DESIGN_DECISIONS.md) in this repository. It includes immutable reservation creation terms, one order per reservation, one shipment/tracking number per order and one reimbursement per reservation. No separate schema checkout is needed. See [database/README.md](database/README.md) for source provenance, fresh-install versus upgrade boundaries and offline checks. Startup never applies SQL automatically.

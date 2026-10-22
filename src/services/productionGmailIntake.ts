@@ -46,6 +46,7 @@ export class ProductionGmailIntake {
   private revision = 0;
   private readonly waiters = new Set<() => void>();
   private closing: Promise<void> | undefined;
+  private failureTask: Promise<void> | undefined;
   private watchExpiresAt = 0;
 
   constructor(private readonly options: {
@@ -81,7 +82,7 @@ export class ProductionGmailIntake {
     // and unacknowledged/redeliverable notifications remain recoverable.
     void this.options.subscription.close().catch(() => {});
     void this.options.provider.close().catch(() => {});
-    void this.options.onFailure(this.failure).catch(() => {});
+    this.failureTask = this.options.onFailure(this.failure).catch(() => {});
   }
 
   async start(allowInitialize = false): Promise<void> {
@@ -278,7 +279,7 @@ export class ProductionGmailIntake {
       for (const delivery of this.buffered.splice(0)) await Promise.resolve(delivery.nack()).catch(() => {});
       await this.options.subscription.close().catch(() => {});
       await this.options.provider.close().catch(() => {});
-      await Promise.allSettled([this.deliveryTail, this.historyTask, this.renewal]);
+      await Promise.allSettled([this.deliveryTail, this.historyTask, this.renewal, this.failureTask]);
       if (this.runId) await this.options.store.stopRun(this.runId).catch(() => {});
     })();
     return this.closing;

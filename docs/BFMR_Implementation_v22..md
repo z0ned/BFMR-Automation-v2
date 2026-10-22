@@ -1,5 +1,14 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 22 October 2026 — action controls tightened
+
+Implemented `amazonAccountIdentity.ts`, `workerActionControl.ts` and worker/adapter wiring. Email checkout rejects missing address/card expectations; verified visible active-account text must equal the configured retailer-account email before cart mutation/final submission and retailer tracking. Final submit rechecks checkout evidence after authorization; CVV continuation and BFMR mutations retain health/ownership guards. Missing cancellation rows no longer prove release, and conflicting status/quantity aliases stop.
+
+Worker SQL incident blocks survive restart and successful notification delivery. Production startup audits startup/post-reservation/batch/status/notification journals, startup event-log presence, Gmail PROCESSING work, unmatched SQL reservation/checkout intents, failed retailer checks and unresolved BFMR write intents without invoking test startup recovery. A reviewed initial recovery baseline records path hashes/presence; existing inventory cannot be reset by its first-adoption flag. Proved non-submissions receive matching NO_ACTION evidence. See [ACTION_CONTROL.md](ACTION_CONTROL.md) for configuration, review-only repair boundaries and limitations.
+
+Evidence: `npm run typecheck`, strict TypeScript checking of `scripts/*.ts`, and `git diff --check` passed. `npm run typecheck:all` was attempted but is blocked by missing `@electric-sql/pglite` and resulting helper typing errors in this workspace. No software tests were added/run under the repository's explicit-request rule; previous counts do not cover this source. No live workflow, SQL installation/import, provider action, baseline initialization or deployment occurred. Provider selectors, native SQL/grants and crash/recovery/notification acceptance remain open.
+
+
 **VERSION 22 | Existing implementation, file responsibilities, operations, evidence, and remaining work**
 
 **Prepared:** 19 October 2026  
