@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "validate-db": "tsx scripts/validate_database_environment.ts"
+    "validate-db": "npx tsx scripts/validate_database_environment.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",
