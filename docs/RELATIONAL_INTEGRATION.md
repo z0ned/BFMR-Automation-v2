@@ -25,9 +25,9 @@ The active email runner uses SQL business records instead of the private Amazon 
 
 ## Operational state remains explicit
 
-Gmail cursor/dedupe/queued work, multi-deal progress, startup and post-reservation recovery, daily status/alert delivery, and other existing private operational journals remain in their durable stores. Historical JSON/status evidence is preserved. The legacy JSONB engine aggregate is also retained for its existing orchestration compatibility; the relational live startup path does not initialize or use it as the business-record store.
+Gmail cursor/work/notification/run state now uses the separate four-table `database/gmail_intake.sql` contract through the push worker source. This does not alter the pinned 16-table business schema. Legacy Gmail JSON requires explicit reviewed import; multi-deal progress, startup/post-reservation recovery and status/alert journals remain private files. Historical JSON/status evidence is preserved. The legacy JSONB engine aggregate is also retained for its existing orchestration compatibility; the relational live startup path does not initialize or use it as the business-record store.
 
-These stores remain behind explicit store interfaces. They are not one database transaction with provider actions or with each other. An evidence row is not a runnable command queue or permission to retry. Gmail gaps and interrupted `PROCESSING` work still stop for review. Migrating the cursor, command/retry state or notification outbox into PostgreSQL would be separate work.
+These stores remain behind explicit store interfaces. They are not one database transaction with provider actions or with each other. An evidence row is not a runnable command queue or permission to retry. Gmail gaps and interrupted `PROCESSING` work still stop for review. Broader command/retry and alert-outbox migration remains separate work; see [production intake runbook](GMAIL_PRODUCTION_INTAKE.md) for the new Gmail store and its unverified installation/import boundary.
 
 ## Startup prerequisites and configuration
 
@@ -114,7 +114,7 @@ These results do not verify a native mini-PC PostgreSQL installation, real provi
 - Real creation/deal payout fields, full tracker retention/completeness, payment evidence, account alignment and current retailer/BFMR DOM/API contracts remain release gates. Keep contract flags unset until their meanings are verified.
 - Installing the schema/guard, accepting an actual legacy import, runtime role provisioning, mini-PC startup/reboot supervision, backup/restore and production recovery have not been performed by this work.
 - Single-new-deal automatic purchasing still has its existing early-return boundary, and the separate 14-day latest-delivery cutoff remains unimplemented. Neither behavior is broadened by persistence integration.
-- Gmail watch/Pub/Sub StreamingPull with durable PostgreSQL notification-before-ACK and cursor/watch recovery is REQUIRED by CON-001 and still incomplete; the current periodic Gmail polling violates that constraint. Broader operational queue/outbox integration and a supervised service also remain unfinished. No deployment or new live invocation is authorized by source presence.
+- Required Gmail watch/owned StreamingPull and SQL notification-before-ACK/cursor/watch recovery are now implemented in source; the periodic Gmail loop is removed. Requested regressions, installed operational SQL, real legacy import and provider/recovery acceptance remain pending. Broader operational queue/outbox integration and a supervised service also remain unfinished. No deployment or new live invocation is authorized by source presence.
 
 ## Documentation QA — 21 October 2026
 

@@ -8,6 +8,7 @@ PostgreSQL 15 or later is intended to run locally on the mini-PC. A second
 | File | Purpose |
 | --- | --- |
 | [schema.sql](schema.sql) | Complete 16-table fresh-install schema, lookup seeds, constraints, append-only evidence and immutable reservation-payout guard. |
+| [gmail_intake.sql](gmail_intake.sql) | Separate, additive four-table operational Gmail cursor/watch/run/notification/work contract; install once only under reviewed authorization. Does not modify the pinned business schema. |
 | [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) | Preserved database design rationale and dated source/validation history. Read current application evidence alongside it. |
 | [migrations/20261020_sync_consistency.sql](migrations/20261020_sync_consistency.sql) | Single-use upgrade for the schema immediately preceding the sync-consistency change; requires actual scope backfill/reconciliation. |
 | [migrations/20261020_reservation_payout_immutability.sql](migrations/20261020_reservation_payout_immutability.sql) | Single-use upgrade from its stated baseline to protect existing reservation creation terms. |
@@ -47,6 +48,30 @@ or provider outcomes.
 `src/db/migrations/001_initial_schema.sql` is the historical v1.5 design;
 `src/db/migrations/002_runtime_state.sql` belongs to the separate legacy JSONB
 orchestration engine. Neither installs this relational business schema.
+
+## Production Gmail operational schema
+
+Production watch/PubSub intake additionally requires [gmail_intake.sql](gmail_intake.sql).
+It creates `gmail_intake_state`, `gmail_intake_runs`,
+`gmail_intake_notifications` and `gmail_intake_work` in the same intended
+PostgreSQL database. The 16-table `schema.sql` and its reviewed SHA-256 remain
+unchanged. Business-schema installation does not install intake tables, and
+intake installation does not install business objects or accepted cutover data.
+
+Review the actual baseline and coordinated backups before a separately
+authorized one-time installation. Runtime performs read-only catalog validation,
+never DDL. Its non-owning role needs SELECT, INSERT and UPDATE on the four
+operational tables; do not grant schema management or table deletion/truncation.
+The tables contain private queued message bodies/headers and actual identifiers.
+Back them up and restore them together with the other private recovery stores.
+
+An existing JSON Gmail queue requires the reviewed report-first
+`scripts/import_gmail_intake.ts` path; no automatic import, cursor reset or empty
+replacement is performed. Native SQL/schema/grant and provider acceptance remain
+pending: the implementation work did not install SQL, import actual state, run
+new software tests, establish a watch or invoke a live worker. See the
+[production Gmail runbook](../docs/GMAIL_PRODUCTION_INTAKE.md) for configuration,
+exact import controls, production-versus-test startup and remaining acceptance.
 
 ## Offline checks
 

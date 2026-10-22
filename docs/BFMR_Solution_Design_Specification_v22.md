@@ -98,7 +98,7 @@ The persistence contract is the adopted 16-table PostgreSQL schema in Section 8,
 
 ### 2.3 Operational requirements
 
-Before unattended production operation, provide supervised execution, durable private storage, account ownership and loss handling, backup/restore and stale-state reconciliation, restart recovery, notification delivery controls, monitoring, and an operator procedure for browser login/MFA. **CON-001 requires Gmail watch and Pub/Sub StreamingPull intake. No periodic Gmail polling or Inbox sweep is permitted.** The current history-polling runner is an implementation gap, not an approved production alternative. An expired Gmail history cursor must preserve a gap and stop; there is no authorized blanket Inbox scan or silent cursor reset.
+Before unattended production operation, provide supervised execution, durable private storage, account ownership and loss handling, backup/restore and stale-state reconciliation, restart recovery, notification delivery controls, monitoring, and an operator procedure for browser login/MFA. **CON-001 requires Gmail watch and Pub/Sub StreamingPull intake. No periodic Gmail polling or Inbox sweep is permitted.** The worker source now implements watch/owned StreamingPull and dedicated SQL intake; its static checks do not establish native installation, provider contracts or supervised production acceptance. An expired Gmail history cursor must preserve a gap and stop; there is no authorized blanket Inbox scan or silent cursor reset.
 
 ## 3. Approved design decisions and v22 amendments
 
@@ -148,7 +148,7 @@ One multi-new-deal email (`E100`) can announce BFMR deal IDs `D101`, `D102`, `D1
 
 ### 4.2 Durable intake and restart requirements
 
-**Production intake contract (CON-001, restored 21 October 2026):** establish/renew an INBOX Gmail watch and receive outbound Pub/Sub StreamingPull notifications; no public webhook or tunnel is required. Persist each notification durably in PostgreSQL before ACK, serialize consumed-history-cursor advancement, and commit corresponding message work and cursor progress together. The existing private JSON queue is an implementation fact, not acceptance of the required PostgreSQL notification/ACK path.
+**Production intake contract (CON-001, restored 21 October 2026):** establish/renew an INBOX Gmail watch and receive outbound Pub/Sub StreamingPull notifications; no public webhook or tunnel is required. Persist each notification durably in PostgreSQL before ACK, serialize consumed-history-cursor advancement, and commit corresponding message work and cursor progress together. The dedicated source store is `database/gmail_intake.sql` plus `PostgresGmailIntakeStore`; the private JSON queue is retained only as a reviewed legacy import/source boundary. Startup never installs SQL or imports it automatically.
 
 Maintain watch baseline, expiration and the durable consumed cursor as distinct facts. Renew the watch daily without replacing the consumed cursor. Continue saved history once at startup and once on reconnect, then read history in response to notifications; do not poll a quiet mailbox. Authentic first-ever initialization uses the initial watch baseline, not a historical Inbox sweep. Missing prior state and expired/rejected history preserve a recovery fault/gap and stop new work. Required configuration is the exact Gmail mailbox/OAuth identity, Pub/Sub topic/subscription and a verified Pub/Sub credential identity; see implementation section 6.2 and `.env.example`.
 
@@ -304,7 +304,7 @@ Money uses finite nonnegative `numeric(12,2)` values in SQL and safe integer cen
 
 There are no generic `metadata` columns on business tables. Sanitized observations use `provider_observations.response_data`; sparse operational snapshots use `workflow_evidence.evidence` with explicit version/shape validation. Both evidence tables are append-only. Event times and local observation/recording times retain their distinct meanings; do not invent typed shipped/delivered event columns that are absent from this schema. Use semantic JSON comparisons for idempotency because JSONB key order is not preserved.
 
-Gmail cursor/queue, retry/recovery journals and notification delivery remain durable operational stores behind interfaces. The separate legacy orchestration aggregate remains a compatibility/model path, not the live runner's authoritative business store. Migrating these stores is separate work; no transaction spans PostgreSQL, files and external providers.
+Gmail cursor/work/notifications/run state now have four dedicated operational tables in `database/gmail_intake.sql`, separately installed and validated alongside the unchanged 16-table business contract. Retry/recovery journals and alert delivery retain their private stores behind interfaces. The separate legacy orchestration aggregate remains a compatibility/model path, not the live runner's authoritative business store. Broader retry/recovery/outbox migration is separate work; no transaction spans PostgreSQL, files and external providers.
 
 ## 9. Approved authoritative reconciliation design
 

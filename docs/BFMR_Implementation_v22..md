@@ -62,13 +62,13 @@ The guard source is in `database/schema.sql`, with its upgrade in `database/migr
 
 | Area | Source as implemented | Remaining gate |
 |---|---|---|
-| Gmail intake | Authenticated history polling and durable private cursor/queue; violates production CON-001 | Required watch/StreamingPull, durable PostgreSQL notification-before-ACK/cursor recovery, actual auth/templates and supervision |
+| Gmail intake | Watch/owned StreamingPull, SQL notification-before-ACK and atomic work/cursor; startup/reconnect catch-up and daily renewal | New source has static checks only; requested regressions, installed intake SQL/legacy import, actual contracts and supervision remain open |
 | Reservations | Normal Playwright form, exact confirmation, SQL intent/creation capture and guarded recovery | Real creation/deal field contracts, account alignment and accepted historical evidence |
 | Amazon purchasing | Existing multi-deal path, fixed-item manual test and SQL pre-submit intent/order ledger | Single-deal shared purchase workflow and 14-day delivery cutoff; current DOM contracts |
 | Orders/shipments | Typed SQL rows through the ledger interface; one shipment/tracking number per order; retained review/exclusion evidence | Real retailer tracking and BFMR Purchase/Shipment contracts |
 | Payments/exposure | Actual verified-payment notice recording, payment-email FK, locked-payout exposure with fresh full coverage | Authentic payment-mail contract/parser evidence and complete provider payment semantics |
 | PostgreSQL business store | Adopted 16-table schema, read-only contract validation, serializable business transactions and dedicated account ownership | Native mini-PC PostgreSQL, installed guard/roles, actual cutover, backup/restore |
-| Operational stores | Gmail/batch/recovery/status/notification interfaces retain existing durable private stores | Any SQL queue/outbox migration is separate work |
+| Operational stores | Gmail queue/notifications/run state use separate SQL tables; batch/recovery/status/alert stores retain private files | Coordinated backup/restore and broader retry/outbox integration remain open |
 | Legacy engine | Separate JSONB aggregate compatibility/model implementation | Not the active runner's business writer or an accepted production coordinator |
 | Operations | Interactive runner | Supervision, recovery, monitoring and service acceptance |
 
@@ -104,11 +104,15 @@ During the setup discussion recorded in v20, the user reported a working non-roo
 
 ### 3.1 Email intake and the single-deal implementation boundary
 
-The interactive entrypoint is `scripts/test_real_email_e2e.ts`, with shared startup in `scripts/live_test_startup.ts` and reusable browser-session handling in `src/services/browserSession.ts`. Gmail provenance and classification are separated into `emailProvenance.ts`, `emailParser.ts`, `bfmrEmailLinks.ts`, and `bfmrUrl.ts`. The existing path polls authenticated Gmail history every 15 seconds (`POLL_INTERVAL_MS = 15_000`). **This violates production CON-001; it is not an approved intake alternative.** Production requires Gmail watch plus Pub/Sub StreamingPull, notification-triggered history reads, durable PostgreSQL persistence before ACK, serialized cursor/work commits, daily watch renewal and startup/reconnect continuation. Watch baseline/expiration must not overwrite the consumed cursor. No periodic Gmail polling or Inbox sweep is permitted.
+The production source entrypoint is `scripts/run_bfmr.ts` (`npm start`), reusing `runBfmrWorker` in `scripts/test_real_email_e2e.ts`. Gmail watch and the owned low-level Pub/Sub StreamingPull connection replace periodic history polling. `gmailPushTransport.ts` verifies the OAuth mailbox and pull-subscription/topic configuration, bounds provider reads/leases and emits explicit reconnect continuations without parsing unstable SDK debug messages. `productionGmailIntake.ts` buffers startup deliveries until the ACTIVE run commit, persists accepted/rejected/duplicate notification evidence before ACK, serializes full-history reads and atomically commits classifications/admissions, work, covered notification completion and consumed cursor. Quiet-mailbox timers never read Gmail; watch/lease timers and local maintenance scheduling have distinct purposes.
 
-`scripts/auth_gmail_oauth.ts` and `scripts/wait_for_real_email.ts` contain watch setup/listener-related code, but those separate paths are not an integrated accepted production worker; their existence or IMAP fallback does not close this gap. `.env.example` lists required production mailbox, OAuth, Pub/Sub topic/subscription and credential configuration separately from legacy utilities. Supplying those values does not change the polling runner into push intake.
+`postgresGmailIntake.ts` validates the four separately reviewed operational tables in `database/gmail_intake.sql` without DDL and uses ownership-checked serializable transactions. Watch baseline/expiration remain distinct from consumed history; daily renewal cannot reset it. Startup and reconnect continue saved history even without a new message. History errors retain the cursor, and an expired/rejected cursor persists a gap and conservatively stops the worker. Transient triggered reads use bounded backoff and honor valid Retry-After up to 60 seconds; a required longer/invalid delay stops rather than retrying early. No Inbox sweep is implemented. New admissions are independently rechecked at the browser boundary, and interrupted PROCESSING work cannot replay.
 
-`src/services/gmailIntakeQueue.ts` persists mailbox, history cursor, fetched payloads, dedupe tombstones and history gap in an atomically replaced fsynced private JSON file. Cursor and queued messages are committed together. Startup requires explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES` for *first ever* initialization, then remove it. If a prior queue is missing, recover it; do not silently initialize from a new baseline. Interrupted `PROCESSING` entries require manual BFMR/Amazon reconciliation. Gmail history expiration/404 is a **persistent gap and stop**, not permission to sweep Inbox or reprocess older email. History polling is not a deployed watch/StreamingPull service.
+The Gmail intake tasks run independently while browser work or its recovery UI is paused. Nightly priority checks read SQL work/pending notifications only. Fatal intake errors close the controlled browser and block new submissions; existing action intent/uncertainty safeguards remain. `npm start` does not run the temporary CAPTCHA reservation; the explicitly named test-real-email entrypoint retains that separate startup option. No new purchasing scope is added.
+
+`gmailIntakeQueue.ts` is now a legacy file/fixture interface. If its private queue exists, startup requires the accepted source hash from an explicit `scripts/import_gmail_intake.ts` report/apply path; it never imports automatically. Preserve accepted bytes. Authentic first-ever SQL setup alone may use `BFMR_INITIALIZE_GMAIL_QUEUE=YES`, then remove it. Missing previous journals, history gaps and unresolved PROCESSING records require authoritative reconciliation, not a new baseline. Separate `auth_gmail_oauth.ts`/`wait_for_real_email.ts` utilities and IMAP fallback are not this production worker. The [intake runbook](GMAIL_PRODUCTION_INTAKE.md) owns installation, configuration, controlled import and outstanding acceptance.
+
+Evidence for this new source: TypeScript static checks and source/document review only. No software tests were added/run because AGENTS.md requires an explicit testing request; earlier suite results do not cover this intake implementation. No schema installation/import, actual Gmail watch, Pub/Sub connection, provider action or deployment was invoked.
 
 **Unimplemented design change retained in v21:** both single and multi new-deal processing must use the same durable per-message/per-reservation state machine and side-effect intent records. The existing `scripts/test_real_email_e2e.ts` returns after supplier evaluation for single-deal mail (`if (!parsed.isMultiDealAnnouncement) return;`), while `multiDealJournal` is created only for multi-deal mail. Removing the return line alone is **unsafe**: extend durable order intent/confirmation/reconciliation to single-deal mail first. Previously processed messages remain tombstoned, not retrospectively purchased.
 
@@ -166,13 +170,13 @@ The separately retained `PostgresDatabase`/`bfmr_runtime_state` aggregate suppor
 
 | Store | Current responsibility |
 |---|---|
-| Gmail intake queue | Durable mailbox/cursor, work, dedupe and history-gap state behind `GmailIntakeStore` |
+| SQL Gmail intake | Four operational tables for mailbox/cursor/watch, work/dedupe, notification evidence and run activation; legacy file preserved as an explicit import/source-hash boundary |
 | Multi-deal/startup/post-reservation journals | Durable batch and uncertain-action recovery state behind store interfaces |
 | Relational Amazon ledger | Authoritative SQL order/shipment rows and allowlisted workflow snapshots, used by the email runner and tracking services |
 | Legacy/manual Amazon ledger | Preserved accepted cutover source/hash boundary; standalone manual purchases retain their file writer |
 | BFMR status/notification store | Durable discrepancy history and notification-delivery progress behind `BfmrStatusStore` |
 
-Private operational files and SQL are not one transaction, and provider actions are independent effects. Missing or ambiguous state requires restoration/reconciliation rather than replay. Evidence is not a runnable retry queue. Moving cursor/work/retry/outbox state into PostgreSQL is separate focused work.
+Private operational files and SQL are not one transaction, and provider actions are independent effects. Missing or ambiguous state requires restoration/reconciliation rather than replay. Evidence is not a runnable retry queue. Gmail cursor/work/notification persistence is now source-integrated with SQL; broader retry/outbox migration remains separate work.
 
 ### 4.4 Controlled cutover and historical records
 
@@ -193,7 +197,9 @@ This catalog expands the source map retained from v20. It describes the primary 
 | `scripts/test_real_email_e2e.ts` | Interactive Gmail/BFMR email workflow and current multi-deal purchase loop; single-deal flow returns after supplier evaluation in the reviewed baseline. |
 | `scripts/live_test_startup.ts` | Shared startup for designated live-test entrypoints and their startup reservation/cleanup safeguards. |
 | `src/services/browserSession.ts` | Reusable browser-session lifecycle for interactive processing. |
-| `src/services/gmailIntakeQueue.ts` | Durable private Gmail cursor, queue, dedupe tombstones, processing state, and gap handling. |
+| `src/services/gmailIntakeQueue.ts` | Legacy private file/fixture queue and shared payload types; not the production writer. |
+| `src/services/gmailPushTransport.ts`, `productionGmailIntake.ts`, `postgresGmailIntake.ts` | Owned push transport, independent coordination and dedicated SQL notification/cursor/work/run store. |
+| `scripts/run_bfmr.ts`, `scripts/import_gmail_intake.ts` | Production worker without test startup reservation; separate default-report/reviewed-hash legacy import. |
 | `src/services/multiDealJournal.ts` | Durable intent and progress for the existing multi-deal workflow; not yet a unified single-/multi-deal journal. |
 | `src/services/emailProvenance.ts` | Gmail-provided sender and routing/authentication evidence checks. |
 | `src/services/emailParser.ts` | Body-based supported new-deal classification, including single and multi-deal messages. |
@@ -311,7 +317,7 @@ Older specifications/PDFs are available in Git history. This documentation split
 | `BFMR_API_KEY`, `BFMR_API_SECRET`, `BFMR_TRACKER_URL` | BFMR API credentials and current documented My Tracker endpoint. Never put credentials in browser headers. |
 | `BFMR_INTAKE_MODE` | Default `production`; explicitly `testing` is required to allow the separately configured test sender. |
 | `BFMR_INITIALIZE_GMAIL_QUEUE` | `YES` only for authentic first queue creation; remove immediately afterward. Never use for restoration/replay. |
-| `BFMR_GMAIL_QUEUE_PATH` | Default `~/.local/state/bfmr/gmail-intake.json` — private queue/cursor/tombstones. |
+| `BFMR_GMAIL_QUEUE_PATH` | Preserved private legacy queue import/hash source; no longer the production writer. Default `~/.local/state/bfmr/gmail-intake.json`. |
 | `BFMR_MULTI_DEAL_STATE_PATH` | Default `~/.local/state/bfmr/multi-deal.json` — durable batch intent/progress. |
 | `BFMR_AMAZON_ORDER_LEDGER_PATH` | Default `~/.local/state/bfmr/amazon-orders.json` — accepted legacy cutover source/hash boundary; standalone manual ledger, not the active email business writer. |
 | `BFMR_STATUS_SNAPSHOT_PATH` | Default `~/.local/state/bfmr/bfmr-status.json` — daily status history/alerts. |
@@ -321,8 +327,8 @@ Older specifications/PDFs are available in Git history. This documentation split
 | `AMAZON_EXPECTED_DELIVERY_FRAGMENT`, `AMAZON_EXPECTED_CARD_LAST4` | Optional nonsecret partial identity checks for saved account selections. |
 | `AMAZON_DEFAULT_CARD` | Existing code uses this for CVV under a recognized challenge; treat as secret and never log. |
 | `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` | Required mailbox OAuth credentials for designed production intake; private configuration only. |
-| `GMAIL_ACCOUNT_EMAIL` | Required intended production mailbox; verify against the authenticated Gmail account. The current interactive runner does not implement this production configuration contract. |
-| `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_SUBSCRIPTION` | Required full resource names for production watch/StreamingPull intake. Integrated worker/ACK/recovery acceptance remains pending. |
+| `GMAIL_ACCOUNT_EMAIL` | Required intended production mailbox; verify against the authenticated Gmail account. The new production provider verifies it against the authenticated Gmail profile. |
+| `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_SUBSCRIPTION` | Required full resource names for production watch/StreamingPull intake. Source is integrated; real provider/ACK/recovery acceptance remains pending. |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Private container-visible credential-file path for Pub/Sub, unless a separately configured and verified Application Default Credentials identity supplies access. Credential access is required; this file-path mechanism is not the only identity source. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Private alert delivery configuration; not proof of durable delivery. |
 
@@ -337,6 +343,8 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 | `npm run test:relational` | Disposable PGlite regression suite using bundled `database/schema.sql`, pinned to its reviewed hash; no private DB URL or external checkout. |
 | `npx tsx scripts/reconcile_relational_cutover.ts ...` | Default read-only report; actual apply is a separately authorized reviewed-hash/account database write. |
 | `npx tsx scripts/record_reimbursement.ts ...` | Default payment-manifest report; explicit reviewed-hash apply after accepted cutover. No provider actions. |
+| `npm start` | **LIVE** watch/StreamingPull and existing BFMR/Amazon processing gates; no temporary test startup reservation. Not invoked/accepted by this source work. |
+| `node --import tsx scripts/import_gmail_intake.ts ...` | Default read-only legacy report; actual database apply requires separately authorized exact reviewed account/source SHA-256. No provider actions. |
 | `npm run test-real-email` / `test-real-email-e2e` | **LIVE** Gmail/BFMR and potentially Amazon purchase actions. Do not run for docs or review. |
 | `npm run test-bfmr-ipad-reservation` | **LIVE** inventory/reservation mutation. |
 | `npm run test-amazon-checkout` | **LIVE** BFMR startup/cleanup; Amazon rehearsal should not submit purchase. |
@@ -359,7 +367,7 @@ Current `scripts/loadEnv.ts` sources explicit shell vars first, then `BFMR_ENV_F
 
 ### 7.2 Operational and release gaps
 
-The runner is not a supervised unattended service. Existing PostgreSQL account ownership is valuable but does not make Gmail queue, Amazon ledger, multi-deal state, BFMR update intent and Telegram alerts one atomic storage system. Before production: durable private mounted storage in Docker, verified restore/reconciliation of stale backups, account namespace, failed-notification gating, browser desktop/MFA operator procedure, restart after crash and lock loss, the required Pub/Sub watch/StreamingPull architecture, logs/secrets access controls, monitoring, rollback plan and formal evidence-based acceptance.
+The runner is not a supervised unattended service. Existing PostgreSQL account ownership is valuable but does not make Gmail queue, Amazon ledger, multi-deal state, BFMR update intent and Telegram alerts one atomic storage system. Before production: durable private mounted storage in Docker, verified restore/reconciliation of stale backups, account namespace, failed-notification gating, browser desktop/MFA operator procedure, restart after crash and lock loss, acceptance of the new Pub/Sub watch/StreamingPull and SQL intake source, logs/secrets access controls, monitoring, rollback plan and formal evidence-based acceptance.
 
 ### 7.3 Remaining implementation and acceptance gaps
 
@@ -380,7 +388,7 @@ The following separates source completion from future acceptance. It is not perm
 | Relational schema/guard/repositories | Implemented; canonical guarded SQL and transaction paths exercised offline | Native mini-PC PostgreSQL, reviewed non-owning role/grants and actual schema installation |
 | Reconciliation, order/shipment, payments/exposure | Implemented; focused synthetic regressions passed | Verified provider full-read/payment contracts and current DOM/API semantics |
 | Historical cutover | Default report and atomic guarded apply implemented; synthetic import tested | Actual creation/payment proofs, full reviewed report, backup/restore and separately authorized real apply |
-| Operational stores/service | Durable private stores behind interfaces; no integrated SQL queue/outbox migration | Required no-poll Gmail watch/StreamingPull, PostgreSQL notifications before ACK, cursor/reconnect/watch recovery, supervision and notification acceptance |
+| Operational stores/service | Dedicated SQL push intake source implemented; batch/recovery/status/alert journals remain files | Requested regression evidence, native intake SQL/import, real watch/ACK/reconnect/restore contracts, supervision and notification acceptance |
 | Documentation/handoff | v22 pair, runbook and registers updated with exact evidence | Keep future evidence dated and tied to concrete revisions; no production-ready claim before acceptance |
 
 ### 8.1 Regression coverage and future scenarios

@@ -4,14 +4,16 @@ import { prepareRelationalReservation, captureRelationalReservation, recordVerif
   recordConfirmedCancellation, readLockedPurchaseEvidence, readTrackerWithFailureEvidence } from '../src/services/relationalReservations';
 import { readRelationalExposureCents } from '../src/services/relationalExposure';
 import { relationalStartupHooks } from '../src/services/relationalStartup';
-import { gmailIntakeQueue } from '../src/services/gmailIntakeQueue';
-import { authenticateGmailSender, intakeMode, type MailHeader } from '../src/services/emailProvenance';
+import { PostgresGmailIntakeStore } from '../src/services/postgresGmailIntake';
+import { ProductionGmailIntake, assertLegacyGmailSource } from '../src/services/productionGmailIntake';
+import { makeGmailPushAdapters } from '../src/services/gmailPushTransport';
+import type { QueuedEmail } from '../src/services/gmailIntakeQueue';
+import { authenticateGmailSender, exactSender, intakeMode, type MailHeader } from '../src/services/emailProvenance';
 import './loadEnv';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
-import { google } from 'googleapis';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
 import { parseBfmrEmail as parseIncomingEmail } from '../src/services/bfmrEmailLinks';
 import { checkDealReservation, resolveBfmrDealId } from '../src/services/bfmrTrackerApi';
@@ -28,8 +30,7 @@ import { runDueAmazonTracking } from '../src/services/nightlyAmazonTracking';
 import { ensureBfmrPurchase, ensureBfmrTracking } from '../src/services/bfmrTrackingSubmission';
 import { bfmrStatusStore, runDueBfmrStatusCheck } from '../src/services/bfmrDailyStatus';
 
-const POLL_INTERVAL_MS = 15_000;
-const intakeQueue = gmailIntakeQueue(process.env.BFMR_GMAIL_QUEUE_PATH || path.join(os.homedir(), '.local/state/bfmr/gmail-intake.json'));
+const legacyIntakeFile = process.env.BFMR_GMAIL_QUEUE_PATH || path.join(os.homedir(), '.local/state/bfmr/gmail-intake.json');
 const batchJournal = multiDealJournal(process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/multi-deal.json'));
 const statusStore = bfmrStatusStore(process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(os.homedir(), '.local/state/bfmr/bfmr-status.json'));
 
@@ -44,106 +45,16 @@ interface ReceivedEmail {
   source?: 'GMAIL' | 'LOCAL_PDF_TEST';
 }
 
-function decodeBase64Url(value: string): string {
-  return Buffer.from(value.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-}
-
-function collectBody(part: any): string[] {
-  const contents: string[] = [];
-  if (part.body?.data) contents.push(decodeBase64Url(part.body.data));
-  for (const child of part.parts || []) contents.push(...collectBody(child));
-  return contents;
-}
-
-function headerValue(headers: Array<{ name?: string | null; value?: string | null }>, name: string): string {
-  return headers.find((header) => header.name?.toLowerCase() === name.toLowerCase())?.value || '';
-}
-
-function makeGmailClient() {
-  const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN } = process.env;
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
-    throw new Error('GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN are required for Gmail intake.');
-  }
-  const auth = new google.auth.OAuth2(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET);
-  auth.setCredentials({ refresh_token: GMAIL_REFRESH_TOKEN });
-  return google.gmail({ version: 'v1', auth });
-}
-
-async function fetchEmail(gmail: ReturnType<typeof makeGmailClient>, id: string): Promise<ReceivedEmail> {
-  const response = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
-  const message = response.data;
-  const headers = message.payload?.headers || [];
-  if (!message.internalDate || !/^\d+$/.test(message.internalDate)) throw new Error('Gmail message has no reliable receipt timestamp; cursor retained.');
-  return {
-    id,
-    sender: headerValue(headers, 'from'),
-    subject: headerValue(headers, 'subject'),
-    headers,
-    inboxAtFetch: message.labelIds?.includes('INBOX') ?? false,
-    body: message.payload ? collectBody(message.payload).join('\n') : message.snippet || '',
-    receivedAt: message.internalDate
-      ? new Date(Number(message.internalDate)).toISOString()
-      : headerValue(headers, 'date'),
-  };
-}
-
-async function* qualifyingEmails(
-  gmail: ReturnType<typeof makeGmailClient>,
-  getStartupHistoryId: () => string | undefined,
-  onIdle: (hasIncomingMail: () => Promise<boolean>) => Promise<void> = async () => {},
-): AsyncGenerator<ReceivedEmail> {
-  if (!getStartupHistoryId()) throw new Error('Durable Gmail queue must be initialized before listening.');
-  while (true) {
-    const state = await intakeQueue.load();
-    if (!state || state.gap) throw new Error('GMAIL_HISTORY_GAP or missing saved Gmail cursor; intake stopped.');
-    if (state.work.some(item => item.state === 'PROCESSING')) throw new Error('Interrupted Gmail work requires manual reconciliation; no automatic replay.');
-    for (const item of state.work.filter(item => item.state === 'PENDING')) {
-      const email = item.email!;
-      const parsed = parseIncomingEmail({ ...email, messageId: email.id });
-      if (!email.inboxAtFetch || !authenticateGmailSender(email.sender, email.headers ?? [], intakeMode(process.env.BFMR_INTAKE_MODE)) ||
-        !((parsed.isSingleDeal && parsed.dealUrl) || parsed.isMultiDealAnnouncement)) {
-        await intakeQueue.mark(item.id, 'DONE');
-        continue;
-      }
-      await intakeQueue.mark(item.id, 'PROCESSING');
-      yield email;
-      // The consumer resumes this iterator only after processing succeeds.
-      await intakeQueue.mark(item.id, 'DONE');
-    }
-    let pageToken: string | undefined;
-    let latestHistoryId = state.cursor;
-    const ids = new Set<string>();
-    try {
-      do {
-        const response = await gmail.users.history.list({ userId: 'me', startHistoryId: state.cursor,
-          historyTypes: ['messageAdded', 'labelAdded'], maxResults: 500, pageToken });
-        if (response.data.historyId) latestHistoryId = response.data.historyId;
-        for (const history of response.data.history ?? []) {
-          for (const added of history.messagesAdded ?? []) if (added.message?.id) ids.add(added.message.id);
-          for (const added of history.labelsAdded ?? []) if (added.labelIds?.includes('INBOX') && added.message?.id) ids.add(added.message.id);
-        }
-        pageToken = response.data.nextPageToken || undefined;
-      } while (pageToken);
-    } catch (error) {
-      if ((error as { code?: number }).code === 404) await intakeQueue.save({ ...(await intakeQueue.load())!, gap: true });
-      throw error;
-    }
-    const emails: ReceivedEmail[] = [];
-    for (const id of ids) {
-      if (!state.work.some(item => item.id === id)) emails.push(await fetchEmail(gmail, id));
-    }
-    emails.sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt) || a.id.localeCompare(b.id));
-    await intakeQueue.ingest(state.cursor, latestHistoryId, emails);
-    if (emails.length) continue;
-    await onIdle(async () => {
-      const saved = await intakeQueue.load();
-      if (!saved || saved.gap || saved.work.some(item => item.state !== 'DONE')) return true;
-      const result = await gmail.users.history.list({ userId: 'me', startHistoryId: saved.cursor,
-        historyTypes: ['messageAdded', 'labelAdded'], maxResults: 1 });
-      return !!result.data.nextPageToken || !!result.data.history?.some(item => item.messagesAdded?.length || item.labelsAdded?.some(added => added.labelIds?.includes('INBOX')));
-    });
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
+function admitGmailEmail(email: QueuedEmail): boolean {
+  if (!email.inboxAtFetch) return false;
+  const parsed = parseIncomingEmail({ ...email, messageId: email.id });
+  if (!((parsed.isSingleDeal && parsed.dealUrl) || parsed.isMultiDealAnnouncement)) return false;
+  const mode = intakeMode(process.env.BFMR_INTAKE_MODE);
+  const sender = exactSender(email.sender);
+  const recognized = sender === 'deals@buyformeretail.com' || mode === 'testing' && sender === 'matt.ward@live.com';
+  const authenticated = authenticateGmailSender(email.sender, email.headers ?? [], mode);
+  if (recognized && !authenticated) throw new Error('Candidate Gmail message lacks verified sender provenance; cursor retained for review.');
+  return authenticated;
 }
 
 async function reserveEmailDeal(
@@ -152,6 +63,7 @@ async function reserveEmailDeal(
   runtime: RelationalRuntime,
   email: (ReceivedEmail & { emailType: string }) | undefined,
   correlationId: string,
+  assertIntakeReady: () => void,
 ): Promise<ReservationReference | null> {
   const dealUrl = deal.dealUrl;
   console.log(`\n[Live BFMR E2E] Reserving one BFMR offer: ${dealUrl}`);
@@ -202,6 +114,7 @@ async function reserveEmailDeal(
     dealUrl: (await browser.init()).url(), dealId, title: visibleDealTitle, email, correlationId,
   });
   await runtime.ownership.verifyOwnership();
+  assertIntakeReady();
   console.log('[Live BFMR E2E] Submitting one unit through the deal page.');
   const submission = await browser.submitReservation(dealUrl, dealId);
   if (submission.status === 'CLOSED_NO_SLOTS') {
@@ -229,7 +142,9 @@ async function reserveEmailDeal(
   return result.reference;
 }
 
-export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmrBrowser, runtime: RelationalRuntime) {
+export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmrBrowser, runtime: RelationalRuntime,
+  assertIntakeReady: () => void = () => {}) {
+  assertIntakeReady();
   if (!runtime) throw new Error('Relational persistence must be initialized before processing live work.');
   const localPdf = email.source === 'LOCAL_PDF_TEST';
   if (localPdf ? !/^pdf-[a-f0-9]{64}$/.test(email.id) :
@@ -262,7 +177,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
   for (const deal of parsed.deals) {
     try {
       const reference = await reserveEmailDeal(browser, deal, runtime,
-        localPdf ? undefined : { ...email, emailType: parsed.isMultiDealAnnouncement ? 'MULTI_DEAL' : 'SINGLE_DEAL' }, correlationId);
+        localPdf ? undefined : { ...email, emailType: parsed.isMultiDealAnnouncement ? 'MULTI_DEAL' : 'SINGLE_DEAL' }, correlationId, assertIntakeReady);
       if (reference) {
         confirmed.push(reference);
         if (progress) {
@@ -282,6 +197,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
   if (progress) { progress.stage = 'EVALUATING'; await batchJournal.save(progress); }
   const kept: ReservationReference[] = [];
   for (const reference of confirmed) {
+    assertIntakeReady();
     const outcome = await finishLiveReservation(reference, 'EMAIL');
     if (outcome === 'KEPT') {
       await recordVerifiedAmazonSupplier(runtime, reference);
@@ -294,6 +210,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
   if (progress) { progress.stage = 'ORDERING'; await batchJournal.save(progress); }
   const missingPurchaseEvidence: string[] = [];
   for (const reference of kept) {
+    assertIntakeReady();
     const evidence = await readLockedPurchaseEvidence(runtime, reference);
     if (!evidence) {
       missingPurchaseEvidence.push(reference.reserveId);
@@ -311,6 +228,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
         return readRelationalExposureCents(runtime.db, reference);
       }, { readPurchaseEvidence: ref => readLockedPurchaseEvidence(runtime, ref),
         beforeSubmit: async () => {
+          assertIntakeReady();
           await runtime.db.withTransaction(async tx => {
             const reservation = await tx.reservations.findByBfmrId(reference.reserveId);
             if (!reservation) throw new Error('Checkout reservation disappeared from the database.');
@@ -319,10 +237,12 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
               evidence: { bfmr_reservation_id: reference.reserveId, bfmr_deal_id: reference.dealId } });
           });
           await runtime.ownership.verifyOwnership();
+          assertIntakeReady();
         } });
     if (purchase.status === 'INELIGIBLE') {
       if (progress) { progress.orderFinished.push(reference.reserveId); await batchJournal.save(progress); }
       if (progress) { progress.cancelStarted.push(reference.reserveId); await batchJournal.save(progress); }
+      assertIntakeReady();
       await cancelConfirmedReservation(reference);
       await recordConfirmedCancellation(runtime, reference);
       if (progress) { progress.cancelFinished.push(reference.reserveId); await batchJournal.save(progress); }
@@ -334,6 +254,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
         asin: purchase.asin, totalCents: purchase.totalCents, purchasedAt: new Date().toISOString(),
         status: 'PENDING', packages: [],
       });
+      assertIntakeReady();
       await ensureBfmrPurchase(purchase.orderId, orderLedger);
       if (progress) { progress.orderFinished.push(reference.reserveId); await batchJournal.save(progress); }
       console.log(`[Live BFMR E2E] Amazon order ${purchase.orderId} recorded for BFMR reservation ${reference.reserveId}.`);
@@ -343,26 +264,49 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
   if (progress) { progress.stage = 'COMPLETE'; await batchJournal.save(progress); }
 }
 
-async function main() {
+export async function runBfmrWorker(options: { testStartupReservation?: boolean } = {}) {
   requireReservationAlerts();
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();
   if (!account || !process.env.DATABASE_URL) throw new Error('BFMR_EXPECTED_ACCOUNT and DATABASE_URL are required for durable account ownership.');
-  const gmail = makeGmailClient();
-  const runtime = await openRelationalRuntime();
+  const adapters = makeGmailPushAdapters();
+  let runtime: RelationalRuntime;
+  try { runtime = await openRelationalRuntime(); }
+  catch (error) {
+    await Promise.allSettled([adapters.provider.close(), adapters.subscription.close()]);
+    throw error;
+  }
   const { ownership, ledger: orderLedger } = runtime;
-  const browser = new PlaywrightBfmrBrowser({ headless: false });
-  ownership.onOwnershipLost(() => { void browser.close(); });
+  let browser: PlaywrightBfmrBrowser;
+  let store: PostgresGmailIntakeStore;
+  try {
+    browser = new PlaywrightBfmrBrowser({ headless: false });
+    store = new PostgresGmailIntakeStore(process.env.DATABASE_URL!, {
+      account, mailbox: adapters.mailbox, subscription: adapters.subscriptionName, topic: adapters.topic,
+      verifyOwnership: () => ownership.verifyOwnership(),
+    });
+  } catch (error) {
+    await Promise.allSettled([adapters.provider.close(), adapters.subscription.close(), runtime.close()]);
+    throw error;
+  }
+  const intake = new ProductionGmailIntake({
+    mailbox: adapters.mailbox, topic: adapters.topic, store, provider: adapters.provider, subscription: adapters.subscription,
+    verifyOwnership: () => ownership.verifyOwnership(), admit: admitGmailEmail,
+    onFailure: async () => {
+      await browser.close();
+      await sendBfmrStatusAlert('Gmail intake stopped. New browser work is blocked; inspect durable intake state and provider configuration before restarting.');
+    },
+  });
+  ownership.onOwnershipLost(() => { void intake.stop(); void browser.close(); });
   const readline = process.stdin.isTTY && process.stdout.isTTY
     ? createInterface({ input: process.stdin, output: process.stdout }) : null;
-  let startupHistoryId: string | undefined;
   let stopping = false;
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
     readline?.close();
+    const stopIntake = intake.stop();
     await browser.close();
-    await runtime.close();
-    process.exit(0);
+    await stopIntake;
   };
   const onSignal = () => { void shutdown(); };
   process.once('SIGINT', onSignal);
@@ -371,14 +315,18 @@ async function main() {
   try {
     console.log('[Live BFMR E2E] Chromium stays open across emails. Press Ctrl+C to exit when attached to a terminal.');
     await ownership.verifyOwnership();
+    await store.validateSchema();
+    await assertLegacyGmailSource(store, legacyIntakeFile);
+    await intake.start(process.env.BFMR_INITIALIZE_GMAIL_QUEUE === 'YES');
     let trackingFailureDay: string | null = null;
     let bfmrFailureDay: string | null = null;
-    await runBrowserSession(browser, qualifyingEmails(gmail, () => startupHistoryId, async (hasIncomingMail) => {
+    await runBrowserSession(browser, intake.emails(async (hasIncomingMail) => {
+      intake.assertHealthy();
       await ownership.verifyOwnership();
       try {
         await runDueAmazonTracking({
           browser, ledger: orderLedger, hasIncomingMail,
-          afterCheck: async (order) => { await ensureBfmrTracking(order.orderId, orderLedger); },
+          afterCheck: async (order) => { intake.assertHealthy(); await ensureBfmrTracking(order.orderId, orderLedger); },
           onOrderFailure: async (order, error) => {
             console.error(`[Amazon tracking] ${order.orderId}: ${error instanceof Error ? error.message : String(error)}`);
             await sendTrackingFailureAlert(order.orderId).catch((alertError) =>
@@ -394,6 +342,7 @@ async function main() {
             console.error(`[Amazon tracking] Alert delivery failed: ${alertError instanceof Error ? alertError.message : String(alertError)}`));
         }
       }
+      intake.assertHealthy();
       try {
         await runDueBfmrStatusCheck({ store: statusStore, ledger: orderLedger, hasIncomingMail,
           readRows: () => readTrackerWithFailureEvidence(runtime),
@@ -410,11 +359,13 @@ async function main() {
         }
       }
     }), async (email) => {
+      intake.assertHealthy();
       await ownership.verifyOwnership();
       const alertDeal = parseIncomingEmail({ ...email, messageId: email.id });
-      await withReservationFailureAlert(`Email-triggered reservation processing stopped.\nDeal: ${alertDeal.dealUrl || alertDeal.deals.map(deal => deal.canonicalDealId).join(', ') || 'identity unavailable'}`, () => processEmail(email, browser, runtime));
+      await withReservationFailureAlert(`Email-triggered reservation processing stopped.\nDeal: ${alertDeal.dealUrl || alertDeal.deals.map(deal => deal.canonicalDealId).join(', ') || 'identity unavailable'}`, () => processEmail(email, browser, runtime, () => intake.assertHealthy()));
       console.log('[Live BFMR E2E] Ready for the next qualifying email in the same browser.');
     }, async (error) => {
+      if (stopping) return;
       console.error(`[Live BFMR E2E] PAUSED: ${error instanceof Error ? error.message : String(error)}`);
       console.log('Processing is stopped; no automatic retry.');
       if (!readline) { process.exitCode = 1; return; }
@@ -428,24 +379,24 @@ async function main() {
       if (pendingBatch && pendingBatch.stage !== 'COMPLETE') {
         throw new Error(`Multi-deal email ${pendingBatch.messageId} is unfinished. Inspect ${process.env.BFMR_MULTI_DEAL_STATE_PATH || '~/.local/state/bfmr/multi-deal.json'} and reconcile My Tracker/Amazon Orders before starting another live run.`);
       }
-      const profile = await gmail.users.getProfile({ userId: 'me' });
-      if (!profile.data.emailAddress || !profile.data.historyId) throw new Error('Gmail profile did not identify the mailbox and cursor.');
-      const savedIntake = await intakeQueue.initialize(profile.data.emailAddress, profile.data.historyId, process.env.BFMR_INITIALIZE_GMAIL_QUEUE === 'YES');
-      startupHistoryId = savedIntake.cursor;
-      if (!startupHistoryId) throw new Error('Gmail did not provide a pre-startup history cursor.');
-      await runLiveTestStartup(browser, relationalStartupHooks(runtime));
+      intake.assertHealthy();
+      // Temporary CAPTCHA reservation/cleanup belongs only to explicit test
+      // entrypoints. The production worker never creates a startup reservation.
+      if (options.testStartupReservation) await runLiveTestStartup(browser, relationalStartupHooks(runtime));
     });
   } finally {
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
     readline?.close();
+    await intake.stop();
     await browser.close();
+    await store.close();
     await runtime.close();
   }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((error: unknown) => {
+  runBfmrWorker({ testStartupReservation: true }).catch((error: unknown) => {
     console.error(`[Live BFMR E2E] FAIL: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   });

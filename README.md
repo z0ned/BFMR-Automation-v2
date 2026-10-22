@@ -14,7 +14,7 @@ The interactive email runner accepts authenticated BFMR new-deal mail and, in ex
 
 A separate daily process in the active runner checks Amazon Order History after 03:00 Atlanta time and reconciles official BFMR status, with Telegram discrepancy alerts. BFMR order/tracking writes are bound to exact reservations and require readback. These retailer selectors and BFMR write contracts have not been validated live as a complete workflow.
 
-The live runner uses relational PostgreSQL business repositories with dedicated account ownership; Gmail, recovery, daily status and notification journals remain explicit durable private stores. The older JSONB engine remains a separate compatibility/model path. Account selectors, Gmail auth-header arrangements, provider field contracts, native PostgreSQL/schema/cutover acceptance, backup/restore and supervised deployment remain open. Do not call the project production-ready.
+The worker source uses relational PostgreSQL business repositories with dedicated account ownership and a separate SQL Gmail intake store. Batch/recovery, daily status and alert-delivery journals remain private files. The older JSONB engine remains a separate compatibility/model path. Account selectors, Gmail auth-header arrangements, provider field contracts, native PostgreSQL/schema/cutover acceptance, backup/restore and supervised deployment remain open. Do not call the project production-ready.
 
 ## Database source
 
@@ -31,6 +31,7 @@ npm run typecheck:all
 
 Run software tests only when the user requests testing or verification. Commands below have real external effects and require the exact gates and setup in the current v22 implementation reference:
 
+- `npm start`: push-intake worker; may reserve/purchase under existing gates. It does not create a temporary startup test reservation. Source is not production acceptance.
 - `npm run test-real-email` / `npm run test-real-email-e2e`: real BFMR intake/reservations and potentially Amazon purchases.
 - `npm run test-bfmr-ipad-reservation`: live BFMR test reservation/startup workflow.
 - `npm run test-amazon-checkout`: live BFMR startup reservation/cleanup, then Amazon rehearsal stopping before order submission.
@@ -42,7 +43,7 @@ The dedicated PostgreSQL integration test requires a disposable `BFMR_TEST_DATAB
 
 ## Configuration and private data
 
-Use [.env.example](.env.example) as the configuration template, merging missing entries into an existing private `.env` without replacing credentials. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull; periodic Gmail polling and Inbox sweeps are forbidden. Configure the exact Gmail mailbox/OAuth identity, Pub/Sub topic/subscription and a verified Pub/Sub credential identity. The current interactive runner still polls every 15 seconds and does not meet this requirement; setting these variables does not implement the missing durable notification-before-ACK/cursor/watch/reconnect path. IMAP and local inbound-listener utilities are not production substitutes.
+Use [.env.example](.env.example) as the configuration template, merging missing entries into an existing private `.env` without replacing credentials. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull; periodic Gmail polling and Inbox sweeps are forbidden. Configure the exact Gmail mailbox/OAuth identity, Pub/Sub topic/subscription and a verified Pub/Sub credential identity. The worker now uses owned StreamingPull, commits notification evidence before ACK and commits admitted work with its consumed cursor. Startup/reconnect history continuation and daily watch renewal preserve cursor identity; no idle timer reads Gmail. Install the separate reviewed operational SQL and reconcile any legacy queue before a separately authorized live run. This source has static-check evidence only; provider and supervised-service acceptance remain open. See [production intake runbook](docs/GMAIL_PRODUCTION_INTAKE.md). IMAP and local inbound-listener utilities are not production substitutes.
 
 Environment loading is described in the v22 implementation reference. Keep credentials, browser profiles, OAuth files, message content, Amazon order/tracking details, PostgreSQL data and runtime journals out of Git and logs. First-time Gmail queue creation requires an explicit `BFMR_INITIALIZE_GMAIL_QUEUE=YES`; never use it to replace a lost existing queue.
 

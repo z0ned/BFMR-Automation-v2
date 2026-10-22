@@ -12,17 +12,19 @@ messages, create and verify exact BFMR reservations, evaluate supplier evidence,
 and run the approved Amazon quantity-one workflow under its financial and
 checkout safeguards. Tracking and BFMR reconciliation run through the active
 worker. Production CON-001 requires Gmail watch/Pub/Sub StreamingPull, with no
-periodic Gmail polling or Inbox sweep. The current 15-second polling runner
-violates that requirement. Required production mailbox/OAuth, topic/subscription
-and Pub/Sub credential settings are in .env.example; the durable PostgreSQL
-notification-before-ACK, cursor/watch/reconnect path remains incomplete.
+periodic Gmail polling or Inbox sweep. New worker source removes that loop and
+uses owned StreamingPull plus dedicated SQL intake. Required production mailbox/OAuth, topic/subscription
+and Pub/Sub credential settings are in .env.example. The PostgreSQL
+notification-before-ACK and cursor/watch/reconnect source has static checks only;
+requested regressions, installed SQL/import and live acceptance remain pending.
 Provider contracts and supervised production acceptance remain gates.
 
 PERSISTENCE
 The canonical business schema and upgrades live under database/. Relational
 repositories store reservations, orders, shipments, payments and evidence.
-Private Gmail, batch/recovery and status/notification journals remain explicit
-operational stores. The separate orchestration engine retains its existing
+Gmail intake uses four separate SQL operational tables. Private batch/recovery
+and status/alert journals remain explicit stores; legacy Gmail JSON is a reviewed
+import/hash boundary. The separate orchestration engine retains its existing
 compatibility store. Database transactions do not include external actions.
 
 SAFETY AND REMAINING WORK

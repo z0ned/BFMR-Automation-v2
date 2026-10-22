@@ -6,8 +6,9 @@ import { BfmrRelationalSync } from './bfmrRelationalSync';
 import { relationalOrderLedger, validateRelationalRetailerAccount } from './relationalOrderLedger';
 import { assertRelationalCutoverReady, hashPrivateFile } from './relationalCutover';
 
-/** Business records use PostgreSQL; cursors, batch/recovery journals and alerts
- * keep their existing private stores. Startup performs no DDL or state import.
+/** Business records use PostgreSQL. The worker opens its separate SQL Gmail
+ * intake store under this ownership; batch/recovery journals and alerts retain
+ * their private stores. Startup performs no DDL or state import.
  */
 export async function openRelationalRuntime() {
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();

@@ -3,6 +3,8 @@ import type { MailHeader } from './emailProvenance';
 
 export interface QueuedEmail {
   id: string; sender: string; subject: string; body: string; receivedAt: string; inboxAtFetch?: boolean; headers?: MailHeader[];
+  /** Production admissions are committed with the SQL consumed cursor. */
+  intakeDisposition?: 'ADMITTED' | 'IGNORED';
 }
 export interface GmailQueueState {
   mailbox: string; cursor: string; gap: boolean;
@@ -13,6 +15,9 @@ export interface GmailIntakeStore extends PrivateStateStore<GmailQueueState> {
   ingest(expectedCursor: string, nextCursor: string, emails: QueuedEmail[]): Promise<void>;
   mark(id: string, next: 'PROCESSING' | 'DONE'): Promise<void>;
 }
+/** Legacy private-file queue, retained for explicit recovery/import and fixtures.
+ * Production uses PostgresGmailIntakeStore and never initializes this file.
+ */
 export function gmailIntakeQueue(file: string): GmailIntakeStore {
   const store = privateJsonStore<GmailQueueState>(file, (value) => {
     const state = value as GmailQueueState;

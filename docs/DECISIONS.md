@@ -1,5 +1,9 @@
 # Decision register
 
+## 21 October 2026 — implement required production intake source
+
+The user requested implementation of production intake. The new source uses CON-001 watch/owned StreamingPull with dedicated PostgreSQL operational tables; it does not redesign or alter the pinned business schema. Existing JSON Gmail state requires reviewed explicit import, never startup import/reset. A production entrypoint skips the separately scoped startup test reservation. This is implementation authority, not authority to install SQL, configure a live watch/subscription, invoke BFMR/Amazon actions or deploy. Static evidence and limits are recorded in IMPLEMENTATION_PLAN.md and GMAIL_PRODUCTION_INTAKE.md; no software test or provider acceptance is implied.
+
 ## 21 October 2026 — restore required no-poll Gmail intake (CON-001)
 
 Restored the original CON-001 requirement from the v1.5 design: **"Gmail watch and Pub/Sub-driven intake. No periodic Gmail polling or Inbox sweep."** The user confirmed this remains controlling. Later "if required" descriptions and optional production Pub/Sub template entries were documentation drift, not an authorized design change.
