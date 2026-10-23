@@ -1,1 +1,1167 @@
+Deals
+Active Deals List
+Get a list of all active deals.
 
+query Parameters
+page_size	
+integer <int32> [ 1 .. 50 ]
+Number of items per page
+
+page_no	
+integer <int32>
+Page number
+
+retailer	
+string
+comma (,) separated retailers slug
+
+retail_type	
+string
+comma (,) separated retail types e,g above,full,below
+
+exclusive_deals_only	
+string
+Default: "0"
+Enum: "0" "1"
+Specify parameter 1 in the query to retrieve a list of exclusive deals.
+
+in_stock	
+string
+Default: "0"
+Enum: "0" "1"
+Specify parameter 1 in the query to retrieve a list of in stock deals.
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Responses
+200 Example response
+Response Schema: application/json
+message	
+any
+Default: "Deal Found."
+Active Deals List.
+
+deals	
+object
+Active Deals List.
+
+401 Example response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+Active Deals List.
+
+429 Example response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+Active Deals List.
+
+
+get
+/api/v2/deals
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/deals/?retailer=RETAILERS-SLUG&retail_type=RETAIL-TYPE&exclusive_deals_only=BOOLEAN-VALUE' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET'
+Response samples
+200401429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Deal Found.",
+"deals": {
+"deal_id": "string",
+"deal_code": "string",
+"retail_price": 19.99,
+"title": "string",
+"slug": "string",
+"closing_at": "string",
+"is_reservation_closed": true,
+"retailers": "string",
+"retail_type": "string",
+"payout_price": 19.99,
+"deal_information": "string",
+"is_bundle": true,
+"is_exclusive_deal": true,
+"items": [
+{
+"id": "string",
+"name": "string",
+"color": "string",
+"model": "string",
+"upc": "string",
+"category": "string",
+"retailer_links": [
+{
+"retailer": "string",
+"identifier_id": "string",
+"url": "string"
+}
+]
+}
+]
+}
+}
+Active Reservation List
+Get a list of all your active reservations.
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Responses
+200 Example response
+Response Schema: application/json
+message	
+any
+Default: "Active Reservation List."
+Active Reservation List.
+
+reservation_list	
+Array of objects
+Active Reservation List.
+
+401 Example response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+Active Reservation List.
+
+404 Example response
+Response Schema: application/json
+message	
+any
+Default: "No reservations available"
+Active Reservation List.
+
+429 Example response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+Active Reservation List.
+
+
+get
+/api/v2/deal/reservations/active
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location --request POST 'https://api.bfmr.com/api/v2/deal/reservations/active' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET'
+Response samples
+200401404429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Active Reservation List.",
+"reservation_list": [
+{
+"item": [
+{
+"item_id": "string",
+"item_name": "string",
+"model_number": "string",
+"upcs": { },
+"color_name": "string",
+"retailer_links": [
+{
+"retailer": "string",
+"identifier_id": "string",
+"url": "string"
+}
+]
+}
+],
+"deal_id": "string",
+"reserve_id": "string",
+"reserved_quantity": 10,
+"remaining_quota": 10,
+"reserved_at": "string",
+"expiry_after": "string"
+}
+]
+}
+Deal Details
+Get deal details.
+
+query Parameters
+slug	
+string
+Deal slug, Can be fetched from active deal list.
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Responses
+200 Example response
+Response Schema: application/json
+message	
+any
+Default: "Deal Found."
+Deals details.
+
+deal	
+object
+Deals details.
+
+401 Example response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+Deals details.
+
+404 Example extended response
+Response Schema: application/json
+message	
+any
+Default: "Deal is not available"
+Deals details.
+
+429 Example response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+Deals details.
+
+
+get
+/api/v2/deals/{slug}
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    --header 'API-KEY: YOUR-API-KEY' \
+    curl --location 'https://api.bfmr.com/api/v2/deals/{slug}' \
+    --header 'API-SECRET: YOUR-API-SECRET'
+Response samples
+200401404429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Deal Found.",
+"deal": {
+"deal_id": "string",
+"deal_code": "string",
+"retail_price": 19.99,
+"title": "string",
+"slug": "string",
+"closing_at": "string",
+"retailers": "string",
+"retail_type": "string",
+"payout_price": 19.99,
+"deal_information": "string",
+"is_bundle": true,
+"is_exclusive_deal": true,
+"items": [
+{
+"id": "string",
+"name": "string",
+"color": "string",
+"model": "string",
+"upc": [
+"string"
+],
+"category": "string",
+"retailer_links": [
+{
+"retailer": "string",
+"identifier_id": "string",
+"url": "string"
+}
+],
+"tracking_deadline": "string"
+}
+]
+}
+}
+Insurance
+File for Insurance
+File insurance for a given shipment with specified package value. 'first_name', 'last_name', and each 'address[*]' field are all independently optional and update the name/address used for insurance — you can send just one, e.g. address[city], to update only that field. Any field left out of the request falls back to the value already saved on your account profile; if that field is also empty on your profile, the request fails with an error naming that specific field as required. 'state' is the ISO 3166-2 subdivision code without the country prefix (e.g. New Hampshire: US-NH (ISO 3166-2) - use the code suffix, NH, in this field) and 'country' is the ISO 3166-1 alpha-3 country code (e.g. United States: US (Alpha-2), USA (Alpha-3) - use the Alpha-3 form, USA, in this field).
+
+⚠️ Warning: If you update your first_name, last_name, or any address[*] field here, this change will be saved to your account profile — it is not limited to insurance filing only. Your profile's saved details will be updated also.
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Request Body schema: application/x-www-form-urlencoded
+tracking_number
+required
+string
+Shipment tracking number
+
+package_value	
+number <float>
+Package value for insurance. If not provided, will be calculated from shipment items.
+
+first_name	
+string
+First name, sent as its own field (not nested under address[]). Optional — if omitted, the first name already on your profile is used. The request fails naming this field if it's omitted and there's no name on file yet.
+
+last_name	
+string
+Last name, sent as its own field (not nested under address[]). Optional — if omitted, the last name already on your profile is used. The request fails naming this field if it's omitted and there's no name on file yet.
+
+address[address_1]	
+string
+Address line 1, 7-300 characters. Optional — if omitted, the value already on your profile is used. The request fails naming this field if it's omitted and there's no value on file yet.
+
+address[address_2]	
+string
+Address line 2. Always optional.
+
+address[city]	
+string
+City. Optional — if omitted, the value already on your profile is used. Unlike the other address fields, this one does not fail the request if it's blank on both the request and the profile — max 255 characters.
+
+address[state]	
+string
+ISO 3166-2 subdivision code without the country prefix, e.g. New Hampshire: US-NH (ISO 3166-2), California: US-CA (ISO 3166-2) - use the code suffix, NH or CA, in this field. Must belong to the resolved address[country] (the one submitted, or the one already on your profile if address[country] is omitted) — otherwise the request fails naming this field. Optional — if omitted, the value already on your profile is used. The request fails naming this field if it's omitted and there's no value on file yet.
+
+address[country]	
+string
+ISO 3166-1 alpha-3 country code, e.g. United States: US (Alpha-2), USA (Alpha-3) - use the Alpha-3 form, USA, in this field. Optional — if omitted, the value already on your profile is used. The request fails naming this field if it's omitted and there's no value on file yet.
+
+address[zip]	
+string
+ZIP/postal code. Must be 5-10 characters, digits and hyphens only, e.g. 03051 or 03051-4905. Optional — if omitted, the value already on your profile is used. The request fails naming this field if it's omitted and there's no value on file yet.
+
+Responses
+200 Insurance filed successfully
+Response Schema: application/json
+message	
+string
+Shipment insurance filed successfully
+
+400 Invalid input
+Response Schema: application/json
+message	
+string
+The shipment isn't eligible for insurance.
+
+401 Unauthorized
+Response Schema: application/json
+message	
+string
+API-KEY or API-SECRET incorrect
+
+404 Shipment not found
+Response Schema: application/json
+message	
+string
+Shipment not found
+
+
+post
+/api/v2/insurance/file
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/insurance/file' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET' \
+    --form 'tracking_number=876854235678909876' \
+    --form 'package_value=1000' \
+    --form 'first_name=John' \
+    --form 'last_name=Doe' \
+    --form 'address[address_1]=13 Flagstone Drive' \
+    --form 'address[address_2]=Apt 4B' \
+    --form 'address[city]=Hudson' \
+    --form 'address[state]=NH' \
+    --form 'address[country]=USA' \
+    --form 'address[zip]=03051'
+    // first_name/last_name and every address[*] field are independently optional; each omitted field falls back to what's already saved on your profile.
+    // To update a single field only, send just that field, e.g. --form 'address[city]=New York' with nothing else.
+    // If a field is omitted and there's no value for it on your profile either, the request fails naming that specific field, e.g. {message: 'City is required.'}
+    // state is ISO 3166-2 without the country prefix (New Hampshire: US-NH -- use NH here). country is ISO 3166-1 alpha-3 (United States: US = Alpha-2, USA = Alpha-3 -- use USA here).
+    // 200 response: {message: 'Shipment insurance filed successfully'}
+    // 400 response (missing required field): {message: 'Address Line 1 is required.'}
+Response samples
+200400401404
+Content type
+application/json
+
+Copy
+{
+"message": "Shipment insurance filed successfully"
+}
+Get Insured Shipment Details
+Retrieve insurance and related item details for a given shipment.
+
+path Parameters
+tracking_number
+required
+string
+Shipment Tracking Number
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Responses
+200 Shipment insurance details response
+Response Schema: application/json
+message	
+string
+Shipment details retrieved successfully
+
+insurance	
+object
+Get Insured Shipment Details.
+
+401 Unauthorized
+Response Schema: application/json
+message	
+string
+API-KEY or API-SECRET incorrect
+
+404 Insurance not found
+Response Schema: application/json
+message	
+string
+Insurance not found
+
+
+get
+/api/v2/insurance/shipments/{tracking_number}
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/insurance/shipments/TBA000665500836' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET'
+Response samples
+200401404
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "string",
+"insurance": {
+"shipment": {
+"tracking_number": "string",
+"package_cost": 0,
+"insured_amount": 0,
+"cert_no": "string",
+"cert_link": "string",
+"claim_no": "string",
+"policy_no": "string",
+"status": "string",
+"items": [
+{
+"item_id": 0,
+"name": "string",
+"qty": 0,
+"price": 0
+}
+]
+}
+}
+}
+Void insurance
+Request Body schema: application/x-www-form-urlencoded
+tracking_number
+required
+string
+Tracking number of the shipment to void insurance for
+
+Responses
+200 Void request submitted successfully
+Response Schema: application/json
+message	
+string
+Void request submitted successfully. We'll notify you once it's reviewed.
+
+400 Validation error or insurance not found
+Response Schema: application/json
+message	
+string
+Insurance not found against the shipment
+
+401 Unauthorized
+Response Schema: application/json
+message	
+string
+API-KEY or API-SECRET incorrect
+
+
+post
+/api/v2/insurance/void
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/insurance/void' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET' \
+    --form 'tracking_number=876854235678909876'
+Response samples
+200400401
+Content type
+application/json
+
+Copy
+{
+"message": "string"
+}
+Get insured shipments
+Get list of insured shipments with pagination and sorting options
+
+query Parameters
+page	
+integer
+Default: 1
+Page number
+
+per_page	
+integer
+Default: 20
+Number of items per page
+
+sort_by	
+string
+Default: "created_at"
+Field to sort by
+
+sort_order	
+string
+Default: "desc"
+Sort order (asc/desc)
+
+tracking_numbers	
+string
+Comma-separated list of tracking numbers to filter
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Responses
+200 List of insured shipments
+Response Schema: application/json
+message	
+string
+List of insured shipments
+
+insurance	
+object
+Get Insured Shipments.
+
+paging	
+object
+Paging information
+
+401 Unauthorized
+Response Schema: application/json
+message	
+string
+API-KEY or API-SECRET incorrect
+
+
+get
+/api/v2/insurance/shipments
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/insurance/shipments?page=1&per_page=20&sort_by=created_at&sort_order=desc' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET'
+Response samples
+200401
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "string",
+"insurance": {
+"shipments": [
+{
+"tracking_number": "string",
+"date": "2019-08-24T14:15:22Z",
+"package_value": 0,
+"cost_of_insurance": 0,
+"certificate_number": "string",
+"certificate_link": "string",
+"notes": "string"
+}
+]
+},
+"paging": {
+"current_page": 0,
+"from": 0,
+"last_page": 0,
+"to": 0,
+"total": 0,
+"perPage": 0,
+"pages": 0,
+"first": 0,
+"last": 0,
+"prev": "string",
+"next": "string"
+}
+}
+My Tracker
+Get My Tracker Data
+Get data in My Tracker. Results include specific searches made based on keywords, date range, item status, etc.
+
+⚠️ Upcoming change to search: Starting November 20, 2026, search will only match item name and model number. To find records more quickly by tracking number, order number, or status, switch to these filters now:
+Tracking numbers: trackings[], e.g. trackings[]=1Z999AA10123456784
+Order numbers: orders[], e.g. orders[]=113-1234567-1234567
+Status: status, e.g. status=shipped,paid
+query Parameters
+page_size	
+integer <int32> [ 1 .. 1000 ]
+Number of items per page
+
+page_no	
+integer <int32>
+Page number
+
+order_by	
+string
+Enum: "status" "qty" "retail_price" "qty_received" "amount_paid" "reserved_at" "sub_total" "date_processed" "date_paid"
+Field to order by
+
+order	
+string
+Enum: "asc" "desc"
+Sort order (asc/desc)
+
+search	
+string
+Search term. Before November 20, 2026 it matches part of the item name, model number, tracking number, order number, or status. Starting November 20, 2026 it matches only the item name and model number: use trackings[] for tracking numbers, orders[] for order numbers and status for statuses.
+
+orders[]	
+Array of strings <= 100 items
+Filter by order number. Each value must be the whole order number as submitted with the purchase, including any dashes; case does not matter. Send it with the brackets, even for one value (orders[]=113-1234567-1234567), and repeat it for several (orders[]=113-1234567-1234567&orders[]=200012345678901), up to 100 values per request.
+
+trackings[]	
+Array of strings <= 100 items
+Filter by tracking number. Each value must be the whole tracking number of the shipment; case does not matter. Send it with the brackets, even for one value (trackings[]=1Z999AA10123456784), and repeat it for several (trackings[]=1Z999AA10123456784&trackings[]=9400111899223197428490), up to 100 values per request.
+
+start_date	
+string <date>
+Default: "2023-11-03"
+Start date for filtering
+
+end_date	
+string <date>
+Default: "2023-11-03"
+End date for filtering
+
+quick_filter	
+string
+Enum: "closed" "all" "action_needed" "pending" "paid"
+Filter by tab. If the filter statuses exist then the quick filter will not be functional.
+
+insurance_status	
+string
+Enum: "not_eligible" "not_insured" "insured"
+Filter by insurance status
+
+status	
+string
+Enum: "purchased" "reserved" "return" "payment_error" "shipped" "processed" "set_aside" "paid" "cancelled" "returned" "closed" "deadline" "pkg_received"
+Filter by status (comma-separated values). Use this, not search, to find records by status.
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Responses
+200 Example extended response
+Response Schema: application/json
+message	
+any
+Default: "Tracker."
+My Tracker Get.
+
+my_tracker	
+Array of objects
+My Tracker Get.
+
+401 Example extended response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+My Tracker Get.
+
+404 Example extended response
+Response Schema: application/json
+message	
+any
+Default: "Record not found"
+My Tracker Get.
+
+429 Example extended response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+My Tracker Get.
+
+
+get
+/api/v2/my-tracker
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/my-tracker' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET'
+Response samples
+200401404429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Tracker.",
+"my_tracker": [
+{
+"reserve_id": "string",
+"purchase_id": "string",
+"shipment_id": "string",
+"qty": 0,
+"amount_paid": 0,
+"deal_id": 0,
+"deal_title": "string",
+"item_id": "string",
+"item_model_number": "string",
+"order_date": 0,
+"order_deadline": 0,
+"qty_received": "string",
+"reserved_at": 0,
+"date_processed": 0,
+"date_paid": 0,
+"retail_price": 0,
+"payout_price": 0,
+"status": 0,
+"total_payout": 0,
+"tracking_deadline": "string",
+"deal_type": "string",
+"tracking_status": "string",
+"missed_deadline": true,
+"insurance_status": "string",
+"note": "string",
+"retailer_links": [
+{
+"retailer": "string",
+"identifier_id": "string",
+"url": "string"
+}
+],
+"issue_with_item": [
+{
+"accepted_items": [
+{
+"name": "string",
+"status": "string"
+}
+],
+"rejected_items": [
+{
+"name": "string",
+"status": "string",
+"issue_with_reason": [
+"string"
+]
+}
+]
+}
+]
+}
+]
+}
+Make Updates in My Tracker
+Make changes to items in My Tracker. This includes submitting or making changes to order numbers, tracking numbers and quantities. There are different steps required for certain actions. Some examples are:
+
+To update the Reservation:
+Required: reserve_id, qty
+Null: purchase_id and shipment_id
+Note: For qty, this value can only be reduced.
+To create a Purchase:
+Required: reserve_id, order_no, qty
+Null: purchase_id,shipment_id ,tracking_number
+Note:
+If a Purchase is not active, then process will halt.
+For qty, this value can only be reduced from its reservation qty.
+To update Purchase:
+Required: reserve_id, purchase_id, order_no, qty
+Null: shipment_id, tracking_number
+Note:
+For qty, this value can only be reduced.
+You can update a tracking number and order number through this also.
+To create a Shipment:
+Required: reserve_id, purchase_id,order_no, tracking_number, qty
+Null: shipment_id
+Note:
+If a Purchase is not active, then process will halt.
+For qty, this value can only be reduced from its purchase qty or reservation qty.
+To update a Shipment:
+Required: reserve_id, purchase_id, shipment_id, tracking_number, qty
+Note: You can update a tracking number and order number through this also.
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Request Body schema: application/json
+Array of reservation IDs
+
+tracker_data
+required
+Array of objects
+Make Updates in My Tracker (Max 500 objects per request).
+
+Responses
+200 Example response
+Response Schema: application/json
+message	
+any
+Default: "Data updated successfully!"
+Make Updates in My Tracker (Max 500 objects per request).
+
+reservations_response	
+object
+List of valid and invalid data.
+
+401 Example response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+Make Updates in My Tracker (Max 500 objects per request).
+
+404 Example response
+Response Schema: application/json
+message	
+any
+Default: "At least one of purchase_id, reserve_id, or shipment_id should not be empty."
+Make Updates in My Tracker (Max 500 objects per request).
+
+429 Example response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+Make Updates in My Tracker (Max 500 objects per request).
+
+
+post
+/api/v2/my-tracker
+Request samples
+PayloadcURLC#JavaScriptJavaNodeJsPHP
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"tracker_data": [
+{
+"reserve_id": "string",
+"purchase_id": "string",
+"shipment_id": "string",
+"qty": 0,
+"order_no": "string",
+"tracking_number": "string"
+}
+]
+}
+Response samples
+200401404429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Data updated successfully!",
+"reservations_response": {
+"valid_items": [
+{ }
+],
+"invalid_items": [
+{ }
+]
+}
+}
+Cancel Purchased
+Cancel items with the Purchased status.
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Request Body schema: application/x-www-form-urlencoded
+Array of purchase IDs
+
+purchase_id
+required
+Array of objects
+Array of purchase IDs
+
+Responses
+200 Example response
+Response Schema: application/json
+message	
+any
+Default: "Purchase cancelled successfully!"
+invalid_purchases	
+Array of any
+If the purchase id invalid, It will be displayed in response.
+
+401 Example response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+422 Example response
+Response Schema: application/json
+message	
+any
+Default: "Not a Valid Purchase or already cancelled"
+429 Example response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+
+post
+api/v2/my-tracker/purchase/cancel
+Request samples
+cURLC#JavaJavaScriptNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/my-tracker/purchase/cancel' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET' \
+    --header 'Content-Type: application/json' \
+    --data '{
+            'purchase_id': ['PURCHASE-ID']
+    }'
+Response samples
+200401422429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Purchase cancelled successfully!",
+"invalid_purchases": [
+null
+]
+}
+Cancel Reserved
+Cancel items with the Reserved status.
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Request Body schema: application/x-www-form-urlencoded
+Array of reservation IDs
+
+reserve_id
+required
+Array of objects
+Array of reservation IDs
+
+Responses
+200 Example response
+Response Schema: application/json
+message	
+any
+Default: "Reservation cancelled successfully!"
+invalid_reservations	
+Array of any
+If the reservation id invalid, It will be displayed in response.
+
+401 Example response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+422 Example response
+Response Schema: application/json
+message	
+any
+Default: "Not a Valid Reservation or reservation already cancelled"
+429 Example response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+
+post
+api/v2/my-tracker/reservation/cancel
+Request samples
+cURLC#JavaJavaScriptNodeJsPHP
+
+Copy
+
+    curl --location 'http://api-v2.buyformeretail.local/api/v2/my-tracker/reservation/cancel' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET' \
+    --header 'Content-Type: application/json' \
+    --data '{
+        'reserve_id': ['RESERVATION-ID']
+    }'
+Response samples
+200401422429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Reservation cancelled successfully!",
+"invalid_reservations": [
+null
+]
+}
+Look ups
+Active Retailers List
+Get a list of all retailers we may post in a deal.
+
+query Parameters
+page_size	
+integer <int32> [ 1 .. 1000 ]
+Number of items per page
+
+page_no	
+integer <int32>
+Page number
+
+header Parameters
+API-KEY
+required
+string
+API-SECRET
+required
+string
+Responses
+200 Example response
+Response Schema: application/json
+message	
+any
+Default: "Active Retailers list."
+Active Retailer List.
+
+retailers	
+object
+Active Retailer List.
+
+401 Example response
+Response Schema: application/json
+message	
+any
+Default: "API-KEY or API-SECRET incorrect"
+Active Retailer List.
+
+429 Example response
+Response Schema: application/json
+message	
+any
+Default: "Too Many Requests"
+Active Retailer List.
+
+
+get
+/api/v2/look-ups/retailers
+Request samples
+cURLC#JavaScriptJavaNodeJsPHP
+
+Copy
+
+    curl --location 'https://api.bfmr.com/api/v2/look-ups/retailers' \
+    --header 'API-KEY: YOUR-API-KEY' \
+    --header 'API-SECRET: YOUR-API-SECRET'
+Response samples
+200401429
+Content type
+application/json
+
+Copy
+Expand allCollapse all
+{
+"message": "Active Retailers list.",
+"retailers": {
+"name": "string",
+"slug": "string",
+"link": "string"
+}
+}
