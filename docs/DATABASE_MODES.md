@@ -24,7 +24,10 @@ The PowerShell wrapper sends the same clone body to Bash inside PostgreSQL and
 normalizes Windows line endings; it does not need Bash installed on Windows.
 
 This uses the existing `bfmr-postgres` Docker container's local `postgres`
-administrator. If its name differs, set BFMR_POSTGRES_CONTAINER to that container
+administrator role selected from the container's POSTGRES_USER (otherwise
+postgres). The OS account remains postgres. A connection/privilege failure stops
+before checking/creating the target and is never reported as an existing clone.
+If its name differs, set BFMR_POSTGRES_CONTAINER to that container
 name for this command. No password is requested or printed. The command:
 
 - Takes a consistent `pg_dump` snapshot of `bfmr`, including schema, data,
@@ -86,7 +89,7 @@ the existing administrator. For the default Docker deployment:
 
 ```sh
 docker cp database/provision_test_runtime.psql bfmr-postgres:/tmp/provision_test_runtime.psql
-docker exec -it --user postgres bfmr-postgres psql -X -U postgres -d bfmr -f /tmp/provision_test_runtime.psql
+docker exec -it --user postgres bfmr-postgres sh -c 'psql -X -U "${POSTGRES_USER:-postgres}" -d bfmr -f /tmp/provision_test_runtime.psql'
 ```
 
 The script creates `bfmr_test_app` without ownership/admin privileges, checks it
@@ -177,8 +180,8 @@ FULL_ACCOUNT_COVERAGE_CONFLICT. Preserve production recovery evidence. No
 historical provider exclusions or uncertain external retries are added here.
 
 `npm run test:database-selection`: 9/9 passed.
-`npm run test:environment-isolation`: 10/10 passed (6 configuration/path/provider
-cases and 4 synthetic clone success/refusal/failure cases).
+`npm run test:environment-isolation`: 13 cases (6 previously passed configuration/path/provider
+cases and 7 clone cases passed after the administrator-role correction).
 `npm run test:recovery`: 33/33 passed (17 SQL/recovery and 16 operations cases).
 Scoped TypeScript, shell syntax and whitespace checks passed.
 

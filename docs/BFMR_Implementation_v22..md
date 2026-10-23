@@ -1,5 +1,15 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — custom PostgreSQL administrator role
+
+Operator output showed that the SQL role postgres does not exist, despite the
+container OS account being postgres. The shared clone body now uses the container's
+POSTGRES_USER (postgres fallback), verifies the role is a superuser, and handles
+connection/existence-query failures separately from an actual existing target.
+No database creation occurred in the reported failure. Seven synthetic clone
+cases cover custom-role selection, failed connections/queries, insufficient role,
+existing targets and dump/restore outcomes; native retry remains unverified.
+
 ## 23 October 2026 — Windows clone launcher
 
 The operator's PowerShell host has no WSL Bash; the application container has no

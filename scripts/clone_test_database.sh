@@ -15,11 +15,22 @@ cleanup() {
     rm -rf -- "${WORK}"
 }
 trap cleanup EXIT
-export PGUSER=postgres PGDATABASE=bfmr
+# The OS user postgres and the SQL administrator role are different identities.
+# Official images can initialize a custom SQL superuser through POSTGRES_USER.
+export PGUSER="${BFMR_CLONE_ADMIN_ROLE:-${POSTGRES_USER:-postgres}}" PGDATABASE=bfmr
+if ! ADMIN="$(psql -X -At --set=ON_ERROR_STOP=1 --command='SELECT rolsuper FROM pg_roles WHERE rolname=current_user')"; then
+    echo 'Cannot connect to bfmr as the configured administrator. No database was created.' >&2; exit 1
+fi
+if [ "${ADMIN}" != t ]; then
+    echo 'Clone requires the PostgreSQL administrator role. No database was created.' >&2; exit 1
+fi
 # A second invocation cannot overwrite a target: CREATE DATABASE refuses
 # existing names even when two administrators race after the initial check.
 # No production sessions are terminated; pg_dump takes a consistent snapshot.
-if [ "$(psql -X -At --set=ON_ERROR_STOP=1 --command="SELECT count(*) FROM pg_database WHERE datname='bfmr_test'")" != 0 ]; then
+if ! EXISTS="$(psql -X -At --set=ON_ERROR_STOP=1 --command="SELECT count(*) FROM pg_database WHERE datname='bfmr_test'")"; then
+    echo 'Could not check whether bfmr_test exists. No database was created.' >&2; exit 1
+fi
+if [ "${EXISTS}" != 0 ]; then
     echo 'bfmr_test already exists; nothing was overwritten.' >&2; exit 1
 fi
 if ! pg_dump --format=custom --no-owner --no-acl --file="${WORK}/snapshot.dump" 2>"${WORK}/private.log"; then

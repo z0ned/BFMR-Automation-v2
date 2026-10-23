@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-for (const scenario of ['success', 'existing', 'dump-failure', 'restore-failure']) {
+for (const scenario of ['success', 'existing', 'connection-failure', 'existence-check-failure', 'nonadmin', 'dump-failure', 'restore-failure']) {
   test(`database clone ${scenario} preserves source and refuses destructive retries`, t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bfmr-clone-test-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -13,7 +13,11 @@ for (const scenario of ['success', 'existing', 'dump-failure', 'restore-failure'
     const executable = (name: string, content: string) => fs.writeFileSync(path.join(root, name), '#!/bin/bash\nset -eu\n' + content, { mode: 0o700 });
     executable('docker', 'test "$1" = exec; shift\ntest "$1" = -i; shift\ntest "$1" = --user; shift\ntest "$1" = postgres; shift\ntest "$1" = bfmr-postgres; shift\nexec "$@"\n');
     executable('psql', `printf 'psql %s\\n' "$*" >> "$CLONE_TEST_LOG"
-case "$*" in *'SELECT count(*)'*) if [ "$SCENARIO" = existing ]; then echo 1; else echo 0; fi ;; esac
+test "$PGUSER" = synthetic_admin
+if [ "$SCENARIO" = connection-failure ]; then exit 2; fi
+case "$*" in
+*'SELECT rolsuper'*) if [ "$SCENARIO" = nonadmin ]; then echo f; else echo t; fi ;;
+*'SELECT count(*)'*) if [ "$SCENARIO" = existence-check-failure ]; then exit 2; fi; if [ "$SCENARIO" = existing ]; then echo 1; else echo 0; fi ;; esac
 `);
     executable('pg_dump', `echo dump >> "$CLONE_TEST_LOG"
 if [ "$SCENARIO" = dump-failure ]; then exit 1; fi
@@ -23,7 +27,7 @@ for arg in "$@"; do case "$arg" in --file=*) printf 'synthetic snapshot' > "\${a
 if [ "$SCENARIO" = restore-failure ]; then exit 1; fi
 `);
     const result = spawnSync('bash', ['scripts/clone_test_database.sh'], { encoding: 'utf8', env: {
-      PATH: `${root}:/usr/bin:/bin`, HOME: root, CLONE_TEST_LOG: log, SCENARIO: scenario,
+      PATH: `${root}:/usr/bin:/bin`, HOME: root, CLONE_TEST_LOG: log, SCENARIO: scenario, POSTGRES_USER: 'synthetic_admin',
     } });
     const calls = fs.readFileSync(log, 'utf8');
     assert.doesNotMatch(calls, /DROP|TRUNCATE|pg_terminate_backend|ALTER DATABASE bfmr /);
@@ -36,6 +40,10 @@ if [ "$SCENARIO" = restore-failure ]; then exit 1; fi
     } else {
       assert.notEqual(result.status, 0);
       assert.doesNotMatch(result.stdout, /Created bfmr_test/);
+      if (['connection-failure', 'existence-check-failure', 'nonadmin'].includes(scenario)) {
+        assert.doesNotMatch(calls, /dump|CREATE DATABASE|restore/);
+        assert.doesNotMatch(result.stderr, /already exists/);
+      }
       if (scenario === 'existing') assert.doesNotMatch(calls, /dump|CREATE DATABASE|restore/);
       if (scenario === 'dump-failure') assert.doesNotMatch(calls, /CREATE DATABASE|restore/);
       if (scenario === 'restore-failure') assert.match(result.stderr, /Keep it offline/);
