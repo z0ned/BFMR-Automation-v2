@@ -1,5 +1,18 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — readable BFMR API reference
+
+[BFMR_API_REFERENCE.md](BFMR_API_REFERENCE.md) reformats the operator-supplied
+[bfmr_api_spec.txt](bfmr_api_spec.txt), pinned to source revision 6399b69. It
+covers all 12 endpoints with parameter/response tables, original success JSON,
+tracker operation rules and the 20 November 2026 search transition. Source
+method, body encoding, URL, schema and insurance-city inconsistencies remain
+explicitly unresolved; no provider contract or application capability is inferred.
+Document QA checked endpoint/parameter coverage, all 12 unchanged success
+samples, 15 valid JSON blocks and directory anchors. No software tests or provider
+calls were needed; application behavior and the original source are unchanged.
+
+
 ## 23 October 2026 — one-command Windows Ubuntu rehearsal
 
 `scripts/bootstrap_ubuntu.ps1` creates a uniquely named clean Ubuntu container,
