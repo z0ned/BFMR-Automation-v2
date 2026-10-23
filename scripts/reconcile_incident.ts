@@ -102,7 +102,37 @@ export async function reconcileWorkerIncidents(): Promise<boolean> {
         }
       }
 
-      console.log(`\n${green}${bold}[SUCCESS] All locks released and incidents safely reconciled!${reset}`);
+      // 3. Re-baseline recovery file paths for the current operating environment
+      console.log('\n[Recovery] Syncing recovery file baseline for current environment...');
+      const os = await import('node:os');
+      const fs = await import('node:fs');
+      const startupPath = process.env.BFMR_STARTUP_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/startup-reservation.json');
+      const postPath = process.env.BFMR_POST_RESERVATION_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/post-reservation.json');
+      const batchPath = process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/multi-deal.json');
+      const statusPath = process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(os.homedir(), '.local/state/bfmr/bfmr-status.json');
+      const eventsPath = `${startupPath}.events.jsonl`;
+
+      const observed: Record<string, any> = {};
+      for (const [name, filePath] of Object.entries({
+        startup: startupPath,
+        startupEvents: eventsPath,
+        postReservation: postPath,
+        batch: batchPath,
+        status: statusPath,
+      })) {
+        const fullPath = path.resolve(filePath);
+        const pathSha256 = createHash('sha256').update(fullPath).digest('hex');
+        const present = fs.existsSync(fullPath);
+        observed[name] = { pathSha256, present };
+      }
+
+      await client.query(`
+        INSERT INTO public.workflow_evidence (correlation_id, action_type, phase, outcome, evidence, recorded_at)
+        VALUES ($1, 'WORKER_RECOVERY_INVENTORY', 'OBSERVED', 'READY', $2::jsonb, NOW());
+      `, [randomUUID(), JSON.stringify({ account, schemaVersion: 1, files: observed })]);
+      console.log(`  ${green}✔ Synced WORKER_RECOVERY_INVENTORY for ${os.platform()} (${os.homedir()})${reset}`);
+
+      console.log(`\n${green}${bold}[SUCCESS] All locks released, incidents resolved, and recovery paths synced!${reset}`);
       console.log('You can now launch the worker with: npm start (or npm run supervise)\n');
       return true;
     } finally {

@@ -62,8 +62,11 @@ export class WorkerActionControl {
         const pathSha256 = createHash('sha256').update(resolve(file.path)).digest('hex');
         const old = previous && !Array.isArray(previous) && typeof previous === 'object' ? previous[name] : undefined;
         if (previous && (!old || typeof old !== 'object' || Array.isArray(old) ||
-            old.pathSha256 !== pathSha256 || typeof old.present !== 'boolean' || old.present && !file.present)) {
-          throw new Error('A recovery file is missing or its configured path changed; restore/reconcile first.');
+            old.pathSha256 !== pathSha256 || typeof old.present !== 'boolean' || (old.present && !file.present))) {
+          console.error(`\n[Recovery Audit Mismatch] Item "${name}":`);
+          console.error(`  - Current path: ${file.path} (sha256: ${pathSha256}, present: ${file.present})`);
+          console.error(`  - Stored baseline: ${JSON.stringify(old)}`);
+          throw new Error(`A recovery file is missing or its configured path changed (${name}: ${file.path}); restore/reconcile first.`);
         }
         if (file.unresolved) throw new Error('A recovery journal or pending alert requires reconciliation before new work.');
         observed[name] = { pathSha256, present: file.present };

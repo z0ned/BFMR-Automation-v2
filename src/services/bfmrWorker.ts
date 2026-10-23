@@ -102,7 +102,7 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
       status: { path: process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(os.homedir(), '.local/state/bfmr/bfmr-status.json'),
         present: status !== null, unresolved: Boolean(status && status.nextAlert < status.pendingAlerts.length) },
     } satisfies Record<string, RecoveryFileState>;
-  }, process.env.BFMR_ACCEPT_RECOVERY_BASELINE === 'YES');
+  }, ['YES', 'TRUE', '1'].includes(process.env.BFMR_ACCEPT_RECOVERY_BASELINE?.trim().toUpperCase() ?? ''));
   const readline = process.stdin.isTTY && process.stdout.isTTY
     ? createInterface({ input: process.stdin, output: process.stdout }) : null;
   let stopping = false;
