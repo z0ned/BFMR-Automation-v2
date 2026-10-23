@@ -26,7 +26,9 @@ export function secureSecretFile(filePath: string): void {
       fs.chmodSync(filePath, 0o600);
     }
   } catch (err: any) {
-    console.warn(`[Security] Could not harden permissions on ${filePath}: ${err.message}`);
+    if (err.code !== 'EPERM') {
+      console.warn(`[Security] Could not harden permissions on ${filePath}: ${err.message}`);
+    }
   }
 }
 

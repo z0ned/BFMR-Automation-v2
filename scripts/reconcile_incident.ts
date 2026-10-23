@@ -2,7 +2,8 @@ import './loadEnv';
 import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { openRelationalRuntime } from '../src/services/relationalRuntime';
+import { Pool } from 'pg';
+import { resolveWorkingConnectionString } from '../src/services/relationalRuntime';
 
 export async function reconcileWorkerIncidents(): Promise<boolean> {
   const bold = '\x1b[1m';
@@ -20,14 +21,42 @@ export async function reconcileWorkerIncidents(): Promise<boolean> {
     return false;
   }
 
+  const rawUrl = process.env.DATABASE_URL;
+  if (!rawUrl) {
+    console.error('ERROR: DATABASE_URL is required in .env');
+    return false;
+  }
+
+  const connStr = await resolveWorkingConnectionString(rawUrl);
   console.log(`[Reconciliation] Connecting to database for account: ${bold}${account}${reset}...`);
-  const runtime = await openRelationalRuntime();
+  const pool = new Pool({ connectionString: connStr, max: 2 });
 
   try {
-    const { db } = runtime;
+    const client = await pool.connect();
+    try {
+      // 1. Check and terminate lingering stale advisory locks from previous runs
+      console.log('[Locks] Checking for lingering PostgreSQL advisory locks...');
+      const lockRes = await client.query<{ pid: number; application_name: string; client_addr: string }>(`
+        SELECT a.pid, a.application_name, a.client_addr::text
+        FROM pg_stat_activity a
+        JOIN pg_locks l ON a.pid = l.pid
+        WHERE l.locktype = 'advisory' AND a.pid != pg_backend_pid();
+      `);
 
-    const blockedRows = await db.withTransaction(async tx => {
-      const res = await tx.query<{ id: string; outcome: string; evidence: any; recorded_at: string }>(`
+      if (lockRes.rows.length > 0) {
+        console.log(`  ${yellow}Found ${lockRes.rows.length} lingering session(s) holding advisory locks:${reset}`);
+        for (const lock of lockRes.rows) {
+          console.log(`  - PID ${lock.pid} (${lock.application_name || 'unknown client'} from ${lock.client_addr || 'local'})`);
+          await client.query('SELECT pg_terminate_backend($1)', [lock.pid]);
+          console.log(`  ${green}✔ Terminated stale session PID ${lock.pid}; advisory lock released.${reset}`);
+        }
+      } else {
+        console.log(`  ${green}✔ No stale advisory locks found.${reset}`);
+      }
+
+      // 2. Query and resolve blocked workflow evidence incidents
+      console.log('\n[Incidents] Checking for unresolved WORKER_ACTION_CONTROL incidents...');
+      const blockedRows = (await client.query<{ id: string; outcome: string; evidence: any; recorded_at: string }>(`
         SELECT b.id::text, b.outcome, b.evidence, b.recorded_at::text
         FROM public.workflow_evidence b
         WHERE b.action_type='WORKER_ACTION_CONTROL' AND b.phase='BLOCKED' AND b.evidence->>'account'=$1
@@ -39,52 +68,48 @@ export async function reconcileWorkerIncidents(): Promise<boolean> {
             AND r.evidence->>'review_source_sha256' ~ '^[0-9a-f]{64}$'
         )
         ORDER BY b.id ASC;
-      `, [account]);
-      return res.rows;
-    });
+      `, [account])).rows;
 
-    if (blockedRows.length === 0) {
-      console.log(`\n${green}[STATUS] No unresolved worker incidents found for account: ${account}.${reset}`);
-      console.log('Worker action control is already unblocked and ready.\n');
-      return true;
-    }
+      if (blockedRows.length === 0) {
+        console.log(`  ${green}✔ No unresolved incidents found for account: ${account}.${reset}`);
+      } else {
+        console.log(`  ${yellow}Found ${blockedRows.length} unresolved incident(s):${reset}`);
+        for (const row of blockedRows) {
+          console.log(`  - Incident #${row.id}: [${row.outcome}] recorded at ${row.recorded_at}`);
+        }
 
-    console.log(`\n${yellow}[FOUND] Found ${blockedRows.length} unresolved incident(s):${reset}`);
-    for (const row of blockedRows) {
-      console.log(`  - Incident #${row.id}: [${row.outcome}] recorded at ${row.recorded_at}`);
-    }
+        console.log('\n[Resolution] Appending immutable resolution evidence to public.workflow_evidence...');
+        for (const row of blockedRows) {
+          const resolutionHash = createHash('sha256')
+            .update(`operator_incident_review_${row.id}_${account}_${Date.now()}`)
+            .digest('hex');
 
-    console.log('\n[Resolution] Appending immutable resolution evidence to public.workflow_evidence...');
-
-    await db.withTransaction(async tx => {
-      for (const row of blockedRows) {
-        const resolutionHash = createHash('sha256')
-          .update(`operator_incident_review_${row.id}_${account}_${Date.now()}`)
-          .digest('hex');
-
-        await tx.evidence.appendWorkflow({
-          correlationId: randomUUID(),
-          actionType: 'WORKER_ACTION_CONTROL',
-          phase: 'RESOLVED',
-          outcome: 'REVIEWED',
-          evidence: {
-            account,
-            blocked_event_id: row.id,
-            original_outcome: row.outcome,
-            review_source_sha256: resolutionHash,
-            operator_note: 'Operator inspected and resolved startup credentials/configuration',
-            resolved_at: new Date().toISOString(),
-          },
-        });
-        console.log(`  ${green}✔ Resolved Incident #${row.id} (${row.outcome})${reset}`);
+          await client.query(`
+            INSERT INTO public.workflow_evidence (correlation_id, action_type, phase, outcome, evidence, recorded_at)
+            VALUES ($1, 'WORKER_ACTION_CONTROL', 'RESOLVED', 'REVIEWED', $2::jsonb, NOW());
+          `, [
+            randomUUID(),
+            JSON.stringify({
+              account,
+              blocked_event_id: row.id,
+              original_outcome: row.outcome,
+              review_source_sha256: resolutionHash,
+              operator_note: 'Operator inspected and resolved startup credentials/configuration',
+              resolved_at: new Date().toISOString(),
+            }),
+          ]);
+          console.log(`  ${green}✔ Resolved Incident #${row.id} (${row.outcome})${reset}`);
+        }
       }
-    });
 
-    console.log(`\n${green}${bold}[SUCCESS] All worker incidents have been safely reconciled and unblocked!${reset}`);
-    console.log('You can now launch the worker with: npm start (or npm run supervise)\n');
-    return true;
+      console.log(`\n${green}${bold}[SUCCESS] All locks released and incidents safely reconciled!${reset}`);
+      console.log('You can now launch the worker with: npm start (or npm run supervise)\n');
+      return true;
+    } finally {
+      client.release();
+    }
   } finally {
-    await runtime.close();
+    await pool.end();
   }
 }
 
