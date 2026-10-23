@@ -28,6 +28,7 @@
     "scripts/clone_test_database.ts",
     "scripts/environment_command.ts",
     "tests/environment_isolation.test.ts",
-    "tests/database_clone.test.ts"
+    "tests/database_clone.test.ts",
+    "scripts/verify_installation.ts"
   ]
 }

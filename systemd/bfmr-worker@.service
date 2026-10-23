@@ -13,9 +13,10 @@ User=bfmr-%i
 Group=bfmr-%i
 WorkingDirectory=/opt/bfmr/BFMR-Automation-v2
 Environment=HOME=/var/lib/bfmr-%i
+Environment=PATH=/opt/bfmr/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=BFMR_ENV_FILE=/etc/bfmr/%i.env
 EnvironmentFile=/etc/bfmr/%i.env
-ExecStart=/usr/bin/node --import tsx scripts/environment_command.ts %i supervise_worker
+ExecStart=/usr/bin/env node --import tsx scripts/environment_command.ts %i supervise_worker
 StateDirectory=bfmr-%i
 StateDirectoryMode=0700
 Restart=on-failure
