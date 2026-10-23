@@ -5,7 +5,8 @@
 ## Incoming Ubuntu mini-PC
 
 The same fresh-host bootstrap supports Ubuntu 24.04 and a Windows-launched Ubuntu
-Docker rehearsal. See [UBUNTU_INSTALL.md](UBUNTU_INSTALL.md). It creates separate
+Docker rehearsal. Windows now has a single-command `scripts/bootstrap_ubuntu.ps1`
+launcher that handles container creation and line endings automatically. See [UBUNTU_INSTALL.md](UBUNTU_INSTALL.md). It creates separate
 production/testing users/profiles/roles/databases and private password files;
 workers remain stopped. Native provider/account/cutover/state-transfer and real
 mini-PC systemd/desktop acceptance remain separate. The prior production incident

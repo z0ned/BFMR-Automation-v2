@@ -1,5 +1,17 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — one-command Windows Ubuntu rehearsal
+
+`scripts/bootstrap_ubuntu.ps1` creates a uniquely named clean Ubuntu container,
+mounts its own checkout read-only, normalizes the mounted bootstrap automatically
+and executes it inside Ubuntu without WSL. It preserves existing/failed containers,
+streams installation output and leaves PostgreSQL running with both workers
+stopped. The prior manual CRLF commands are removed from the primary rehearsal
+instructions. Native mini-PC setup remains unchanged. Windows PowerShell runtime
+acceptance is pending; the shared CRLF payload is validated locally without
+installation. See [Ubuntu setup](UBUNTU_INSTALL.md).
+
+
 ## 23 October 2026 — Windows bind-mount line endings
 
 Operator output showed CRLF causing Bash to reject `set -euo pipefail` before

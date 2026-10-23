@@ -8,43 +8,26 @@ or WSL is required for the Windows rehearsal.
 
 ## Rehearse today from Windows PowerShell
 
-With Docker Desktop running, open the existing BFMR checkout:
+With Docker Desktop running, open PowerShell in the updated BFMR checkout and
+run one command:
 
 ```powershell
-git pull
-docker run --name bfmr-ubuntu-test --shm-size=1g -it --mount "type=bind,source=$($PWD.Path),target=/source,readonly" ubuntu:24.04 bash
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap_ubuntu.ps1
 ```
 
-Then, inside the Ubuntu shell:
+The launcher locates the checkout itself, creates a uniquely named clean Ubuntu
+24.04 container, mounts the source read-only, automatically normalizes Windows
+line endings and runs the bootstrap. No WSL, host Bash or manual commands inside
+Ubuntu are needed. It streams installation progress and leaves the container and
+PostgreSQL running afterward; both live workers stay stopped. The container name
+and optional shell-access command are printed when installation completes.
 
-```sh
-sed 's/\r$//' /source/scripts/bootstrap_ubuntu.sh > /tmp/bfmr-bootstrap.sh
-bash /tmp/bfmr-bootstrap.sh --container --source-dir /source
-```
+To use a specific name, append `-ContainerName bfmr-ubuntu-test`. Existing names
+are refused rather than reused, deleted or reset. A failed installation is also
+preserved for inspection. The retained container contains private generated DB
+passwords: do not export/share it or publish a snapshot image.
 
-The temporary copy normalizes Windows CRLF endings without changing the
-read-only source mount. `.gitattributes` also enforces LF for future shell-script
-checkouts; an existing Windows checkout may still need this normalization.
-Only committed code is copied; your existing private
-configuration/browser data is not imported. Keep this Ubuntu shell open after
-installation. To return to a stopped rehearsal later:
-
-```powershell
-docker start -ai bfmr-ubuntu-test
-```
-
-Then start its local PostgreSQL cluster (normally version 16; `pg_lsclusters`
-shows the actual version):
-
-```sh
-pg_ctlcluster 16 main start
-```
-
-No systemd is needed. The retained container includes generated private database
-passwords; do not export/share it or publish a snapshot image.
-
-Use a new container name for a genuinely fresh retry. A partial installation is
-preserved for inspection; the installer never clears a database to retry.
+The Ubuntu mini-PC still uses the native single-command bootstrap below.
 
 ## Install on the mini-PC
 
