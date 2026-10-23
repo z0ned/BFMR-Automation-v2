@@ -68,7 +68,10 @@ export function parseIncomingEmail(raw: {
     /more reservations added/i.test(readableBody) ||
     /added more reservations/i.test(readableBody);
 
-  const bodyAnnouncesNewDeal = /\bwe posted (?:a|an|two|three|four|five|six|seven|eight|nine|ten|\d+) new deals?\b/i.test(readableBody);
+  const bodyAnnouncesNewDeal =
+    /\bwe posted (?:a|an|two|three|four|five|six|seven|eight|nine|ten|\d+) new deals?\b/i.test(readableBody) ||
+    /\bnew deal\b/i.test(subject) ||
+    /\bnew deals?\b/i.test(readableBody);
   const bodyIsUpdate = /\b(?:we increased our payout|we have added more reservations|we added more reservations|added more reservations|payout increase|new deal update)\b/i.test(readableBody);
   const isNewDealAnnouncement = bodyAnnouncesNewDeal && !bodyIsUpdate;
   const announcedCountWord = /\bwe posted (two|three|four|five|six|seven|eight|nine|ten|\d+) new deals\b/i.exec(readableBody)?.[1]?.toLowerCase();
@@ -170,7 +173,7 @@ export function parseIncomingEmail(raw: {
   }
 
   const isPayoutUpdate =
-    /\b(?:we increased our payout|payout increase|increased our payout|above retail)\b/i.test(readableBody) ||
+    /\b(?:we increased our payout|payout increase|increased our payout)\b/i.test(readableBody) ||
     /\bpayout increase\b/i.test(subject);
 
   const isDealClosing =
@@ -178,7 +181,7 @@ export function parseIncomingEmail(raw: {
     /\bclosing\b/i.test(subject);
 
   const isInformationalUpdate =
-    !isPaymentNotice && (bodyIsUpdate || isPayoutUpdate || isDealClosing || isAdditionalSlotNotice);
+    !isPaymentNotice && !isNewDealAnnouncement && (bodyIsUpdate || isPayoutUpdate || isDealClosing || isAdditionalSlotNotice);
 
   let informationalType: IntakeEmail['informationalType'] = undefined;
   if (isInformationalUpdate) {

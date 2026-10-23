@@ -158,3 +158,25 @@ test('readLockedPurchaseEvidence calls live BFMR Deal API at checkout and update
   assert.equal(workflowEvents[0].evidence.live_payout_cents, 14999);
   assert.equal(workflowEvents[0].evidence.previous_payout_cents, 13999);
 });
+
+test('parseIncomingEmail classifies NEW DEAL with above retail as a single actionable deal', () => {
+  const raw = {
+    messageId: 'gmail-deal-above-retail',
+    sender: 'deals@buyformeretail.com',
+    subject: 'FW: NEW DEAL - PREPAID GALAXY A17',
+    receivedAt: '2026-10-23T10:00:00Z',
+    body: `
+      <h2>New Deal: Samsung Galaxy A17</h2>
+      <p>We posted a new deal! Paying $10 above retail!</p>
+      <a href="https://bfmr.com/deals/samsung-galaxy-a17">View deal</a>
+      <p>Payout: $159.99</p>
+    `,
+  };
+
+  const parsed = parseIncomingEmail(raw);
+
+  assert.equal(parsed.isInformationalUpdate, false);
+  assert.equal(parsed.isSingleDeal, true);
+  assert.equal(parsed.deals.length, 1);
+  assert.equal(parsed.deals[0].canonicalDealId, 'samsung-galaxy-a17');
+});
