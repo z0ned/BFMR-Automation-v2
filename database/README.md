@@ -1,5 +1,19 @@
 # BFMR database schema
 
+## 23 October 2026 — existing-runtime recovery
+
+See the [recovery amendment](../docs/RECOVERY_REVIEW_20261023.md) before changing
+an installed system. `runtime_intake_grants.psql` is a separately reviewed,
+idempotent column-grant repair for the four existing Gmail tables, with psql
+`runtime_role` defaulting to `bfmr_app`. Startup and repair check these privileges
+without applying grants. The fresh installer no longer grants payout updates;
+creation terms remain protected by the immutable trigger. `optimizations.sql`
+now installs an atomic, partial-payment-aware conservative payout ceiling with
+serialized competing writes; it is distinct from checkout's provider-coverage
+and proposed-order-cost check. Do not rerun the fresh installer on an existing
+database. No installed SQL was applied by this amendment.
+
+
 This directory is the authoritative source for the relational business schema,
 upgrade migrations and database design notes used by BFMR-Automation-v2.
 PostgreSQL 15 or later is intended to run locally on the mini-PC. A second

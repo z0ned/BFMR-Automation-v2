@@ -28,7 +28,7 @@ test('getDatabaseConfig parses DATABASE_URL or individual PG variables', () => {
   }
 });
 
-test('runDatabaseValidation verifies version >= 15 and flags older versions', async () => {
+test('validator records successful modeled checks and fails an undemonstrated exposure ceiling', async () => {
   const queriesExecuted: string[] = [];
 
   const mockClient = {
@@ -90,7 +90,8 @@ test('runDatabaseValidation verifies version >= 15 and flags older versions', as
 
   const summary = await runDatabaseValidation(mockClient as any);
 
-  assert.equal(summary.failed, 0);
+  assert.equal(summary.failed, 1);
+  assert.equal(summary.results.find(r => r.name === 'Probe: Exposure Limit ($200.00 Cap)')?.status, 'FAIL');
   assert.ok(summary.passed >= 6);
 
   const verResult = summary.results.find(r => r.name === 'PostgreSQL Version');

@@ -1,5 +1,20 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — recovery review amendment
+
+The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
+revision/grant diagnostics, atomic exact-message repair, creation-locked checkout
+payouts, partial-payment exposure accounting, and coordinated backup/restore.
+Earlier source/native acceptance claims retain their dated scope. These changes
+have not been installed on the operator host or used to clear its incident.
+
+Validation for this amendment: **66/66 focused offline cases passed**, no
+failures/skips, plus source and scoped script/test TypeScript checks, shell syntax
+and whitespace checks. Exact commands and limitations are in the amendment;
+this does not add reruns to older historical case totals or establish native
+restore/concurrency/provider acceptance.
+
+
 ## 22 October 2026 — shared durable email workflow source
 
 Production coordination now lives in `src/services/bfmrWorker.ts` and `dealEmailWorkflow.ts`; the test-named script is a thin explicitly invoked startup-test wrapper. Single- and multi-new-deal messages share the same reservation-first/evaluation/purchase phases and guards. Append-only SQL snapshots bind per-message/per-reservation intent, causal confirmation, source identity and account. Newly processed SQL PROCESSING mail only may enroll; completed or historical mail cannot be backfilled. `reconcile_deal_email.ts` supplies read-only report/freshly revalidated, reviewed-hash local repair without provider replay. Queue repair, scoped incident resolution and supported local records commit together. Exact configuration, action boundaries, unsupported uncertain outcomes and acceptance limits are in [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md).

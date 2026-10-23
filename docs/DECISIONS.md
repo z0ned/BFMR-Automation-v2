@@ -1,5 +1,20 @@
 # Decision register
 
+## 23 October 2026 — address recovery review findings
+
+The user requested addressing all review findings. Keep D22-03 creation-time
+payout immutability; current deal rates are separate evidence and never rewrite
+existing reservations. The 22 October checkout-refresh implementation text is
+superseded. Preserve startup's interrupted-work block and use only exact-message,
+evidence-backed atomic local repairs, with source-bound reports and committed
+receipts for idempotency. Correct partial-payment accounting and document the
+optional conservative database payout ceiling separately from checkout exposure.
+Restore must fail on SQL errors and retain an incomplete boundary across SQL and
+filesystem publication. See [the amendment](RECOVERY_REVIEW_20261023.md).
+This implements source/tooling and focused offline validation; it does not apply
+native grants/SQL, repair actual work, deploy or start the worker.
+
+
 ## 22 October 2026 — shared single-/multi-deal workflow implementation
 
 The user requested extracting production coordination into shared services and making both qualifying message types durable with identical purchase safeguards. Preserve the all-reservations-before-evaluation barrier, reconcile possible effects before reviewed repair and never backfill completed mail. The source now uses existing append-only SQL evidence, exact admitted PROCESSING identity, causal action checkpoints and report-first/freshly validated local repair scoped to interrupted work. This changes source behavior, not live invocation authority or installed schema. See [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md). No software tests, provider action or actual repair/deployment occurred.

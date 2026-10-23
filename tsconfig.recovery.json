@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src",
+    "scripts/diagnose_recovery.ts",
+    "scripts/sourceIdentity.ts",
+    "scripts/reconcile_incident.ts",
+    "scripts/reconcile_deal_email.ts",
+    "scripts/run_bfmr.ts",
+    "scripts/health_check.ts",
+    "scripts/run_production_cutover.ts",
+    "scripts/apply_database_optimizations.ts",
+    "scripts/validate_database_environment.ts",
+    "tests/review_fixes.test.ts",
+    "tests/recovery_operations.test.ts",
+    "tests/database_validator.test.ts",
+    "tests/informational_and_checkout_payout.test.ts"
+  ]
+}

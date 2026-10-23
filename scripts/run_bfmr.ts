@@ -1,3 +1,4 @@
+import { sourceIdentity } from './sourceIdentity';
 import './loadEnv';
 import { runBfmrWorker } from '../src/services/bfmrWorker';
 
@@ -14,7 +15,10 @@ if (args.length === 1 && args[0] === '--help') {
   console.error('[BFMR worker] Unknown argument. Use --help; no workflow was started.');
   process.exitCode = 2;
 } else {
-  runBfmrWorker().catch((err: any) => {
+  Promise.resolve().then(() => {
+    console.log(`[BFMR worker] Source: ${JSON.stringify(sourceIdentity())}`);
+    return runBfmrWorker();
+  }).catch((err: any) => {
     console.error(`\n[BFMR worker] Startup/Runtime Error: ${err?.message || err}`);
     if (err?.stack) {
       console.error(err.stack);

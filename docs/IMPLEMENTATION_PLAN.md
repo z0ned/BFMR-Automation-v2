@@ -1,5 +1,14 @@
 # Implementation plan and evidence
 
+## 23 October 2026 — recovery review amendment
+
+The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
+revision/grant diagnostics, atomic exact-message repair, creation-locked checkout
+payouts, partial-payment exposure accounting, and coordinated backup/restore.
+Earlier source/native acceptance claims retain their dated scope. These changes
+have not been installed on the operator host or used to clear its incident.
+
+
 ## 22 October 2026 — shared single-/multi-deal source implemented
 
 Extracted worker coordination to `bfmrWorker.ts`, per-message/per-reservation processing to `dealEmailWorkflow.ts`, reservation actions to `emailReservation.ts` and checkout orchestration to `reservedDealPurchase.ts`. `DealEmailWorkflowStore` persists append-only SQL checkpoints with optimistic revision checks and immutable identity for both message types. Single-deal mail now reaches the same guarded order path. Multi-deal reservation/evaluation barriers and existing financial/account/uncertainty safeguards remain. Report-first reconciliation supports freshly validated, reviewed local repair of safe interrupted states, atomic queue/snapshot/local-record repair and exact workflow-scoped email incident resolution; unknown effects cannot be replayed or invented. See [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md).

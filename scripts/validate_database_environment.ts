@@ -539,8 +539,8 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
 
       const probeExposureBfmrId = `probe_exp_check_${Date.now()}`;
       const dealRes = await client.query<{ id: string }>(`
-        INSERT INTO public.deals (bfmr_deal_id, title, payout_per_item, reimbursement_amount)
-        VALUES ($1, 'Validator Exposure Probe Deal', 250.00, 250.00)
+        INSERT INTO public.deals (bfmr_deal_id, slug, title, reimbursement_amount)
+        VALUES ($1, $1, 'Validator Exposure Probe Deal', 250.00)
         RETURNING id;
       `, [probeExposureBfmrId]);
       const probeDealId = dealRes.rows[0].id;
@@ -552,7 +552,7 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
           VALUES ($1, $2, 1, 250.00, 1);
         `, [probeDealId, `probe_res_exp_${Date.now()}`]);
       } catch (insertErr: any) {
-        if (insertErr.code === '23514' || /exceeds maximum allowable limit of \$200\.00/i.test(insertErr.message)) {
+        if (insertErr.code === '23514' && /Unreimbursed reservation payouts exceed \$200\.00/i.test(insertErr.message)) {
           exposureBlocked = true;
         }
       }
@@ -568,12 +568,13 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
         add({
           name: 'Probe: Exposure Limit ($200.00 Cap)',
           category: 'PROBES',
-          status: 'INFO',
-          message: 'Exposure cap trigger not active or limit was not exceeded in probe',
+          status: 'FAIL',
+          message: 'The reservation-payout ceiling was not demonstrated by its expected rejection',
         });
       }
     } catch {
-      // Non-fatal probe
+      add({ name: 'Probe: Exposure Limit ($200.00 Cap)', category: 'PROBES', status: 'FAIL',
+        message: 'Exposure probe could not execute; native ceiling acceptance remains unverified' });
     }
 
     // Always unconditionally roll back active probes
@@ -626,7 +627,7 @@ export function printValidationReport(summary: ValidationSummary): void {
   if (summary.failed > 0) {
     console.error(`${red}${bold}ERROR: Database environment validation failed. Review the errors above.${reset}\n`);
   } else {
-    console.log(`${green}${bold}SUCCESS: Database environment meets all BFMR Automation v2 requirements!${reset}\n`);
+    console.log(`${green}${bold}Database checks completed; review warnings and separately establish provider/recovery acceptance.${reset}\n`);
   }
 }
 

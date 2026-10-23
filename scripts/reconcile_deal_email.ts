@@ -1,3 +1,5 @@
+import { sourceIdentity } from './sourceIdentity';
+import { assertIntakePrivileges, IntakePrivilegeError } from '../src/db/intakePrivileges';
 import './loadEnv';
 import { readFile, open, stat, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -38,7 +40,7 @@ async function main() {
   const directory = await stat(directoryPath);
   if (resolve(file) !== resolve(directoryPath, file.slice(file.lastIndexOf('/') + 1))) throw new Error('Report directory symlinks require an explicit canonical path.');
   if (!directory.isDirectory() || (directory.mode & 0o077) !== 0) throw new Error('Report directory must already exist with owner-only permissions.');
-  let reviewed: EmailReconciliationReport | undefined;
+  let reviewed: (EmailReconciliationReport & { source: ReturnType<typeof sourceIdentity> }) | undefined;
   let reviewedHash: string | undefined;
   if (apply) {
     const info = await stat(file);
@@ -46,16 +48,29 @@ async function main() {
     const bytes = await readFile(file);
     reviewedHash = createHash('sha256').update(bytes).digest('hex');
     if (reviewedHash !== values.get('--confirm-report-sha256')) throw new Error('Exact reviewed report hash is required.');
-    reviewed = JSON.parse(bytes.toString('utf8')) as EmailReconciliationReport;
-    const age = Date.now() - Date.parse(reviewed.generatedAt);
-    if (!Number.isFinite(age) || age < 0 || age > 5 * 60_000 || !reviewed.ready) throw new Error('Report is not fresh and ready; regenerate/review it.');
+    reviewed = JSON.parse(bytes.toString('utf8')) as EmailReconciliationReport & { source: ReturnType<typeof sourceIdentity> };
+    if (!reviewed.ready) throw new Error('Report is not ready; regenerate/review it.');
   } else if (values.has('--confirm-report-sha256')) throw new Error('Confirmation hash is valid only with --apply.');
 
+  const source = sourceIdentity();
+  if (apply && (!reviewed?.source || canonicalWorkflowJson(reviewed.source) !== canonicalWorkflowJson(source))) {
+    throw new Error('Source revision/content differs from the reviewed report; regenerate/review it.');
+  }
   const runtime = await openRelationalRuntime();
   const browser = new PlaywrightBfmrBrowser({ browserPid: Number(pid) });
   runtime.ownership.onOwnershipLost(() => { void browser.close(); });
   try {
     const store = new DealEmailWorkflowStore(runtime.db, runtime.account);
+    if (apply && reviewed && reviewedHash && reviewed.next.messageId === id &&
+        await store.repairAlreadyApplied(reviewed.next, reviewedHash)) {
+      console.log(JSON.stringify({ mode: 'ALREADY_APPLIED', reportSha256: reviewedHash }));
+      return;
+    }
+    if (apply && reviewed) {
+      const age = Date.now() - Date.parse(reviewed.generatedAt);
+      if (!Number.isFinite(age) || age < 0 || age > 5 * 60_000) throw new Error('Report is not fresh; regenerate/review it.');
+    }
+    await runtime.db.withTransaction(tx => assertIntakePrivileges(tx));
     const checkpoint = await store.load('GMAIL', id);
     if (!checkpoint) throw new Error('No durable workflow exists; historical messages cannot be enrolled by repair.');
     const page = await browser.init();
@@ -63,8 +78,8 @@ async function main() {
       try { return isTrustedBfmrHost(new URL(candidate.url()).hostname); } catch { return false; }
     });
     if (!bfmr || !await verifyBfmrAccountIdentity(bfmr, runtime.account)) throw new Error('Verified BFMR browser/API alignment is required.');
-    const report = await reconcileDealEmail(runtime, checkpoint, { readTracker: readRecentReservedRows,
-      createRetailerPage: () => browser.createRetailerTab() });
+    const report = { ...await reconcileDealEmail(runtime, checkpoint, { readTracker: readRecentReservedRows,
+      createRetailerPage: () => browser.createRetailerTab() }), source };
     if (apply) {
       const stable = (r: EmailReconciliationReport) => { const { generatedAt: _observed, ...rest } = r; return canonicalWorkflowJson(rest); };
       if (!reviewed || stable(reviewed) !== stable(report)) throw new Error('Fresh provider evidence/state differs from the reviewed plan.');
@@ -80,7 +95,9 @@ async function main() {
     }
   } finally { try { await browser.close(); } finally { await runtime.close(); } }
 }
-main().catch(() => {
+main().catch(error => {
+  if (error instanceof IntakePrivilegeError) console.error(error.message);
+  else if (typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)) console.error(`Database reconciliation failed (${error.code}).`);
   console.error('Workflow reconciliation stopped. Preserve the private report and exact provider evidence; no external action was retried.');
   process.exitCode = 1;
 });

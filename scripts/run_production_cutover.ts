@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { PostgresAccountOwnership } from '../src/db/postgresDatabase';
@@ -44,34 +44,15 @@ export function computeFileSha256(filePath: string): string {
   return crypto.createHash('sha256').update(fileBuffer).digest('hex');
 }
 
-export async function executePreCutoverBackup(): Promise<boolean> {
+export async function executePreCutoverBackup(stateDirectory?: string): Promise<boolean> {
   const backupScript = path.resolve('scripts/backup_production_state.sh');
   try {
-    console.log('\n[Backup] Executing automated pre-cutover state backup...');
-    if (process.platform === 'win32') {
-      const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
-      if (fs.existsSync(gitBash)) {
-        execSync(`"${gitBash}" "${backupScript}"`, { stdio: 'inherit' });
-        return true;
-      }
-      try {
-        const backupDir = path.join(os.homedir(), 'backups', 'bfmr');
-        fs.mkdirSync(backupDir, { recursive: true });
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const dumpPath = path.join(backupDir, `backup_${timestamp}.sql`);
-        execSync(`docker exec bfmr-postgres pg_dump -U bfmr -d bfmr > "${dumpPath}"`, { stdio: 'ignore' });
-        console.log(`[Backup] Created PostgreSQL database dump at: ${dumpPath}`);
-        return true;
-      } catch {
-        console.log('[Backup] Notice: Shell backup script skipped on Windows host; database is safe in Docker container.');
-        return false;
-      }
-    } else {
-      execSync(`bash "${backupScript}"`, { stdio: 'inherit' });
-      return true;
-    }
-  } catch (err: any) {
-    console.warn(`[Backup] Warning: Pre-cutover backup note: ${err.message}`);
+    const shell = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+    execFileSync(shell, [backupScript], { stdio: 'inherit', env: { ...process.env,
+      ...(stateDirectory ? { BFMR_STATE_DIR: stateDirectory } : {}) } });
+    return true;
+  } catch {
+    console.error('Coordinated pre-cutover backup failed; cutover stopped. No database-only backup fallback is accepted.');
     return false;
   }
 }
@@ -175,7 +156,7 @@ export async function runProductionCutover(options: CutoverCliOptions = {}): Pro
 
     // 4. Automated Pre-Cutover Backup (if not skipped)
     if (!options.skipBackup) {
-      await executePreCutoverBackup();
+      if (!await executePreCutoverBackup(stateDirectory)) return false;
     } else {
       console.log('[Backup] Pre-cutover backup skipped via flag.');
     }

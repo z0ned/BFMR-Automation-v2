@@ -1,3 +1,4 @@
+import { assertIntakePrivileges } from '../db/intakePrivileges';
 import { createHash, randomUUID } from 'node:crypto';
 import type { RelationalDatabase } from '../db/relationalDatabase';
 import type { BusinessRepositories } from '../db/relationalRepositories';
@@ -187,6 +188,21 @@ export class DealEmailWorkflowStore {
       return this.append(tx, next);
     });
   }
+  private async repairAlreadyAppliedInTransaction(tx: BusinessRepositories, next: DealEmailState, hash: string): Promise<boolean> {
+    validateDealEmailState(next);
+    if (next.account !== this.account || next.source !== 'GMAIL' || !/^[0-9a-f]{64}$/.test(hash)) throw new Error('Invalid repair identity.');
+    const receipt = await tx.query(`SELECT id FROM public.workflow_evidence WHERE action_type='DEAL_EMAIL_REPAIR'
+      AND phase='APPLIED' AND correlation_id=$1 AND evidence->>'account'=$2 AND evidence->>'message_id'=$3
+      AND evidence->>'report_sha256'=$4 AND evidence->>'state_sha256'=$5 LIMIT 1`,
+    [next.workflowId, this.account, next.messageId, hash, createHash('sha256').update(canonicalWorkflowJson(next)).digest('hex')]);
+    if (!receipt.rows.length) return false;
+    // A committed receipt proves this exact repair happened. Do not replay it,
+    // even if a later authorized worker has advanced the workflow/queue again.
+    return true;
+  }
+  async repairAlreadyApplied(next: DealEmailState, hash: string): Promise<boolean> {
+    return this.db.withTransaction(tx => this.repairAlreadyAppliedInTransaction(tx, next, hash));
+  }
   /** Only a caller with a freshly regenerated provider report may use this path.
    * The transaction callback repairs local records only; never provider effects.
    */
@@ -194,6 +210,8 @@ export class DealEmailWorkflowStore {
     repairLocalRecords: (tx: BusinessRepositories) => Promise<void>): Promise<void> {
     if (!/^[0-9a-f]{64}$/.test(reportSha256)) throw new Error('Exact reviewed reconciliation report hash is required.');
     await this.db.withTransaction(async tx => {
+      await assertIntakePrivileges(tx);
+      if (await this.repairAlreadyAppliedInTransaction(tx, next, reportSha256)) return;
       const current = await this.read(tx, checkpoint.state.source, checkpoint.state.messageId);
       if (!current || current.revision !== checkpoint.revision || (current.state.status === 'COMPLETE' && next.status !== 'COMPLETE') ||
           next.source !== 'GMAIL' || !['READY', 'COMPLETE'].includes(next.status)) throw new Error('Workflow repair no longer matches the reviewed state.');
@@ -204,15 +222,22 @@ export class DealEmailWorkflowStore {
           emailSourceSha256(work.rows[0].payload) !== next.sourceSha256) throw new Error('Completed, missing or changed Gmail work cannot be repaired/replayed.');
       await repairLocalRecords(tx);
       await this.append(tx, next);
-      await tx.query(`UPDATE public.gmail_intake_work SET state=$3,payload=CASE WHEN $3='DONE' THEN NULL ELSE payload END,updated_at=now()
+      const changed = await tx.query(`UPDATE public.gmail_intake_work SET state=$3,payload=CASE WHEN $3='DONE' THEN NULL ELSE payload END,updated_at=now()
         WHERE account_namespace=$1 AND gmail_message_id=$2 AND state='PROCESSING'`,
       [this.account, next.messageId, next.status === 'COMPLETE' ? 'DONE' : 'PENDING']);
+      if (changed.rowCount !== 1) throw new Error('Gmail work changed during repair; all local changes rolled back.');
       const incidents = await tx.query<{ id: string }>(`SELECT id::text FROM public.workflow_evidence
         WHERE action_type='WORKER_ACTION_CONTROL' AND phase='BLOCKED' AND outcome='EMAIL_ACTION_REQUIRES_REVIEW'
-        AND evidence->>'account'=$1 AND evidence->>'workflow_id'=$2`, [this.account, next.workflowId]);
+        AND evidence->>'account'=$1 AND evidence->>'workflow_id'=$2
+        AND NOT EXISTS (SELECT 1 FROM public.workflow_evidence resolved WHERE resolved.action_type='WORKER_ACTION_CONTROL'
+          AND resolved.phase='RESOLVED' AND resolved.evidence->>'account'=$1
+          AND resolved.evidence->>'blocked_event_id'=workflow_evidence.id::text)`, [this.account, next.workflowId]);
       for (const incident of incidents.rows) await tx.evidence.appendWorkflow({ correlationId: next.workflowId,
         actionType: 'WORKER_ACTION_CONTROL', phase: 'RESOLVED', outcome: 'REVIEWED', evidence: {
           account: this.account, workflow_id: next.workflowId, blocked_event_id: incident.id, review_source_sha256: reportSha256 } });
+      await tx.evidence.appendWorkflow({ correlationId: next.workflowId, actionType: 'DEAL_EMAIL_REPAIR',
+        phase: 'APPLIED', outcome: next.status, evidence: { account: this.account, message_id: next.messageId,
+          report_sha256: reportSha256, state_sha256: createHash('sha256').update(canonicalWorkflowJson(next)).digest('hex') } });
     });
   }
 }

@@ -1,5 +1,14 @@
 # Relational business persistence — 20 October 2026
 
+## 23 October 2026 — recovery review amendment
+
+The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
+revision/grant diagnostics, atomic exact-message repair, creation-locked checkout
+payouts, partial-payment exposure accounting, and coordinated backup/restore.
+Earlier source/native acceptance claims retain their dated scope. These changes
+have not been installed on the operator host or used to clear its incident.
+
+
 This runbook describes the application integration source authorized on 20 October 2026, with the 22 October ranked-account selection amendment below. PostgreSQL is intended to run locally on the mini-PC. The authoritative 16-table contract lives in [database/schema.sql](../database/schema.sql), including `deal_retailers`, the immutable-payout guard and required account ranking. Upgrades and preserved design notes are beside it; [database/README.md](../database/README.md) records current/historical hashes and installation boundaries. Consolidation on 21 October copied the original files unchanged from former `BFMR_DB_Schema` main at `a67a0715ef040b0dd65de17ce63a0a5e34898699`; the ranking source now changes that schema and adds a two-stage upgrade. No second checkout is required. The current v22 pair describes this contract; older conceptual fields and order-linked multiple-payment examples are superseded.
 
 The application does not install that schema, apply migrations, or import historical records at startup. A deployed schema/cutover and provider-contract acceptance remain separate from source implementation. No live provider or production database was invoked for this work. User-authorized offline results are recorded below, dated 21 October 2026.

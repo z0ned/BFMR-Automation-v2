@@ -15,7 +15,12 @@
     "health": "node --import tsx scripts/health_check.ts",
     "cutover": "node --import tsx scripts/run_production_cutover.ts",
     "optimize-db": "node --import tsx scripts/apply_database_optimizations.ts",
-    "test": "node --import tsx --test tests/delivery_cutoff.test.ts tests/payment_intake.test.ts tests/informational_and_checkout_payout.test.ts tests/database_validator.test.ts tests/milestone5_operations.test.ts tests/cutover.test.ts tests/optimizations.test.ts"
+    "test": "node --import tsx --test tests/delivery_cutoff.test.ts tests/payment_intake.test.ts tests/informational_and_checkout_payout.test.ts tests/database_validator.test.ts tests/milestone5_operations.test.ts tests/cutover.test.ts tests/optimizations.test.ts",
+    "recovery:diagnose": "node --import tsx scripts/diagnose_recovery.ts",
+    "recovery:report": "node --import tsx scripts/reconcile_deal_email.ts",
+    "unblock": "node --import tsx scripts/reconcile_incident.ts",
+    "test:recovery": "node --import tsx tests/review_fixes.test.ts && node --import tsx tests/recovery_operations.test.ts",
+    "typecheck:recovery": "tsc --project tsconfig.recovery.json --noEmit"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",

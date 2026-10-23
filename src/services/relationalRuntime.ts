@@ -1,3 +1,4 @@
+import { assertNoIncompleteRestore } from './restoreBoundary';
 import path from 'node:path';
 import os from 'node:os';
 import { PostgresAccountOwnership } from '../db/postgresDatabase';
@@ -11,6 +12,7 @@ import { assertRelationalCutoverReady, hashPrivateFile } from './relationalCutov
  * their private stores. Startup performs no DDL or state import.
  */
 export async function openRelationalRuntime() {
+  assertNoIncompleteRestore();
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();
   const connection = process.env.DATABASE_URL;
   if (!account || !connection) {

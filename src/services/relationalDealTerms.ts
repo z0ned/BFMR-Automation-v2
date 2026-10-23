@@ -38,6 +38,7 @@ export async function readCanonicalDealTerms(dealUrl: string, expectedDealId: st
 export async function fetchLiveBfmrDealPayout(
   slug: string,
   request: typeof fetch = fetch,
+  expectedDealId?: string,
 ): Promise<number> {
   const key = process.env.BFMR_API_KEY, secret = process.env.BFMR_API_SECRET;
   const headers: Record<string, string> = { accept: 'application/json' };
@@ -61,10 +62,12 @@ export async function fetchLiveBfmrDealPayout(
     throw new Error(`Canonical deal terms missing in API response for slug "${slug}"`);
   }
   const row = deal as Record<string, unknown>;
+  if (expectedDealId && (trackerIdentifier(row.deal_id) !== expectedDealId ||
+      row.slug !== undefined && row.slug !== slug)) throw new Error('Current deal payout identity conflicts.');
   const amounts = [row.reimbursement_amount, row.payout_price, row.payout]
     .filter(value => value !== undefined && value !== null).map(usdToCents);
-  if (!amounts.length) {
-    throw new Error(`Current deal payout is missing in API response for slug "${slug}"`);
+  if (!amounts.length || amounts.some(value => value !== amounts[0])) {
+    throw new Error(`Current deal payout is missing or conflicting in API response for slug "${slug}"`);
   }
   return amounts[0];
 }

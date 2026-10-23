@@ -1,5 +1,14 @@
 # Durable single-/multi-deal email workflow
 
+## 23 October 2026 — recovery review amendment
+
+The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
+revision/grant diagnostics, atomic exact-message repair, creation-locked checkout
+payouts, partial-payment exposure accounting, and coordinated backup/restore.
+Earlier source/native acceptance claims retain their dated scope. These changes
+have not been installed on the operator host or used to clear its incident.
+
+
 **22 October 2026 — source implementation; behavioral/native/provider acceptance remains pending.**
 
 ## Runtime and scope

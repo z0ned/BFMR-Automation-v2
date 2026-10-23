@@ -1,10 +1,30 @@
 # Open issues and release blockers
 
-**Updated:** 22 October 2026
+**Updated:** 23 October 2026
 
 This is the current-only checklist of unfinished implementation, provider evidence and operational acceptance. Requirements are defined in the [v22 solution design](BFMR_Solution_Design_Specification_v22.md); implemented behavior, configuration and evidence are recorded in the [v22 implementation reference](BFMR_Implementation_v22..md) and [relational integration runbook](RELATIONAL_INTEGRATION.md). Database installation and upgrade boundaries are in [database/README.md](../database/README.md).
 
 Remove an item when its stated completion evidence is recorded in the implementation reference or project registers. Synthetic coverage does not establish a live provider contract, installed database enforcement or production acceptance.
+
+## Recovery review: operator-host acceptance remains open
+
+- Deploy/identify the reviewed revision and inspect the exact interrupted message
+  from the supplied screenshot. Its reported `09f9d2b` object was unavailable in
+  this checkout. No actual incident or queue row has been cleared.
+- Inspect/install reviewed runtime intake grants with the worker stopped, then
+  reconcile provider effects and review an exact-message repair report. Source
+  privilege checks and atomic/idempotent repairs are implemented; host repair
+  acceptance remains pending.
+- Accept the installed creation-payout guard and corrected optional conservative
+  payout ceiling under concurrent native sessions, including partial payments
+  and status/payment changes. The earlier single $250 probe does not establish
+  these properties or provider-coverage acceptance.
+- Perform a coordinated replacement-database restore drill and crash-boundary
+  acceptance. Shell/PGlite checks do not establish native restore behavior.
+
+See [current recovery amendment](RECOVERY_REVIEW_20261023.md). The dated delivered
+and user-reported native entries below are historical evidence with bounded
+scope, not acceptance of the revised source or unattended operation.
 
 ## Provider evidence
 
@@ -74,8 +94,8 @@ Implemented controlled cutover orchestrator CLI (`scripts/run_production_cutover
 ### SETUP-005 Backup, restore and stale-state recovery (DELIVERED)
 
 Implemented automated backup and restore tooling (`commit 7a697d1`):
-- `scripts/backup_production_state.sh`: Creates timestamped PostgreSQL dumps via `pg_dump` (with automatic Docker container `bfmr-postgres` detection), compresses with gzip, archives local state directories (`~/.local/state/bfmr`), computes SHA-256 checksums, and prunes backups retaining the latest 14 snapshots.
-- `scripts/restore_production_state.sh`: Verifies SHA-256 checksum integrity, safely restores database SQL, unpacks state archives, and reports restore status.
+- `scripts/backup_production_state.sh`: Creates timestamped PostgreSQL dumps via `pg_dump` (with automatic Docker container `bfmr-postgres` detection), compresses with gzip, archives local state directories (`~/.local/state/bfmr`), computes SHA-256 checksums, and computes coordinated archive checksums. The 23 October amendment makes retention operator-managed and adds explicit stopped-writer and incomplete-backup boundaries.
+- `scripts/restore_production_state.sh`: The 23 October amendment requires checksums for both artifacts, stages private state, restores SQL atomically into an empty replacement database, and blocks startup across incomplete SQL/filesystem publication. Native restore-drill acceptance remains pending.
 
 ### IMPL-006 Creation-locked reservation payout (D22-03) (VALIDATED)
 
@@ -107,7 +127,7 @@ The worker automates one selected Amazon account per run. After a rank change an
 Implemented and covered by 10 unit tests in `tests/payment_intake.test.ts` and `tests/informational_and_checkout_payout.test.ts` (commits `cc5ce37`, `7681678`, `a63e165`):
 - Payment emails resolve carrier tracking numbers deterministically: `tracking_number -> shipments -> orders -> reservations -> reimbursements`. Records reimbursements idempotently under `reimbursements_reservation_uk`, updates reservation status to `'3'` (Reimbursed), and quarantines unmapped tracking numbers without data loss.
 - Informational emails (payout increases, deal deadlines/closings, additional slots) are recorded in `emails`, linked to deals in `email_deals`, advance intake cursors, and bypass reservation/purchasing loops.
-- Live checkout payout verification: At retailer checkout review, queries BFMR Deal API (`GET /api/v2/deals/{slug}`) to fetch live payout rate, updates `reservations.payout_per_item`, and verifies order total does not exceed the fresh payout.
+- Live checkout payout verification: At retailer checkout review, queries BFMR Deal API (`GET /api/v2/deals/{slug}`) to fetch live payout rate, records the current rate separately on the deal and retains the creation-locked reservation payout for checkout; the former reservation-rate mutation is removed by the 23 October amendment.
 
 ### Fourteen-day latest-delivery cutoff (RESOLVED)
 
