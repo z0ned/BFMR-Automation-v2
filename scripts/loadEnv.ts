@@ -43,6 +43,11 @@ for (const envFile of [...new Set(envFiles)]) {
   }
 }
 
+// Normalize path separators on Windows to avoid backslash escaping issues
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS.replace(/["']/g, '').trim();
+}
+
 // The BFMR setup stores the service account file outside the repository. Use it
 // as Application Default Credentials unless the operator configured another path.
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -50,5 +55,26 @@ if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   if (fs.existsSync(localCredentials)) {
     secureSecretFile(localCredentials);
     process.env.GOOGLE_APPLICATION_CREDENTIALS = localCredentials;
+  }
+}
+
+// Validate that GOOGLE_APPLICATION_CREDENTIALS is an actual Service Account key, not an OAuth client secret
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+    if (raw.installed || raw.web) {
+      console.error('\n❌ [Credentials Error] GOOGLE_APPLICATION_CREDENTIALS points to an OAuth Client Secret JSON, NOT a Service Account Key JSON!');
+      console.error('Google Cloud Pub/Sub requires a Service Account Key JSON containing "type": "service_account" and "private_key".');
+      console.error('\nHow to fix (takes 30 seconds):');
+      console.error('1. Go to Google Cloud Console -> IAM & Admin -> Service Accounts');
+      console.error('   https://console.cloud.google.com/iam-admin/serviceaccounts');
+      console.error('2. Click on: bfmr-appliance-pubsub@bfmr-automation.iam.gserviceaccount.com');
+      console.error('3. Click the KEYS tab -> ADD KEY -> Create new key -> JSON -> Create');
+      console.error('4. Save that downloaded JSON file as your GOOGLE_APPLICATION_CREDENTIALS file.\n');
+    } else if (raw.type === 'service_account' && !raw.private_key) {
+      console.error('\n❌ [Credentials Error] The service account key JSON is missing the "private_key" field.\n');
+    }
+  } catch {
+    // Non-fatal parse warning
   }
 }
