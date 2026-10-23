@@ -1,5 +1,36 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — legacy COMPLETE/RESERVING snapshot recovery
+
+Operator-supplied read-only output confirmed a latest workflow marked COMPLETE
+while its deal remained RESERVING and the Gmail item remained PROCESSING. The
+former bulk-unblock script could create that inconsistent snapshot. Existing
+strict workflow loading correctly rejects it; a repair-only interpretation now
+handles the narrowly substantiated legacy shape.
+
+`DealEmailWorkflowStore.loadForReconciliation` requires a valid immediate prior
+snapshot for the same Gmail message/account/source/correlation. Every field must
+match the latest snapshot except its top-level status. Missing, invalid or changed
+history remains blocked. The reader does not write SQL or infer reservation/order
+absence. It presents the previous action state as PAUSED only to the report path,
+retaining the latest revision plus predecessor revision and invalid-snapshot hash.
+Normal worker claim/load/save paths still reject the invalid completion.
+
+The existing report still requires current provider/account/financial evidence.
+Its reviewed plan binds the legacy provenance; apply rechecks it in the atomic
+local repair transaction. Original evidence remains append-only. A correction,
+queue transition and receipt with provenance commit together or all roll back.
+This is not permission to repeat RESERVING work or reset the queue directly.
+
+Validation: `npm run test:recovery` passed **29/29** (17 SQL/recovery cases and
+12 existing operations cases); `npm run typecheck:recovery` and whitespace checks
+passed. Seven new synthetic cases cover read-only interpretation, retained strict
+loading, altered-action/correlation/missing-history rejection, atomic corrected
+snapshots and provenance receipts, idempotency, stale provenance and queue-failure
+rollback. These results do not establish the actual predecessor/provider outcome
+on the operator host. No live provider, SQL repair or worker invocation occurred.
+
+
 ## 23 October 2026 — origin/work integration into main
 
 Merged `origin/work` at `044472e` with `origin/main` at `09f9d2b`. The actual

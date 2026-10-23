@@ -36,7 +36,20 @@ export interface DealEmailState {
   status: 'RUNNING' | 'PAUSED' | 'READY' | 'COMPLETE';
   deals: DealProgress[];
 }
-export interface WorkflowCheckpoint { revision: string; state: DealEmailState }
+export interface LegacyStatusOverride {
+  predecessorRevision: string;
+  invalidSnapshotSha256: string;
+}
+export interface WorkflowCheckpoint {
+  revision: string;
+  state: DealEmailState;
+  legacyStatusOverride?: LegacyStatusOverride;
+}
+export class LegacyWorkflowSnapshotError extends Error {
+  constructor() {
+    super('Invalid workflow completion cannot be substantiated by its immediate preceding snapshot. Preserve history; no local repair or provider retry was performed.');
+  }
+}
 export interface WorkflowEmail {
   id: string; sender: string; subject: string; body: string; receivedAt: string;
   headers?: Array<{ name?: string | null; value?: string | null }>; inboxAtFetch?: boolean;
@@ -118,15 +131,43 @@ function sameIdentity(before: DealEmailState, after: DealEmailState) {
 
 export class DealEmailWorkflowStore {
   constructor(readonly db: RelationalDatabase, readonly account: string) {}
-  private async read(tx: BusinessRepositories, source: string, messageId: string): Promise<WorkflowCheckpoint | null> {
-    const result = await tx.query<{ id: string; evidence: JsonObject }>(`SELECT id::text,evidence FROM public.workflow_evidence
-      WHERE action_type=$1 AND evidence->>'account'=$2 AND evidence->>'source'=$3 AND evidence->>'messageId'=$4 ORDER BY id DESC LIMIT 1`,
-    [EMAIL_WORKFLOW_ACTION, this.account, source, messageId]);
+  private async read(tx: BusinessRepositories, source: string, messageId: string,
+    forReconciliation = false): Promise<WorkflowCheckpoint | null> {
+    const result = await tx.query<{ id: string; correlation_id: string; phase: string; evidence: JsonObject }>(`SELECT id::text,correlation_id,phase,evidence FROM public.workflow_evidence
+      WHERE action_type=$1 AND evidence->>'account'=$2 AND evidence->>'source'=$3 AND evidence->>'messageId'=$4
+      ORDER BY id DESC LIMIT $5`, [EMAIL_WORKFLOW_ACTION, this.account, source, messageId, forReconciliation ? 2 : 1]);
     const row = result.rows[0];
-    return row ? { revision: row.id, state: validateDealEmailState(row.evidence) } : null;
+    if (!row) return null;
+    try { return { revision: row.id, state: validateDealEmailState(row.evidence) }; }
+    catch (error) {
+      if (!forReconciliation) throw error;
+      // The former bulk-unblock script copied the immediately preceding state
+      // and replaced only status with COMPLETE. Never invent missing history or
+      // discard any action fields; normal load/claim still reject this state.
+      const previous = result.rows[1];
+      if (source !== 'GMAIL' || row.phase !== 'SNAPSHOT' || row.evidence.status !== 'COMPLETE' ||
+          !previous || previous.phase !== 'SNAPSHOT' || previous.correlation_id !== row.correlation_id) {
+        throw new LegacyWorkflowSnapshotError();
+      }
+      let prior: DealEmailState;
+      try { prior = validateDealEmailState(previous.evidence); }
+      catch { throw new LegacyWorkflowSnapshotError(); }
+      if (prior.status === 'COMPLETE' || prior.account !== this.account || prior.messageId !== messageId ||
+          prior.source !== 'GMAIL' || prior.workflowId !== row.correlation_id ||
+          canonicalWorkflowJson({ ...row.evidence, status: prior.status }) !== canonicalWorkflowJson(previous.evidence)) {
+        throw new LegacyWorkflowSnapshotError();
+      }
+      return { revision: row.id, state: validateDealEmailState({ ...structuredClone(prior), status: 'PAUSED' }),
+        legacyStatusOverride: { predecessorRevision: previous.id,
+          invalidSnapshotSha256: createHash('sha256').update(canonicalWorkflowJson(row.evidence)).digest('hex') } };
+    }
   }
   async load(source: string, messageId: string): Promise<WorkflowCheckpoint | null> {
     return this.db.withTransaction(tx => this.read(tx, source, messageId));
+  }
+  /** Read-only recovery interpretation, never available to worker claim/save. */
+  async loadForReconciliation(messageId: string): Promise<WorkflowCheckpoint | null> {
+    return this.db.withTransaction(tx => this.read(tx, 'GMAIL', messageId, true));
   }
   async assertNoUnfinished(): Promise<void> {
     const result = await this.db.withTransaction(tx => tx.query(`SELECT id FROM (
@@ -212,7 +253,10 @@ export class DealEmailWorkflowStore {
     await this.db.withTransaction(async tx => {
       await assertIntakePrivileges(tx);
       if (await this.repairAlreadyAppliedInTransaction(tx, next, reportSha256)) return;
-      const current = await this.read(tx, checkpoint.state.source, checkpoint.state.messageId);
+      const current = await this.read(tx, checkpoint.state.source, checkpoint.state.messageId, Boolean(checkpoint.legacyStatusOverride));
+      if (canonicalWorkflowJson(current?.legacyStatusOverride ?? null) !== canonicalWorkflowJson(checkpoint.legacyStatusOverride ?? null)) {
+        throw new Error('Workflow recovery provenance changed; regenerate the report.');
+      }
       if (!current || current.revision !== checkpoint.revision || (current.state.status === 'COMPLETE' && next.status !== 'COMPLETE') ||
           next.source !== 'GMAIL' || !['READY', 'COMPLETE'].includes(next.status)) throw new Error('Workflow repair no longer matches the reviewed state.');
       sameIdentity(current.state, next);
@@ -237,7 +281,9 @@ export class DealEmailWorkflowStore {
           account: this.account, workflow_id: next.workflowId, blocked_event_id: incident.id, review_source_sha256: reportSha256 } });
       await tx.evidence.appendWorkflow({ correlationId: next.workflowId, actionType: 'DEAL_EMAIL_REPAIR',
         phase: 'APPLIED', outcome: next.status, evidence: { account: this.account, message_id: next.messageId,
-          report_sha256: reportSha256, state_sha256: createHash('sha256').update(canonicalWorkflowJson(next)).digest('hex') } });
+          report_sha256: reportSha256,
+          ...(current.legacyStatusOverride ? { legacy_status_override: { ...current.legacyStatusOverride } } : {}),
+          state_sha256: createHash('sha256').update(canonicalWorkflowJson(next)).digest('hex') } });
     });
   }
 }

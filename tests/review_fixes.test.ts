@@ -4,14 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { QueryResultRow } from 'pg';
 import { createRelationalFixture } from './helpers/relationalPglite';
-import { DealEmailWorkflowStore, emailSourceSha256, type DealEmailState } from '../src/services/dealEmailWorkflowStore';
+import { DealEmailWorkflowStore, emailSourceSha256, type DealEmailState, LegacyWorkflowSnapshotError } from '../src/services/dealEmailWorkflowStore';
 import { missingIntakePrivileges, IntakePrivilegeError } from '../src/db/intakePrivileges';
 import { readLockedPurchaseEvidence } from '../src/services/relationalReservations';
 import type { RelationalRuntime } from '../src/services/relationalRuntime';
 
 // Synthetic identities only; all SQL goes to disposable PGlite, all provider
 // reads are injected. No CLI environment loader or private database connection.
-async function recoveryFixture() {
+async function recoveryFixture(step: 'SKIPPED' | 'RESERVING' = 'SKIPPED') {
   const f = await createRelationalFixture();
   await f.db.validateSchema();
   await f.embedded.exec(await readFile(new URL('../database/gmail_intake.sql', import.meta.url), 'utf8'));
@@ -23,7 +23,7 @@ async function recoveryFixture() {
     VALUES($1,$2,'PROCESSING',$3::jsonb,$4,$5)`, [account, email.id, JSON.stringify(email), 'a'.repeat(64), email.receivedAt]);
   const state: DealEmailState = { schemaVersion: 1, workflowId: randomUUID(), account, source: 'GMAIL', messageId: email.id,
     messageType: 'SINGLE_DEAL', sourceSha256: emailSourceSha256(email), retailerAccountId: '1', startedAt: email.receivedAt,
-    status: 'PAUSED', deals: [{ dealUrl: 'https://bfmr.com/deals/synthetic', step: 'SKIPPED' }] };
+    status: 'PAUSED', deals: [{ dealUrl: 'https://bfmr.com/deals/synthetic', step }] };
   const revision = await f.db.withTransaction(async tx => {
     const snapshot = await tx.evidence.appendWorkflow({ correlationId: state.workflowId, actionType: 'DEAL_EMAIL_WORKFLOW', phase: 'SNAPSHOT', outcome: state.status, evidence: JSON.parse(JSON.stringify(state)) });
     await tx.evidence.appendWorkflow({ correlationId: state.workflowId, actionType: 'WORKER_ACTION_CONTROL', phase: 'BLOCKED', outcome: 'EMAIL_ACTION_REQUIRES_REVIEW', evidence: { account, workflow_id: state.workflowId } });
@@ -173,5 +173,91 @@ test('exposure trigger counts partial payments and protects inserts, status chan
   await f.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
   await assert.rejects(f.query('UPDATE public.reservations SET reservation_status_id=reservation_status_id'), (e: any) => e.code === '25000');
   await f.query('ROLLBACK');
+  await f.db.close();
+});
+
+
+async function appendLegacyCompletion(f: Awaited<ReturnType<typeof recoveryFixture>>, changes: object = {}, correlationId = f.state.workflowId) {
+  return f.db.withTransaction(tx => tx.evidence.appendWorkflow({ correlationId,
+    actionType: 'DEAL_EMAIL_WORKFLOW', phase: 'SNAPSHOT', outcome: 'COMPLETE',
+    evidence: JSON.parse(JSON.stringify({ ...f.state, status: 'COMPLETE', ...changes })) }));
+}
+
+test('legacy forced completion is readable only for reconciliation with exact predecessor provenance', async () => {
+  const f = await recoveryFixture('RESERVING');
+  const forced = await appendLegacyCompletion(f);
+  const before = (await f.query('SELECT id FROM public.workflow_evidence')).rows.length;
+  await assert.rejects(f.store.load('GMAIL', f.state.messageId), /Incomplete reservations/);
+  const checkpoint = (await f.store.loadForReconciliation(f.state.messageId))!;
+  assert.equal(checkpoint.revision, forced.id);
+  assert.equal(checkpoint.state.status, 'PAUSED');
+  assert.equal(checkpoint.state.deals[0].step, 'RESERVING');
+  assert.equal(checkpoint.legacyStatusOverride?.predecessorRevision, f.checkpoint.revision);
+  assert.match(checkpoint.legacyStatusOverride!.invalidSnapshotSha256, /^[0-9a-f]{64}$/);
+  assert.equal((await f.query('SELECT id FROM public.workflow_evidence')).rows.length, before);
+  assert.equal((await f.query('SELECT state FROM public.gmail_intake_work')).rows[0].state, 'PROCESSING');
+  assert.equal((await f.query('SELECT evidence FROM public.workflow_evidence WHERE id=$1', [forced.id])).rows[0].evidence.status, 'COMPLETE');
+  await f.db.close();
+});
+
+for (const change of ['action', 'correlation', 'missing-history']) test(`legacy completion recovery refuses ${change} differences`, async () => {
+  const f = await recoveryFixture('RESERVING');
+  await appendLegacyCompletion(f, change === 'action' ? { deals: [{ ...f.state.deals[0], dealId: 'UNPROVEN' }] }
+    : change === 'missing-history' ? { messageId: 'unproven-message' } : {},
+  change === 'correlation' ? randomUUID() : f.state.workflowId);
+  await assert.rejects(f.store.loadForReconciliation(change === 'missing-history' ? 'unproven-message' : f.state.messageId), LegacyWorkflowSnapshotError);
+  assert.equal((await f.query('SELECT state FROM public.gmail_intake_work')).rows[0].state, 'PROCESSING');
+  await f.db.close();
+});
+
+test('reviewed legacy completion repair appends correction and preserves original evidence atomically', async () => {
+  const f = await recoveryFixture('RESERVING');
+  const forced = await appendLegacyCompletion(f);
+  const checkpoint = (await f.store.loadForReconciliation(f.state.messageId))!;
+  const next: DealEmailState = { ...checkpoint.state, status: 'READY', deals: [{ ...checkpoint.state.deals[0], step: 'PENDING' }] };
+  // This store test models an already-reviewed plan; only the report CLI can
+  // establish provider outcomes. Loading a predecessor alone never applies it.
+  await f.store.applyReviewedRepair(checkpoint, next, 'd'.repeat(64), async () => {});
+  const repaired = (await f.store.load('GMAIL', f.state.messageId))!;
+  assert.equal(repaired.state.status, 'READY');
+  assert.equal(repaired.state.deals[0].step, 'PENDING');
+  assert.equal((await f.query('SELECT state FROM public.gmail_intake_work')).rows[0].state, 'PENDING');
+  const original = (await f.query('SELECT evidence FROM public.workflow_evidence WHERE id=$1', [forced.id])).rows[0].evidence;
+  assert.equal(original.status, 'COMPLETE');
+  assert.equal(original.deals[0].step, 'RESERVING');
+  const receipt = (await f.query("SELECT evidence FROM public.workflow_evidence WHERE action_type='DEAL_EMAIL_REPAIR'")).rows[0].evidence;
+  assert.deepEqual(receipt.legacy_status_override, checkpoint.legacyStatusOverride);
+  const count = (await f.query('SELECT id FROM public.workflow_evidence')).rows.length;
+  await f.store.applyReviewedRepair(checkpoint, next, 'd'.repeat(64), async () => { throw new Error('Must not replay'); });
+  assert.equal((await f.query('SELECT id FROM public.workflow_evidence')).rows.length, count);
+  await f.db.close();
+});
+
+test('legacy completion repair rejects stale provenance before local writes', async () => {
+  const f = await recoveryFixture('RESERVING');
+  await appendLegacyCompletion(f);
+  const checkpoint = (await f.store.loadForReconciliation(f.state.messageId))!;
+  const next: DealEmailState = { ...checkpoint.state, status: 'READY' };
+  await assert.rejects(f.store.applyReviewedRepair({ ...checkpoint, legacyStatusOverride: {
+    ...checkpoint.legacyStatusOverride!, invalidSnapshotSha256: '0'.repeat(64),
+  } }, next, 'd'.repeat(64), async () => { throw new Error('Must not write'); }), /provenance changed/);
+  assert.equal((await f.query('SELECT state FROM public.gmail_intake_work')).rows[0].state, 'PROCESSING');
+  await f.db.close();
+});
+
+test('failed legacy completion queue repair rolls back corrected snapshot and receipt', async () => {
+  const f = await recoveryFixture('RESERVING');
+  const forced = await appendLegacyCompletion(f);
+  const checkpoint = (await f.store.loadForReconciliation(f.state.messageId))!;
+  await assert.rejects(f.store.applyReviewedRepair(checkpoint, { ...checkpoint.state, status: 'READY' }, 'd'.repeat(64), async tx => {
+    const query = tx.query.bind(tx);
+    tx.query = async <T extends QueryResultRow>(sql: string, values?: unknown[]) => {
+      if (sql.startsWith('UPDATE public.gmail_intake_work')) throw new Error('Synthetic queue failure');
+      return query<T>(sql, values);
+    };
+  }), /Synthetic queue failure/);
+  assert.equal((await f.store.loadForReconciliation(f.state.messageId))!.revision, forced.id);
+  assert.equal((await f.query("SELECT id FROM public.workflow_evidence WHERE action_type='DEAL_EMAIL_REPAIR'")).rows.length, 0);
+  assert.equal((await f.query('SELECT state FROM public.gmail_intake_work')).rows[0].state, 'PROCESSING');
   await f.db.close();
 });

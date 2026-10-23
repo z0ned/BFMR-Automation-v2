@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { isAbsolute, dirname, resolve } from 'node:path';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
 import { openRelationalRuntime } from '../src/services/relationalRuntime';
-import { DealEmailWorkflowStore, canonicalWorkflowJson } from '../src/services/dealEmailWorkflowStore';
+import { DealEmailWorkflowStore, canonicalWorkflowJson, LegacyWorkflowSnapshotError } from '../src/services/dealEmailWorkflowStore';
 import { reconcileDealEmail, applyDealEmailReconciliation, type EmailReconciliationReport } from '../src/services/dealEmailReconciliation';
 import { readRecentReservedRows } from '../src/services/bfmrTrackerApi';
 import { verifyBfmrAccountIdentity } from '../src/services/bfmrAccountIdentity';
@@ -71,7 +71,7 @@ async function main() {
       if (!Number.isFinite(age) || age < 0 || age > 5 * 60_000) throw new Error('Report is not fresh; regenerate/review it.');
     }
     await runtime.db.withTransaction(tx => assertIntakePrivileges(tx));
-    const checkpoint = await store.load('GMAIL', id);
+    const checkpoint = await store.loadForReconciliation(id);
     if (!checkpoint) throw new Error('No durable workflow exists; historical messages cannot be enrolled by repair.');
     const page = await browser.init();
     const bfmr = page.context().pages().find(candidate => {
@@ -96,7 +96,7 @@ async function main() {
   } finally { try { await browser.close(); } finally { await runtime.close(); } }
 }
 main().catch(error => {
-  if (error instanceof IntakePrivilegeError) console.error(error.message);
+  if (error instanceof IntakePrivilegeError || error instanceof LegacyWorkflowSnapshotError) console.error(error.message);
   else if (typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)) console.error(`Database reconciliation failed (${error.code}).`);
   console.error('Workflow reconciliation stopped. Preserve the private report and exact provider evidence; no external action was retried.');
   process.exitCode = 1;

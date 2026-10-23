@@ -8,6 +8,12 @@ Remove an item when its stated completion evidence is recorded in the implementa
 
 ## Recovery review: operator-host acceptance remains open
 
+- The operator's read-only output establishes COMPLETE/RESERVING inconsistency,
+  not successful completion. Install the narrow predecessor-backed recovery
+  reader, verify the real immediate predecessor and generate/review a fresh
+  provider-backed report. Source coverage passes 29/29; actual repair acceptance
+  and provider effects remain unverified. Do not directly edit the queue/status.
+
 Implementation is committed as `ee183ef`; its first push was blocked before
 publication. Verify the final remote `work` ref and operator-installed revision
 independently. The 66 passing offline cases cover source behavior only; the

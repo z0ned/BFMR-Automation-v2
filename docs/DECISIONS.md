@@ -1,5 +1,17 @@
 # Decision register
 
+## 23 October 2026 — narrow recovery of forced legacy completion
+
+Read-only operator evidence showed COMPLETE with a RESERVING deal, so normal
+workflow loading remains blocked. Support only a repair-path interpretation
+proven identical to its valid immediate predecessor except top-level status.
+Preserve both original events, bind provenance to the reviewed report and receipt,
+and require current provider evidence before atomic local apply. No generic
+snapshot rewrite, queue reset or uncertain reservation replay is introduced.
+Focused synthetic validation passed 29/29; operator-host repair and provider
+acceptance remain pending. See the [recovery amendment](RECOVERY_REVIEW_20261023.md).
+
+
 ## 23 October 2026 — merge work into main
 
 The user explicitly requested merging `origin/work` into main. Integrate main's

@@ -1,5 +1,17 @@
 # Implementation plan and evidence
 
+## 23 October 2026 — recover the legacy status-only completion mistake
+
+Operator read-only evidence exposed COMPLETE paired with RESERVING/PROCESSING.
+The exact-message report now accepts only a status-only copy of its valid
+immediate predecessor, binds predecessor/raw-snapshot provenance, and rechecks it
+at atomic reviewed apply. Normal worker loading stays strict and all evidence
+remains append-only. Missing/changed history or uncertain provider effects still
+stop. See the [recovery record](RECOVERY_REVIEW_20261023.md#23-october-2026--legacy-completereserving-snapshot-recovery).
+Focused offline checks: 29/29 passed, plus scoped TypeScript and whitespace. No
+actual SQL repair, provider action or worker startup was performed.
+
+
 ## 23 October 2026 — origin/work integration into main
 
 Merged `origin/work` at `044472e` with `origin/main` at `09f9d2b`. The actual

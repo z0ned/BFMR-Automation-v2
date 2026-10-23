@@ -13,10 +13,11 @@ import { encodeAmazonOperationalState, readRelationalAmazonAccount, readRelation
 import { atlantaDayAndHour } from './nightlyAmazonTracking';
 import type { AmazonOrderRecord } from './amazonOrderLedger';
 import { numericToCents } from '../db/relationalRepositories';
-import { DealEmailWorkflowStore, emailSourceSha256, validateDealEmailState, terminalDeal, type WorkflowEmail, type WorkflowCheckpoint, type DealEmailState } from './dealEmailWorkflowStore';
+import { DealEmailWorkflowStore, canonicalWorkflowJson, emailSourceSha256, validateDealEmailState, terminalDeal, type WorkflowEmail, type WorkflowCheckpoint, type DealEmailState } from './dealEmailWorkflowStore';
 
 export interface EmailReconciliationReport {
   schemaVersion: 1;
+  legacyStatusOverride?: WorkflowCheckpoint['legacyStatusOverride'];
   generatedAt: string;
   account: string;
   workflowRevision: string;
@@ -179,7 +180,7 @@ export async function reconcileDealEmail(runtime: RelationalRuntime, checkpoint:
   }
   next.status = next.deals.every(terminalDeal) ? 'COMPLETE' : 'READY';
   validateDealEmailState(next);
-  return { schemaVersion: 1, generatedAt: new Date().toISOString(), account: runtime.account, workflowRevision: checkpoint.revision,
+  return { schemaVersion: 1, ...(checkpoint.legacyStatusOverride ? { legacyStatusOverride: checkpoint.legacyStatusOverride } : {}), generatedAt: new Date().toISOString(), account: runtime.account, workflowRevision: checkpoint.revision,
     ready: issues.length === 0, issues: [...new Set(issues)], next, cancelledReservationIds, purchaseReadbacks,
     creationNoActionDealIds: [...new Set(creationNoActionDealIds)], orderCaptures };
 }
@@ -189,6 +190,9 @@ export async function reconcileDealEmail(runtime: RelationalRuntime, checkpoint:
  */
 export async function applyDealEmailReconciliation(runtime: RelationalRuntime, checkpoint: WorkflowCheckpoint,
   report: EmailReconciliationReport, reportSha256: string): Promise<void> {
+  if (canonicalWorkflowJson(report.legacyStatusOverride ?? null) !== canonicalWorkflowJson(checkpoint.legacyStatusOverride ?? null)) {
+    throw new Error('Reconciliation report does not match the legacy snapshot provenance.');
+  }
   const age = Date.now() - Date.parse(report.generatedAt);
   if (!Number.isFinite(age) || !report.ready || report.account !== runtime.account || report.workflowRevision !== checkpoint.revision ||
       age < 0 || age > 5 * 60_000) {

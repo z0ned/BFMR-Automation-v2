@@ -4,6 +4,14 @@
 
 ## Current recovery checkpoint
 
+The operator subsequently confirmed a legacy COMPLETE snapshot with a RESERVING
+deal and PROCESSING queue item. The report-only loader now recognizes only an
+exact status-only copy of a valid immediate predecessor; no queue/state mutation
+occurs on load. Provider-backed reviewed apply remains required. The focused
+recovery suite now passes 29/29 (seven new cases), with scoped TypeScript checks.
+See the [legacy recovery record](RECOVERY_REVIEW_20261023.md#23-october-2026--legacy-completereserving-snapshot-recovery).
+The operator's actual history and provider effects have not been reconciled here.
+
 The 23 October merge integrates `origin/work` (`044472e`) with main's newer
 `09f9d2b` runtime fixes. The screenshot revision is now fetched and its bulk-reset
 script is replaced by the reviewed exact-message compatibility flow. Main's
