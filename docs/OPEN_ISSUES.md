@@ -46,7 +46,7 @@ Validated PostgreSQL 17.11 in container `bfmr-postgres` on the native host using
 - Append-only trigger: Mutations on `workflow_evidence` blocked with `42501` / `55000`.
 - Stored generated column: `expected_payout = (quantity * payout_per_item)` verified computed by engine.
 - Financial integrity: Reimbursement 1-to-1 uniqueness enforced by `reimbursements_reservation_uk` (`23505`).
-- CCV privacy: `retailer_accounts.ccv` verified restricted from runtime role.
+- CCV privacy: `retailer_accounts.ccv` dropped for PCI-DSS compliance (`database/migrations/20261022_drop_ccv.sql`).
 Financial enforcement acceptance is closed under IMPL-006.
 
 ### SETUP-002 Gmail queue initialization and recovery (DELIVERED)
@@ -87,6 +87,14 @@ Applied and validated live on native PostgreSQL 17 via `npm run validate-db`:
 - Indexes applied: `idx_workflow_evidence_cutover`, `idx_reservations_open_exposure`, and `idx_orders_order_id`.
 - Trigger applied: `trg_enforce_exposure_cap` on `public.reservations`.
 - Active Probe F verified: PostgreSQL strictly rejected a $250.00 reservation attempt with error `23514 check_violation`, providing engine-level defense-in-depth against exceeding the $200.00 exposure boundary.
+
+### Information Security & Architectural Hardening (DELIVERED)
+
+Implemented comprehensive security, architectural, and code quality hardening (commit `ee1ee10`):
+- Secret File Permissions (`scripts/loadEnv.ts`): Added `secureSecretFile()` to automatically audit and harden permissions on `.env` and GCP credential files to `0600` (POSIX owner-only read/write).
+- Unified Database Locking (`src/db/relationalDatabase.ts`): Integrated `claimAccount()` and `relinquishAccount()` directly into `RelationalDatabase`, enabling native advisory lock management on its connection pool without dual-pool overhead.
+- PCI-DSS Compliance: Dropped plaintext CCV storage (`database/migrations/20261022_drop_ccv.sql` and `database/optimizations.sql`), making `ccv` optional in schema validation.
+- Code De-compression: Refactored `freshStartCutoverPreparation.ts` from compressed single-line expressions into clean, idiomatic TypeScript with typed contracts. Covered by 35 unit tests across all 7 test suites.
 
 ## Remaining application work
 

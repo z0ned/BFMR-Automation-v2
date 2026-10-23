@@ -425,5 +425,13 @@ Implemented production optimizations, index additions, and process hygiene:
 - `scripts/apply_database_optimizations.ts`: Dedicated CLI tool (`npm run optimize-db`) to apply optimizations to the target database.
 - `scripts/supervise_worker.ts`: Added `reapOrphanBrowserProcesses()` to automatically sweep and terminate lingering headless browser instances on supervisor startup and shutdown.
 - `src/adapters/playwrightBrowser.ts`: Added `captureErrorScreenshot()` to capture full-page diagnostic PNG screenshots into `~/.local/state/bfmr/screenshots/` upon unexpected failure or DOM layout changes.
-- `package.json`: Added `"optimize-db"` script and updated `"test"` to run all 33 tests across all 7 test suites.
-- `tests/optimizations.test.ts`: Added 3 unit tests verifying process reaper safety, screenshot method resilience, and SQL optimization syntax. All 33 unit tests pass.
+- `package.json`: Added `"optimize-db"` script and updated `"test"` to run all 35 tests across all 7 test suites.
+- `tests/optimizations.test.ts`: Added unit tests verifying process reaper safety, screenshot method resilience, SQL optimization syntax, permission hardening, and native advisory locking. All 35 unit tests pass.
+
+## 23 October 2026 — Information Security & Code Quality Hardening
+
+- `scripts/loadEnv.ts`: Added `secureSecretFile()` to automatically verify and harden permissions on `.env` and GCP credential files to `0600` on POSIX systems.
+- `src/db/relationalDatabase.ts`: Unified database ownership and advisory locking. Added `claimAccount()` and `relinquishAccount()` directly to `RelationalDatabase`, enabling native advisory lock management on its connection pool without dual-pool overhead.
+- `database/migrations/20261022_drop_ccv.sql` & `database/optimizations.sql`: Dropped unused plaintext `retailer_accounts.ccv` column for PCI-DSS compliance. Updated `RelationalDatabase` schema validation to treat `ccv` as optional.
+- `src/services/freshStartCutoverPreparation.ts`: De-compressed code into clean, readable, typed TypeScript with structured guard clauses and explicit contracts.
+
