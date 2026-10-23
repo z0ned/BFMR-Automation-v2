@@ -48,15 +48,42 @@ for (const envFile of [...new Set(envFiles)]) {
 // Normalize path separators on Windows to avoid backslash escaping issues
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   process.env.GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS.replace(/["']/g, '').trim();
+
+  // If running in a Linux/Docker container but the path is a Windows path (e.g. C:\Users\...)
+  if (process.platform !== 'win32') {
+    const rawPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    const winMatch = /^([a-zA-Z]):[\\/](.*)$/.exec(rawPath);
+    if (winMatch) {
+      const drive = winMatch[1].toLowerCase();
+      const relativePart = winMatch[2].replace(/\\/g, '/');
+      const candidates = [
+        `/mnt/${drive}/${relativePart}`,
+        `/${drive}/${relativePart}`,
+        `/host_mnt/${drive}/${relativePart}`,
+        path.resolve(home, '.bfmr', path.basename(relativePart)),
+        path.resolve(process.cwd(), path.basename(relativePart)),
+      ];
+      const matched = candidates.find(c => fs.existsSync(c));
+      if (matched) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = matched;
+      }
+    }
+  }
 }
 
 // The BFMR setup stores the service account file outside the repository. Use it
 // as Application Default Credentials unless the operator configured another path.
-if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  const localCredentials = path.resolve(home, '.bfmr/gcp-credentials.json');
-  if (fs.existsSync(localCredentials)) {
-    secureSecretFile(localCredentials);
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = localCredentials;
+if (!process.env.GOOGLE_APPLICATION_CREDENTIALS || !fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+  const localCandidates = [
+    path.resolve(home, '.bfmr/gcp-credentials.json'),
+    path.resolve(process.cwd(), 'gcp-credentials.json'),
+  ];
+  for (const candidate of localCandidates) {
+    if (fs.existsSync(candidate)) {
+      secureSecretFile(candidate);
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = candidate;
+      break;
+    }
   }
 }
 
