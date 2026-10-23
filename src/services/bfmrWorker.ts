@@ -60,7 +60,7 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
   let store: PostgresGmailIntakeStore;
   try {
     browser = new PlaywrightBfmrBrowser({ headless: false });
-    store = new PostgresGmailIntakeStore(process.env.DATABASE_URL!, {
+    store = new PostgresGmailIntakeStore(runtime.connectionString, {
       account, mailbox: adapters.mailbox, subscription: adapters.subscriptionName, topic: adapters.topic,
       verifyOwnership: () => ownership.verifyOwnership(),
     });

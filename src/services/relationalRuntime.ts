@@ -6,36 +6,82 @@ import { BfmrRelationalSync } from './bfmrRelationalSync';
 import { relationalOrderLedger, validateRelationalRetailerAccount } from './relationalOrderLedger';
 import { assertRelationalCutoverReady, hashPrivateFile } from './relationalCutover';
 
+/**
+ * Resolves the working connection string, automatically translating the internal
+ * Docker hostname 'bfmr-postgres' to 'localhost' when running on the host machine.
+ */
+export async function resolveWorkingConnectionString(rawUrl?: string): Promise<string> {
+  let connection = rawUrl || process.env.DATABASE_URL || '';
+  if (connection.includes('@bfmr-postgres')) {
+    try {
+      const dns = await import('node:dns/promises');
+      await dns.lookup('bfmr-postgres');
+    } catch {
+      connection = connection.replace(/@bfmr-postgres(:|\/)/, '@localhost$1');
+    }
+  }
+  return connection;
+}
+
 /** Business records use PostgreSQL. The worker opens its separate SQL Gmail
  * intake store under this ownership; batch/recovery journals and alerts retain
  * their private stores. Startup performs no DDL or state import.
  */
 export async function openRelationalRuntime() {
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();
-  const connection = process.env.DATABASE_URL;
-  if (!account || !connection) {
+  const rawConnection = process.env.DATABASE_URL;
+  if (!account || !rawConnection) {
     throw new Error('Relational startup requires DATABASE_URL and BFMR_EXPECTED_ACCOUNT.');
   }
+
+  const connection = await resolveWorkingConnectionString(rawConnection);
   const ownership = new PostgresAccountOwnership(connection, account);
   const db = new RelationalDatabase(connection, () => ownership.verifyOwnership());
+
   try {
-    if (!await ownership.claimAccount(`bfmr_worker_lock_${account}`)) throw new Error('Another worker owns this BFMR account.');
+    if (!await ownership.claimAccount(`bfmr_worker_lock_${account}`)) {
+      throw new Error('Another worker owns this BFMR account.');
+    }
     await db.validateSchema();
     const retailerAccount = Object.freeze(await validateRelationalRetailerAccount(db));
-    const options = Object.freeze({ retailerId: retailerAccount.retailer_id,
-      retailerAccountId: retailerAccount.id, expectedAccountEmail: retailerAccount.email });
-    const legacyFile = process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(os.homedir(), '.local/state/bfmr/amazon-orders.json');
-    const baselineStartsAt = await assertRelationalCutoverReady(db, { account, legacyOrderLedgerSha256: await hashPrivateFile(legacyFile) });
-    return {
-      db, ownership, account, retailerAccount, baselineStartsAt,
+    const options = Object.freeze({
+      retailerId: retailerAccount.retailer_id,
       retailerAccountId: retailerAccount.id,
-      async verifyRetailerAccount() { await validateRelationalRetailerAccount(db, options); },
+      expectedAccountEmail: retailerAccount.email,
+    });
+    const legacyFile = process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(os.homedir(), '.local/state/bfmr/amazon-orders.json');
+    const baselineStartsAt = await assertRelationalCutoverReady(db, {
+      account,
+      legacyOrderLedgerSha256: await hashPrivateFile(legacyFile),
+    });
+
+    return {
+      db,
+      ownership,
+      account,
+      retailerAccount,
+      baselineStartsAt,
+      connectionString: connection,
+      retailerAccountId: retailerAccount.id,
+      async verifyRetailerAccount() {
+        await validateRelationalRetailerAccount(db, options);
+      },
       sync: new BfmrRelationalSync(db),
       ledger: relationalOrderLedger(db, options),
-      async close() { try { await db.close(); } finally { await ownership.close(); } },
+      async close() {
+        try {
+          await db.close();
+        } finally {
+          await ownership.close();
+        }
+      },
     };
   } catch (error) {
-    try { await db.close(); } finally { await ownership.close(); }
+    try {
+      await db.close();
+    } finally {
+      await ownership.close();
+    }
     throw error;
   }
 }
