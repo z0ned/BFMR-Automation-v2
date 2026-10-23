@@ -250,6 +250,55 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
     });
   }
 
+  // 3b. OPTIMIZATION INDEXES & TRIGGERS
+  try {
+    const idxRes = await client.query<{ indexname: string }>(`
+      SELECT indexname FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname IN ('idx_workflow_evidence_cutover', 'idx_reservations_open_exposure', 'idx_orders_order_id');
+    `);
+    const foundIndexes = new Set(idxRes.rows.map(r => r.indexname));
+    for (const expectedIdx of ['idx_workflow_evidence_cutover', 'idx_reservations_open_exposure', 'idx_orders_order_id']) {
+      if (foundIndexes.has(expectedIdx)) {
+        add({
+          name: `Index: ${expectedIdx}`,
+          category: 'SCHEMA',
+          status: 'PASS',
+          message: `Optimization index "${expectedIdx}" is present and active`,
+        });
+      } else {
+        add({
+          name: `Index: ${expectedIdx}`,
+          category: 'SCHEMA',
+          status: 'WARN',
+          message: `Optimization index "${expectedIdx}" is not yet applied (apply via: npm run optimize-db)`,
+        });
+      }
+    }
+
+    const trgRes = await client.query<{ count: string }>(`
+      SELECT count(*) FROM pg_trigger
+      WHERE tgname = 'trg_enforce_exposure_cap';
+    `);
+    if (parseInt(trgRes.rows[0].count, 10) > 0) {
+      add({
+        name: 'Trigger: trg_enforce_exposure_cap',
+        category: 'SCHEMA',
+        status: 'PASS',
+        message: 'Exposure hard cap trigger is registered on public.reservations',
+      });
+    } else {
+      add({
+        name: 'Trigger: trg_enforce_exposure_cap',
+        category: 'SCHEMA',
+        status: 'WARN',
+        message: 'Exposure cap trigger not yet applied (apply via: npm run optimize-db)',
+      });
+    }
+  } catch {
+    // Non-fatal index check
+  }
+
   // 4. ACTIVE PROBES (EXECUTED INSIDE UNCOMMITTED TRANSACTION THAT ROLLS BACK)
   try {
     await client.query('BEGIN;');
@@ -481,6 +530,50 @@ export async function runDatabaseValidation(client: Client): Promise<ValidationS
           message: 'retailer_accounts query executed without permission fault',
         });
       }
+    }
+
+    // Probe F: Exposure Limit ($200.00 Hard Cap) Trigger Probe
+    try {
+      await client.query('ROLLBACK;');
+      await client.query('BEGIN;');
+
+      const probeExposureBfmrId = `probe_exp_check_${Date.now()}`;
+      const dealRes = await client.query<{ id: string }>(`
+        INSERT INTO public.deals (bfmr_deal_id, title, payout_per_item, reimbursement_amount)
+        VALUES ($1, 'Validator Exposure Probe Deal', 250.00, 250.00)
+        RETURNING id;
+      `, [probeExposureBfmrId]);
+      const probeDealId = dealRes.rows[0].id;
+
+      let exposureBlocked = false;
+      try {
+        await client.query(`
+          INSERT INTO public.reservations (deal_id, bfmr_reservation_id, quantity, payout_per_item, reservation_status_id)
+          VALUES ($1, $2, 1, 250.00, 1);
+        `, [probeDealId, `probe_res_exp_${Date.now()}`]);
+      } catch (insertErr: any) {
+        if (insertErr.code === '23514' || /exceeds maximum allowable limit of \$200\.00/i.test(insertErr.message)) {
+          exposureBlocked = true;
+        }
+      }
+
+      if (exposureBlocked) {
+        add({
+          name: 'Probe: Exposure Limit ($200.00 Cap)',
+          category: 'PROBES',
+          status: 'PASS',
+          message: 'PostgreSQL strictly rejected reservation exceeding $200.00 cap with 23514 check_violation',
+        });
+      } else {
+        add({
+          name: 'Probe: Exposure Limit ($200.00 Cap)',
+          category: 'PROBES',
+          status: 'INFO',
+          message: 'Exposure cap trigger not active or limit was not exceeded in probe',
+        });
+      }
+    } catch {
+      // Non-fatal probe
     }
 
     // Always unconditionally roll back active probes
