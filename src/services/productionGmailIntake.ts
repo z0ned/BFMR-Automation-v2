@@ -156,8 +156,10 @@ export class ProductionGmailIntake {
       if (!delivery.id || delivery.id.length > 256) throw new Error('Pub/Sub delivery lacks a usable exact message identity.');
       let historyId: string | null = null;
       let rejection: string | null = null;
+      let eventPayload: Record<string, unknown> | null = null;
       try {
         const value = JSON.parse(delivery.data.toString('utf8')) as Record<string, unknown>;
+        eventPayload = value;
         if (!value || Array.isArray(value) || typeof value !== 'object') rejection = 'INVALID_SHAPE';
         else if (typeof value.emailAddress !== 'string' || value.emailAddress.trim().toLowerCase() !== this.options.mailbox) rejection = 'MAILBOX_MISMATCH';
         else if (typeof value.historyId !== 'string' || !/^[1-9]\d*$/.test(value.historyId)) rejection = 'INVALID_HISTORY_ID';
@@ -167,7 +169,7 @@ export class ProductionGmailIntake {
         messageId: delivery.id, payloadSha256: createHash('sha256').update(delivery.data).digest('hex'), historyId, rejection,
       });
       if (rejection) {
-        console.warn(`[PubSub Notification] Warning: notification rejected with "${rejection}" (mailbox in event: "${(value as any)?.emailAddress}", expected: "${this.options.mailbox}")`);
+        console.warn(`[PubSub Notification] Warning: notification rejected with "${rejection}" (mailbox in event: "${eventPayload?.emailAddress}", expected: "${this.options.mailbox}")`);
       } else {
         console.log(`[PubSub Notification] Received real-time push notification from Gmail (historyId: ${historyId})`);
       }
