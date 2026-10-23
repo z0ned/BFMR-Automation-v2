@@ -61,12 +61,12 @@ first-watch coverage remain pending.
 
 Verify first-ever SQL initialization versus restoration of an existing queue and the reviewed legacy import/source-hash boundary; the report/apply source is implemented, not applied. Install `database/gmail_intake.sql` separately with reviewed runtime grants. Reconcile interrupted `PROCESSING` work against BFMR/Amazon before operator repair. Preserve expired-history gaps; an alternative recovery scan or purchase backfill needs a separate explicit decision. Missing state must not silently initialize a new mailbox baseline.
 
-### SETUP-003 Supervised service, scheduling and notifications (DELIVERED)
+### SETUP-003 Supervised service, scheduling and notifications (VERIFIED)
 
-Implemented production service supervision, health monitoring, and systemd service packaging (`commit 7a697d1`):
+Implemented production service supervision, health monitoring, and systemd service packaging (`commit 7a697d1` & `31f8608`). Verified live on the operator's native host with `npm run health` (reporting HEALTHY database connectivity) and `npm test` (passing 26/26 unit tests):
 - `systemd/bfmr-worker.service`: Production service unit with auto-restart, journal logging (`SyslogIdentifier=bfmr-worker`), and security sandboxing (`NoNewPrivileges=true`, `ProtectSystem=full`).
 - `scripts/supervise_worker.ts` (`npm run supervise`): Process supervisor with signal forwarding (`SIGTERM` graceful drain with 25s timeout), exponential backoff restart delay (5s to 60s), burst crash circuit breaker (halts if > 5 crashes in 5 mins), and heartbeat file generation (`/tmp/bfmr-worker-heartbeat.json`).
-- `scripts/health_check.ts` (`npm run health`): Real-time diagnostic CLI verifying PostgreSQL connectivity, worker process liveness, heartbeat freshness, and open exposure boundaries (< $200.00).
+- `scripts/health_check.ts` (`npm run health`): Real-time diagnostic CLI verifying PostgreSQL connectivity (with automatic localhost container bridge fallback), worker process liveness, heartbeat freshness, and open exposure boundaries (< $200.00).
 
 ### SETUP-004 Actual historical reconciliation and cutover
 

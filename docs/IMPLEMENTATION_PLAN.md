@@ -397,5 +397,6 @@ Implemented production supervisor, systemd service configuration, health monitor
 - `scripts/health_check.ts`: Standalone diagnostic tool runnable via `npm run health`. Checks database connectivity and PostgreSQL version, inspects worker heartbeat status and age, verifies un-reimbursed exposure does not exceed the $200.00 limit, and outputs a formatted terminal report with exit code 0/1.
 - `scripts/backup_production_state.sh` & `scripts/restore_production_state.sh`: Automated backup and restore tooling with native and Docker container `bfmr-postgres` support, gzip compression, state tarballing, SHA-256 integrity verification, and 14-backup retention.
 - `src/services/bfmrWorker.ts`: Updated `admitGmailEmail` to admit verified payment notices and informational update messages into the worker intake pipeline.
-- `package.json`: Added `"start"`, `"supervise"`, and `"health"` scripts.
-- `tests/milestone5_operations.test.ts`: Added 3 unit tests verifying heartbeat writes, stale heartbeat detection, and active healthy worker detection. All 3 tests pass.
+- `package.json`: Added `"start"`, `"supervise"`, `"health"`, and `"test"` scripts (running all 26 unit tests across the 5 test suites).
+- `scripts/validate_database_environment.ts` & `scripts/health_check.ts`: Added shared `connectDatabaseClient()` helper providing transparent fallback to `localhost:5432` when executing from host environments where internal Docker network hostnames (such as `bfmr-postgres`) do not resolve in host DNS.
+- `tests/milestone5_operations.test.ts`: Added 3 unit tests verifying heartbeat writes, stale heartbeat detection, and active healthy worker detection. All 26 tests pass.
