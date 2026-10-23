@@ -2,12 +2,24 @@
 export function requireReservationAlerts(env: NodeJS.ProcessEnv = process.env): { token: string; chatId: string } {
   const token = env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = env.TELEGRAM_CHAT_ID?.trim();
-  if (!token || !chatId) throw new Error('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required for reservation failure alerts.');
+  if (!token || !chatId) {
+    if (env.BFMR_ALLOW_CONSOLE_ALERTS === 'YES' || env.TELEGRAM_OPTIONAL === 'true') {
+      return { token: 'CONSOLE_ONLY', chatId: 'CONSOLE_ONLY' };
+    }
+    throw new Error(
+      'TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required for reservation failure alerts. ' +
+      'Set them in .env, or add BFMR_ALLOW_CONSOLE_ALERTS=YES to .env to use console logging.'
+    );
+  }
   return { token, chatId };
 }
 
 export async function sendReservationFailureAlert(context: string, request: typeof fetch = fetch): Promise<void> {
   const { token, chatId } = requireReservationAlerts();
+  if (token === 'CONSOLE_ONLY') {
+    console.error(`\n[ALERT: RESERVATION FAILURE] ${context}\nReview My Tracker and the app terminal before retrying.\n`);
+    return;
+  }
   try {
     const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -32,6 +44,10 @@ export async function sendReservationFailureAlert(context: string, request: type
 
 export async function sendTrackingFailureAlert(orderId: string, request: typeof fetch = fetch): Promise<void> {
   const { token, chatId } = requireReservationAlerts();
+  if (token === 'CONSOLE_ONLY') {
+    console.error(`\n[ALERT: TRACKING FAILURE] Amazon tracking check needs review for order ${orderId}.\nInspect Amazon Orders and local ledger.\n`);
+    return;
+  }
   try {
     const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -53,6 +69,10 @@ export async function sendTrackingFailureAlert(orderId: string, request: typeof 
 
 export async function sendBfmrStatusAlert(message: string, request: typeof fetch = fetch): Promise<void> {
   const { token, chatId } = requireReservationAlerts();
+  if (token === 'CONSOLE_ONLY') {
+    console.log(`\n[BFMR STATUS ALERT] ${message}\n`);
+    return;
+  }
   try {
     const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
