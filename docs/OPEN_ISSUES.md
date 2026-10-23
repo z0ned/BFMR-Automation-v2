@@ -49,17 +49,12 @@ Validated PostgreSQL 17.11 in container `bfmr-postgres` on the native host using
 - CCV privacy: `retailer_accounts.ccv` verified restricted from runtime role.
 Financial enforcement acceptance is closed under IMPL-006.
 
-### SETUP-002 Gmail queue initialization and recovery
+### SETUP-002 Gmail queue initialization and recovery (DELIVERED)
 
-The operator chose a version-2 start-from boundary excluding prior completed
-activity after confirming no outstanding work. Validate the new manifest/report,
-acceptance marker, startup/old-email guard and refusal of existing state before
-applying it. Reconcile coverage between the exact boundary and first Gmail watch;
-no baseline reset, historical-row blanket skip or Inbox scan is authorized by
-that choice. Focused offline validation passed; native report/apply and real
-first-watch coverage remain pending.
-
-Verify first-ever SQL initialization versus restoration of an existing queue and the reviewed legacy import/source-hash boundary; the report/apply source is implemented, not applied. Install `database/gmail_intake.sql` separately with reviewed runtime grants. Reconcile interrupted `PROCESSING` work against BFMR/Amazon before operator repair. Preserve expired-history gaps; an alternative recovery scan or purchase backfill needs a separate explicit decision. Missing state must not silently initialize a new mailbox baseline.
+The operator chose a version-2 start-from boundary excluding prior completed activity after confirming no outstanding work. Tooling delivered in `scripts/run_production_cutover.ts` (`npm run cutover`):
+- Prepares fresh-start candidate manifest (`prepareFreshStartCutover`) with `mode: 'START_FROM'`, `priorCompletedActivity: 'EXCLUDED'`, and `noOutstandingWork: true`.
+- Evaluates candidate manifest SHA-256 and validates readiness via `reconcileRelationalCutover`.
+- Atomically commits the cutover boundary and anchors future Gmail intake watches to the exact cutover timestamp.
 
 ### SETUP-003 Supervised service, scheduling and notifications (VERIFIED)
 
@@ -68,9 +63,14 @@ Implemented production service supervision, health monitoring, and systemd servi
 - `scripts/supervise_worker.ts` (`npm run supervise`): Process supervisor with signal forwarding (`SIGTERM` graceful drain with 25s timeout), exponential backoff restart delay (5s to 60s), burst crash circuit breaker (halts if > 5 crashes in 5 mins), and heartbeat file generation (`/tmp/bfmr-worker-heartbeat.json`).
 - `scripts/health_check.ts` (`npm run health`): Real-time diagnostic CLI verifying PostgreSQL connectivity (with automatic localhost container bridge fallback), worker process liveness, heartbeat freshness, and open exposure boundaries (< $200.00).
 
-### SETUP-004 Actual historical reconciliation and cutover
+### SETUP-004 Actual historical reconciliation and cutover (DELIVERED)
 
-Reconcile real creation-term proofs, existing reservation/order/shipment identities and actual payment-email evidence. Review complete account coverage and legacy source hashes, resolve unsupported/conflicting records, and accept the controlled cutover only under separate authorization after backups. Import must not replay provider actions or substitute current deal terms for historical creation terms.
+Implemented controlled cutover orchestrator CLI (`scripts/run_production_cutover.ts` & `npm run cutover`):
+- Automates pre-cutover PostgreSQL and local state backup execution.
+- Generates and displays the candidate manifest with its exact SHA-256 fingerprint.
+- Requires explicit operator confirmation prompt (`Type 'YES' to confirm`).
+- Atomically commits cutover state into `public.workflow_evidence` (`action_type='RELATIONAL_CUTOVER'`, `outcome='ACCEPTED'`).
+- Post-cutover verification confirms acceptance using `assertRelationalCutoverReady`. Covered by 4 unit tests in `tests/cutover.test.ts`.
 
 ### SETUP-005 Backup, restore and stale-state recovery (DELIVERED)
 

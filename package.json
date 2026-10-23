@@ -13,7 +13,8 @@
     "start": "node --import tsx scripts/run_bfmr.ts",
     "supervise": "node --import tsx scripts/supervise_worker.ts",
     "health": "node --import tsx scripts/health_check.ts",
-    "test": "node --import tsx --test tests/delivery_cutoff.test.ts tests/payment_intake.test.ts tests/informational_and_checkout_payout.test.ts tests/database_validator.test.ts tests/milestone5_operations.test.ts"
+    "cutover": "node --import tsx scripts/run_production_cutover.ts",
+    "test": "node --import tsx --test tests/delivery_cutoff.test.ts tests/payment_intake.test.ts tests/informational_and_checkout_payout.test.ts tests/database_validator.test.ts tests/milestone5_operations.test.ts tests/cutover.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",

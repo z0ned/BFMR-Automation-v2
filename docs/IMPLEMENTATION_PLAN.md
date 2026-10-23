@@ -400,3 +400,17 @@ Implemented production supervisor, systemd service configuration, health monitor
 - `package.json`: Added `"start"`, `"supervise"`, `"health"`, and `"test"` scripts (running all 26 unit tests across the 5 test suites).
 - `scripts/validate_database_environment.ts` & `scripts/health_check.ts`: Added shared `connectDatabaseClient()` helper providing transparent fallback to `localhost:5432` when executing from host environments where internal Docker network hostnames (such as `bfmr-postgres`) do not resolve in host DNS.
 - `tests/milestone5_operations.test.ts`: Added 3 unit tests verifying heartbeat writes, stale heartbeat detection, and active healthy worker detection. All 26 tests pass.
+
+## 22 October 2026 — Milestone #4: Controlled Reconciliation & Production Cutover
+
+Implemented interactive production cutover CLI workflow:
+- `scripts/run_production_cutover.ts`: Interactive production cutover orchestrator.
+  - Pre-flight checks: Validates `BFMR_EXPECTED_ACCOUNT`, claims exclusive account advisory lock `bfmr_worker_lock_${account}`, and validates relational schema.
+  - Automated Backup: Triggers `./scripts/backup_production_state.sh` prior to cutover application.
+  - Candidate Manifest Generation: Prepares a clean fresh-start boundary manifest (`prepareFreshStartCutover`) anchored at the exact cutover timestamp with `mode: 'START_FROM'`, `priorCompletedActivity: 'EXCLUDED'`, and `noOutstandingWork: true`.
+  - SHA-256 Verification: Computes and displays the manifest SHA-256 fingerprint for operator inspection.
+  - Operator Confirmation: Prompts the operator with `Type 'YES' to confirm and apply this production cutover boundary:` (with `--dry-run` and `--non-interactive` flag support).
+  - Atomic Commitment: Atomically applies the cutover to PostgreSQL via `applyRelationalCutover()` recording the cutover marker in `public.workflow_evidence`.
+  - Verification: Confirms cutover acceptance with `assertRelationalCutoverReady()`.
+- `package.json`: Added `"cutover": "node --import tsx scripts/run_production_cutover.ts"` and updated `"test"` to run all 30 tests.
+- `tests/cutover.test.ts`: Added 4 unit tests covering CLI argument parsing, SHA-256 hashing, compliant fresh-start manifest creation and validation, and missing confirmation rejection. All 30 tests across all 6 test suites pass.

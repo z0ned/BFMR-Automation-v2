@@ -52,25 +52,42 @@ export function getDatabaseConfig(): ClientConfig {
   };
 }
 
-export async function connectDatabaseClient(): Promise<Client> {
-  const config = getDatabaseConfig();
-  let client = new Client(config);
+export function getEffectiveConnectionString(): string {
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
+  }
+  const host = process.env.PGHOST || 'localhost';
+  const port = process.env.PGPORT || '5432';
+  const db = process.env.PGDATABASE || 'bfmr';
+  const user = process.env.PGUSER || 'bfmr_app';
+  const pass = process.env.PGPASSWORD ? `:${encodeURIComponent(process.env.PGPASSWORD)}` : '';
+  return `postgresql://${encodeURIComponent(user)}${pass}@${host}:${port}/${encodeURIComponent(db)}`;
+}
+
+export async function resolveWorkingConnectionString(): Promise<string> {
+  const base = getEffectiveConnectionString();
   try {
-    await client.connect();
-    return client;
+    const c = new Client({ connectionString: base });
+    await c.connect();
+    await c.end();
+    return base;
   } catch (err: any) {
-    if (
-      err.code === 'ENOTFOUND' &&
-      typeof config.connectionString === 'string' &&
-      config.connectionString.includes('bfmr-postgres')
-    ) {
-      const fallbackUrl = config.connectionString.replace(/@bfmr-postgres(:|\/)/, '@localhost$1');
-      client = new Client({ connectionString: fallbackUrl });
-      await client.connect();
-      return client;
+    if (err.code === 'ENOTFOUND' && base.includes('bfmr-postgres')) {
+      const fallback = base.replace(/@bfmr-postgres(:|\/)/, '@localhost$1');
+      const c = new Client({ connectionString: fallback });
+      await c.connect();
+      await c.end();
+      return fallback;
     }
     throw err;
   }
+}
+
+export async function connectDatabaseClient(): Promise<Client> {
+  const connStr = await resolveWorkingConnectionString();
+  const client = new Client({ connectionString: connStr });
+  await client.connect();
+  return client;
 }
 
 export async function runDatabaseValidation(client: Client): Promise<ValidationSummary> {

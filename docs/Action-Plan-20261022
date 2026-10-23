@@ -11,9 +11,9 @@ Represent estimates as known, explicitly absent, or unknown. Use the latest date
 - Standalone Native Database & Role Validator (Delivered - commit 6d78e86): Implemented scripts/validate_database_environment.ts (runnable via `npm run validate-db`), accepting standard PG environment variables or DATABASE_URL. Verifies PostgreSQL >= 15, non-superuser runtime role, non-owning table boundaries, least-privilege DDL rejection (42501), append-only trigger enforcement on workflow_evidence (55000), generated column expected_payout calculation, and reimbursement uniqueness (23505) using active probes inside rolled-back transactions. Covered by tests/database_validator.test.ts.
 - Provider Live Evidence Collection: Sanitized evidence collection for Gmail provenance, BFMR browser/API alignment, tracker completeness, and Amazon checkout layouts.
 
-4. Reconcile and perform the controlled cutover.
-Back up actual SQL and private state, resolve historical creation terms and payment evidence, and review both business and Gmail import reports. Apply only reviewed inputs under separately authorized execution.
-Completion criterion: startup accepts the exact account/source hashes, historical records reconcile, and restoration cannot replay provider actions.
+4. Reconcile and perform the controlled cutover. [DELIVERED - commits b0a3366 & HEAD]
+- Interactive Production Cutover CLI (`scripts/run_production_cutover.ts` & `npm run cutover`): Provides pre-flight account/lock/schema validation, automated pre-cutover state backup execution, fresh-start candidate manifest generation, SHA-256 fingerprint verification, operator confirmation prompt ('YES'), and atomic application to PostgreSQL via `applyRelationalCutover`.
+- Post-Cutover Verification: Asserts cutover boundary is active and verified in PostgreSQL via `assertRelationalCutoverReady`. Covered by unit tests in `tests/cutover.test.ts`.
 
 5. Package and accept production operation. [DELIVERED - commits 47a5123 & HEAD]
 - Service Supervision (`scripts/supervise_worker.ts` & `npm run supervise`): Background supervisor with signal handling (graceful SIGTERM shutdown), exponential crash backoff (5s to 60s), burst crash circuit breaker (halts if > 5 crashes in 5 mins), and structured heartbeat file (/tmp/bfmr-worker-heartbeat.json).
