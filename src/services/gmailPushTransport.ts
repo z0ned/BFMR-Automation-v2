@@ -391,14 +391,27 @@ function pubsubSubscription(projectId: string, subscriptionName: string, topic: 
       if (stopping) throw new Error('PUBSUB_SUBSCRIPTION_CLOSED');
       try {
         const [metadata] = await client.getSubscription({ subscription: subscriptionName }, unary);
-        if (metadata.name !== subscriptionName || metadata.topic !== topic || metadata.detached ||
-            metadata.pushConfig?.pushEndpoint || metadata.bigqueryConfig || metadata.cloudStorageConfig || metadata.filter) {
-          throw new Error('PUBSUB_SUBSCRIPTION_CONTRACT_MISMATCH');
+        if (metadata.name !== subscriptionName) {
+          throw new Error(`PUBSUB_SUBSCRIPTION_CONTRACT_MISMATCH: name mismatch (expected "${subscriptionName}", got "${metadata.name}")`);
+        }
+        if (metadata.topic !== topic) {
+          throw new Error(`PUBSUB_SUBSCRIPTION_CONTRACT_MISMATCH: topic mismatch (expected "${topic}", got "${metadata.topic}")`);
+        }
+        if (metadata.detached) {
+          throw new Error('PUBSUB_SUBSCRIPTION_CONTRACT_MISMATCH: subscription is detached');
+        }
+        if (metadata.pushConfig?.pushEndpoint) {
+          throw new Error('PUBSUB_SUBSCRIPTION_CONTRACT_MISMATCH: subscription has pushEndpoint (must be pull/streamingPull)');
         }
         stub = await client.initialize();
         if (typeof stub.streamingPull !== 'function') throw new Error('PUBSUB_STREAM_STUB_UNAVAILABLE');
         validated = true;
-      } catch { throw new Error('PUBSUB_SUBSCRIPTION_VALIDATION_FAILED'); }
+      } catch (err: any) {
+        console.error(`\n[PubSub Validation Error] ${err?.message || err}`);
+        if (err?.code) console.error(`[PubSub Validation Error] Code: ${err.code}`);
+        if (err?.details) console.error(`[PubSub Validation Error] Details: ${err.details}`);
+        throw new Error(`PUBSUB_SUBSCRIPTION_VALIDATION_FAILED: ${err?.message || err}`);
+      }
     },
     async start(message, reconnect, failure) {
       if (!validated || started || stopping) throw new Error('PUBSUB_SUBSCRIPTION_NOT_READY');
