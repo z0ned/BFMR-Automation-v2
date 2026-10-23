@@ -58,8 +58,10 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
   const { ownership, ledger: orderLedger } = runtime;
   let browser: PlaywrightBfmrBrowser;
   let store: PostgresGmailIntakeStore;
-  try {
-    browser = new PlaywrightBfmrBrowser({ headless: false });
+    const isHeadless = process.env.BFMR_HEADLESS === 'true' ||
+      process.env.PLAYWRIGHT_HEADLESS === 'true' ||
+      (!process.env.DISPLAY && process.platform !== 'win32');
+    browser = new PlaywrightBfmrBrowser({ headless: isHeadless });
     store = new PostgresGmailIntakeStore(runtime.connectionString, {
       account, mailbox: adapters.mailbox, subscription: adapters.subscriptionName, topic: adapters.topic,
       verifyOwnership: () => ownership.verifyOwnership(),
