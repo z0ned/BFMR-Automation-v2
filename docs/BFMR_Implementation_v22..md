@@ -1,5 +1,15 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — Windows bind-mount line endings
+
+Operator output showed CRLF causing Bash to reject `set -euo pipefail` before
+installation began. Enforce LF for shell scripts through `.gitattributes` and
+normalize the read-only mounted bootstrap into /tmp in the Docker instructions.
+The source directory is still explicit, so moving the launcher does not select
+another checkout. A CRLF synthetic copy normalized successfully and passed Bash
+syntax/help checks without installation; no new native install is claimed.
+
+
 ## 23 October 2026 — fresh Ubuntu bootstrap
 
 `scripts/bootstrap_ubuntu.sh` provisions a clean Ubuntu 24.04 host or unprivileged

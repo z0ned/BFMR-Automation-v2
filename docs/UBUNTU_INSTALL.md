@@ -18,10 +18,14 @@ docker run --name bfmr-ubuntu-test --shm-size=1g -it --mount "type=bind,source=$
 Then, inside the Ubuntu shell:
 
 ```sh
-bash /source/scripts/bootstrap_ubuntu.sh --container --source-dir /source
+sed 's/\r$//' /source/scripts/bootstrap_ubuntu.sh > /tmp/bfmr-bootstrap.sh
+bash /tmp/bfmr-bootstrap.sh --container --source-dir /source
 ```
 
-The mount is read-only. Only committed code is copied; your existing private
+The temporary copy normalizes Windows CRLF endings without changing the
+read-only source mount. `.gitattributes` also enforces LF for future shell-script
+checkouts; an existing Windows checkout may still need this normalization.
+Only committed code is copied; your existing private
 configuration/browser data is not imported. Keep this Ubuntu shell open after
 installation. To return to a stopped rehearsal later:
 
