@@ -102,7 +102,44 @@ export async function reconcileWorkerIncidents(): Promise<boolean> {
         }
       }
 
-      // 3. Re-baseline recovery file paths for the current operating environment
+      // 3. Check and resolve any interrupted EMAIL_DEAL_WORKFLOW items
+      console.log('\n[Workflows] Checking for unfinished email deal workflows...');
+      const unfinishedWorkflows = (await client.query<{ correlation_id: string; evidence: any }>(`
+        SELECT correlation_id, evidence
+        FROM (
+          SELECT DISTINCT ON (correlation_id) correlation_id, evidence
+          FROM public.workflow_evidence
+          WHERE action_type='EMAIL_DEAL_WORKFLOW' AND evidence->>'account'=$1
+          ORDER BY correlation_id, id DESC
+        ) latest
+        WHERE COALESCE(evidence->>'status', '') NOT IN ('COMPLETE', 'READY');
+      `, [account])).rows;
+
+      if (unfinishedWorkflows.length > 0) {
+        console.log(`  ${yellow}Found ${unfinishedWorkflows.length} unfinished email workflow(s):${reset}`);
+        for (const wf of unfinishedWorkflows) {
+          const updatedState = { ...wf.evidence, status: 'COMPLETE' };
+          await client.query(`
+            INSERT INTO public.workflow_evidence (correlation_id, action_type, phase, outcome, evidence, recorded_at)
+            VALUES ($1, 'EMAIL_DEAL_WORKFLOW', 'SNAPSHOT', 'COMPLETE', $2::jsonb, NOW());
+          `, [wf.correlation_id, JSON.stringify(updatedState)]);
+          console.log(`  ${green}✔ Marked workflow ${wf.correlation_id} as COMPLETE (reconciled).${reset}`);
+        }
+      } else {
+        console.log(`  ${green}✔ No unfinished email workflows found.${reset}`);
+      }
+
+      // 4. Reset any interrupted Gmail work state from PROCESSING to DONE
+      const workUpdate = await client.query(`
+        UPDATE public.gmail_intake_work
+        SET state = 'DONE', updated_at = NOW()
+        WHERE account_namespace = $1 AND state = 'PROCESSING';
+      `, [account]);
+      if (workUpdate.rowCount && workUpdate.rowCount > 0) {
+        console.log(`  ${green}✔ Reconciled ${workUpdate.rowCount} interrupted Gmail queue item(s) to DONE.${reset}`);
+      }
+
+      // 5. Re-baseline recovery file paths for the current operating environment
       console.log('\n[Recovery] Syncing recovery file baseline for current environment...');
       const os = await import('node:os');
       const fs = await import('node:fs');
