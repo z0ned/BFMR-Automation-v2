@@ -2,30 +2,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getDatabaseConfig, runDatabaseValidation, type CheckResult } from '../scripts/validate_database_environment';
 
-test('getDatabaseConfig parses DATABASE_URL or individual PG variables', () => {
+test('database validator uses the mode-selected URL and never legacy or PG fallbacks', () => {
   const origEnv = { ...process.env };
-
   try {
-    process.env.DATABASE_URL = 'postgresql://myuser:mypass@myhost:5433/mydb';
-    const cfg1 = getDatabaseConfig();
-    assert.equal(cfg1.connectionString, 'postgresql://myuser:mypass@myhost:5433/mydb');
-
-    delete process.env.DATABASE_URL;
-    process.env.PGHOST = '127.0.0.1';
-    process.env.PGPORT = '5434';
-    process.env.PGUSER = 'custom_app';
-    process.env.PGDATABASE = 'custom_db';
-    process.env.PGPASSWORD = 'secretpassword';
-
-    const cfg2 = getDatabaseConfig();
-    assert.equal(cfg2.host, '127.0.0.1');
-    assert.equal(cfg2.port, 5434);
-    assert.equal(cfg2.user, 'custom_app');
-    assert.equal(cfg2.database, 'custom_db');
-    assert.equal(cfg2.password, 'secretpassword');
-  } finally {
-    process.env = origEnv;
-  }
+    process.env.DATABASE_URL_PRODUCTION = 'postgresql://synthetic:production@db.invalid/production';
+    process.env.DATABASE_URL_TEST = 'postgresql://synthetic:testing@db.invalid/testing';
+    process.env.DATABASE_URL = 'postgresql://legacy:ignored@legacy.invalid/wrong';
+    process.env.BFMR_INTAKE_MODE = 'production';
+    assert.equal(getDatabaseConfig().connectionString, process.env.DATABASE_URL_PRODUCTION);
+    process.env.BFMR_INTAKE_MODE = 'testing';
+    assert.equal(getDatabaseConfig().connectionString, process.env.DATABASE_URL_TEST);
+    delete process.env.DATABASE_URL_TEST;
+    process.env.PGDATABASE = 'wrong-default';
+    assert.throws(getDatabaseConfig, /DATABASE_URL_TEST is required/);
+  } finally { process.env = origEnv; }
 });
 
 test('validator records successful modeled checks and fails an undemonstrated exposure ceiling', async () => {

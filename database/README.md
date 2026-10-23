@@ -1,5 +1,13 @@
 # BFMR database schema
 
+## Separate test database
+
+See [environment setup](../docs/DATABASE_MODES.md) for the explicit consistent
+`bfmr` to `bfmr_test` clone command and `provision_test_runtime.psql`. The latter
+is test-only role/grant provisioning, not the fresh production installer. No
+clone/schema/provisioning operation was executed during source implementation.
+
+
 ## 23 October 2026 — existing-runtime recovery
 
 See the [recovery amendment](../docs/RECOVERY_REVIEW_20261023.md) before changing

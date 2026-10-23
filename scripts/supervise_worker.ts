@@ -1,3 +1,5 @@
+import { environmentPaths } from '../src/config/environment';
+import './loadEnv';
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,7 +18,7 @@ export interface SupervisorConfig {
 export function getDefaultSupervisorConfig(): SupervisorConfig {
   return {
     workerScript: path.resolve('scripts/run_bfmr.ts'),
-    heartbeatPath: process.env.BFMR_HEARTBEAT_PATH || path.join(os.tmpdir(), 'bfmr-worker-heartbeat.json'),
+    heartbeatPath: process.env.BFMR_HEARTBEAT_PATH || environmentPaths().heartbeat,
     initialDelayMs: 5000,
     maxDelayMs: 60000,
     maxBurstCrashes: 5,
@@ -49,6 +51,7 @@ export class WorkerSupervisor {
         totalRestarts: this.totalRestarts,
         error: error ?? null,
       };
+      fs.mkdirSync(path.dirname(this.config.heartbeatPath), { recursive: true, mode: 0o700 });
       fs.writeFileSync(this.config.heartbeatPath, JSON.stringify(data, null, 2), 'utf-8');
     } catch {
       // Ignore heartbeat write errors
@@ -56,14 +59,8 @@ export class WorkerSupervisor {
   }
 
   public static reapOrphanBrowserProcesses(): void {
-    try {
-      if (process.platform !== 'win32') {
-        const { execSync } = require('node:child_process');
-        execSync('pkill -f "playwright.*chrome|chrome.*--headless" 2>/dev/null || true', { stdio: 'ignore' });
-      }
-    } catch {
-      // Non-fatal process sweep
-    }
+    // Browser ownership is not provable from a process-name pattern. Never kill
+    // another environment's browser; close only the owned child/context.
   }
 
   public async start(): Promise<void> {

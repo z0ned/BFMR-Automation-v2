@@ -1,3 +1,5 @@
+import { environmentPaths } from '../config/environment';
+import { selectDatabase, databaseIdentity } from '../db/databaseConfig';
 import { assertNoIncompleteRestore } from './restoreBoundary';
 import path from 'node:path';
 import os from 'node:os';
@@ -12,7 +14,7 @@ import { assertRelationalCutoverReady, hashPrivateFile } from './relationalCutov
  * Docker hostname 'bfmr-postgres' to 'localhost' when running on the host machine.
  */
 export async function resolveWorkingConnectionString(rawUrl?: string): Promise<string> {
-  let connection = rawUrl || process.env.DATABASE_URL || '';
+  let connection = rawUrl ?? selectDatabase().connectionString;
   if (connection.includes('@bfmr-postgres')) {
     try {
       const dns = await import('node:dns/promises');
@@ -31,9 +33,10 @@ export async function resolveWorkingConnectionString(rawUrl?: string): Promise<s
 export async function openRelationalRuntime() {
   assertNoIncompleteRestore();
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();
-  const rawConnection = process.env.DATABASE_URL;
-  if (!account || !rawConnection) {
-    throw new Error('Relational startup requires DATABASE_URL and BFMR_EXPECTED_ACCOUNT.');
+  const selected = selectDatabase();
+  const rawConnection = selected.connectionString;
+  if (!account) {
+    throw new Error('Relational startup requires the mode-selected database URL and BFMR_EXPECTED_ACCOUNT.');
   }
 
   const connection = await resolveWorkingConnectionString(rawConnection);
@@ -45,13 +48,33 @@ export async function openRelationalRuntime() {
       throw new Error('Another worker owns this BFMR account.');
     }
     await db.validateSchema();
+    if (selected.mode === 'testing') {
+      const roles = await db.withTransaction(tx => tx.query<{ unsafe: boolean }>(`SELECT EXISTS (
+        SELECT 1 FROM pg_roles WHERE rolname=current_user AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls)
+      ) OR EXISTS (
+        SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND pg_has_role(current_user, c.relowner, 'USAGE')
+      ) AS unsafe`));
+      const production = process.env.DATABASE_URL_PRODUCTION;
+      if (roles.rows[0]?.unsafe !== false || (production &&
+          new URL(production).username === new URL(selected.connectionString).username)) {
+        throw new Error('Testing requires a distinct non-owning database runtime role without administrator privileges.');
+      }
+    }
     const retailerAccount = Object.freeze(await validateRelationalRetailerAccount(db));
+    if (selected.mode === 'testing') {
+      const expected = process.env.AMAZON_EXPECTED_ACCOUNT?.trim().toLowerCase();
+      const production = process.env.AMAZON_EXPECTED_ACCOUNT_PRODUCTION?.trim().toLowerCase();
+      if (!expected || !production || expected === production || retailerAccount.email.trim().toLowerCase() !== expected) {
+        throw new Error('The test database must select the separate configured test Amazon account. Cloned production accounts cannot be used.');
+      }
+    }
     const options = Object.freeze({
       retailerId: retailerAccount.retailer_id,
       retailerAccountId: retailerAccount.id,
       expectedAccountEmail: retailerAccount.email,
     });
-    const legacyFile = process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(os.homedir(), '.local/state/bfmr/amazon-orders.json');
+    const legacyFile = process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(environmentPaths().state, 'amazon-orders.json');
     const baselineStartsAt = await assertRelationalCutoverReady(db, {
       account,
       legacyOrderLedgerSha256: await hashPrivateFile(legacyFile),
@@ -64,6 +87,7 @@ export async function openRelationalRuntime() {
       retailerAccount,
       baselineStartsAt,
       connectionString: connection,
+      database: databaseIdentity(selected),
       retailerAccountId: retailerAccount.id,
       async verifyRetailerAccount() {
         await validateRelationalRetailerAccount(db, options);

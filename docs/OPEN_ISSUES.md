@@ -8,6 +8,16 @@ Remove an item when its stated completion evidence is recorded in the implementa
 
 ## Recovery review: operator-host acceptance remains open
 
+- Validate the new production/testing URL mapping on the operator host. Provision
+  and accept each actual schema/role/account/cutover separately where required;
+  identify which selected URL retains the original interrupted Gmail work. The
+  selector and private/provider/process boundaries are source-implemented and
+  covered offline. Run/review the explicit bfmr-to-bfmr_test clone and separate
+  test-role provisioning on the native host; no real clone exists from this work.
+  Provision separate test provider accounts/IAM, browser sessions and test Amazon
+  account/cutover; copied production workflow/account rows do not authorize replay.
+  Validate both isolated systemd instances before live acceptance. See [database modes](DATABASE_MODES.md).
+
 - The operator's read-only output establishes COMPLETE/RESERVING inconsistency,
   not successful completion. Install the narrow predecessor-backed recovery
   reader, verify the real immediate predecessor and generate/review a fresh

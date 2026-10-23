@@ -1,28 +1,11 @@
+import { loadConfiguration } from '../src/config/loadConfiguration';
+import { selectDatabase } from '../src/db/databaseConfig';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, type ClientConfig } from 'pg';
 
-// Automatically load local .env if present without requiring external package
-if (fs.existsSync('.env')) {
-  const envContent = fs.readFileSync('.env', 'utf-8');
-  for (const line of envContent.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith('#')) {
-      const idx = trimmed.indexOf('=');
-      if (idx > 0) {
-        const key = trimmed.slice(0, idx).trim();
-        let val = trimmed.slice(idx + 1).trim();
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-          val = val.slice(1, -1);
-        }
-        if (!process.env[key]) {
-          process.env[key] = val;
-        }
-      }
-    }
-  }
-}
+loadConfiguration();
 
 export interface CheckResult {
   name: string;
@@ -40,28 +23,11 @@ export interface ValidationSummary {
 }
 
 export function getDatabaseConfig(): ClientConfig {
-  if (process.env.DATABASE_URL) {
-    return { connectionString: process.env.DATABASE_URL };
-  }
-  return {
-    host: process.env.PGHOST || 'localhost',
-    port: process.env.PGPORT ? parseInt(process.env.PGPORT, 10) : 5432,
-    database: process.env.PGDATABASE || 'bfmr',
-    user: process.env.PGUSER || 'bfmr_app',
-    password: process.env.PGPASSWORD || undefined,
-  };
+  return { connectionString: selectDatabase().connectionString };
 }
 
 export function getEffectiveConnectionString(): string {
-  if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL;
-  }
-  const host = process.env.PGHOST || 'localhost';
-  const port = process.env.PGPORT || '5432';
-  const db = process.env.PGDATABASE || 'bfmr';
-  const user = process.env.PGUSER || 'bfmr_app';
-  const pass = process.env.PGPASSWORD ? `:${encodeURIComponent(process.env.PGPASSWORD)}` : '';
-  return `postgresql://${encodeURIComponent(user)}${pass}@${host}:${port}/${encodeURIComponent(db)}`;
+  return selectDatabase().connectionString;
 }
 
 export async function resolveWorkingConnectionString(): Promise<string> {
@@ -658,7 +624,7 @@ if (isMainScript()) {
     })
     .catch((err: any) => {
       console.error(`\x1b[31mFailed to connect to PostgreSQL:\x1b[0m ${err.message}`);
-      console.error('Ensure PostgreSQL is running and connection variables are set (PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD, or DATABASE_URL).');
+      console.error('Ensure PostgreSQL is running and the mode-selected DATABASE_URL_PRODUCTION or DATABASE_URL_TEST is configured.');
       process.exit(1);
     });
 }

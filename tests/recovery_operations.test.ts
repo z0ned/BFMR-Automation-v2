@@ -22,16 +22,19 @@ async function restoreFixture() {
   await writeFile(path.join(archiveRoot, 'bfmr/new.json'), 'new');
   await writeFile(path.join(backup, 'database_bfmr.sql.gz'), gzipSync('SELECT 1;\n'));
   execFileSync('tar', ['-czf', path.join(backup, 'local_state.tar.gz'), '-C', archiveRoot, 'bfmr']);
+  await writeFile(path.join(backup, 'ENVIRONMENT'), 'testing\n');
   const capture = path.join(root, 'captured.sql');
-  await writeFile(path.join(bin, 'psql'), '#!/bin/bash\nprintf "%s\\n" "$@" > "$RESTORE_ARGS"\ncat > "$RESTORE_CAPTURE"\nexit "${RESTORE_EXIT:-0}"\n', { mode: 0o700 });
+  await writeFile(path.join(bin, 'psql'), '#!/bin/bash\nprintf "%s\\n" "$@" > "$RESTORE_ARGS"\nprintf "%s" "$PGDATABASE" > "$RESTORE_TARGET"\ncat > "$RESTORE_CAPTURE"\nexit "${RESTORE_EXIT:-0}"\n', { mode: 0o700 });
   const checksums = async () => {
-    const names = ['database_bfmr.sql.gz', 'local_state.tar.gz'];
+    const names = ['database_bfmr.sql.gz', 'local_state.tar.gz', 'ENVIRONMENT'];
     const lines = await Promise.all(names.map(async name => `${createHash('sha256').update(await readFile(path.join(backup, name))).digest('hex')}  ${name}\n`));
     await writeFile(path.join(backup, 'SHA256SUMS'), lines.join(''));
   };
   await checksums();
-  const env = { PATH: `${bin}:/usr/bin:/bin`, HOME: root, PGUSER: 'synthetic', PGDATABASE: 'synthetic',
-    BFMR_RESTORE_WORKER_STOPPED: 'YES', BFMR_STATE_DIR: state, RESTORE_CAPTURE: capture, RESTORE_ARGS: path.join(root, 'args') };
+  const env = { PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, HOME: root, PGUSER: 'synthetic', PGDATABASE: 'synthetic',
+    BFMR_INTAKE_MODE: 'testing', DATABASE_URL_TEST: 'postgresql://synthetic@db.invalid/testing',
+    DATABASE_URL_PRODUCTION: 'postgresql://synthetic@db.invalid/production',
+    BFMR_RESTORE_WORKER_STOPPED: 'YES', BFMR_STATE_DIR: state, RESTORE_CAPTURE: capture, RESTORE_ARGS: path.join(root, 'args'), RESTORE_TARGET: path.join(root, 'target') };
   const run = (overrides: Record<string, string> = {}) => spawnSync('bash', ['scripts/restore_production_state.sh', backup], { cwd: process.cwd(), env: { ...env, ...overrides }, encoding: 'utf8' });
   return { root, backup, state, capture, checksums, run };
 }
@@ -60,6 +63,7 @@ test('successful restore publishes staged private state and preserves the previo
   t.after(() => rm(f.root, { recursive: true, force: true }));
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(await readFile(path.join(f.root, 'target'), 'utf8'), 'postgresql://synthetic@db.invalid/testing');
   assert.equal(await readFile(path.join(f.state, 'new.json'), 'utf8'), 'new');
   assert.equal((await stat(path.join(f.state, 'new.json'))).mode & 0o777, 0o600);
   assert.equal((await stat(f.state)).mode & 0o777, 0o700);
@@ -99,7 +103,9 @@ for (const fail of [false, true]) test(`coordinated backup ${fail ? 'retains an 
   await writeFile(path.join(bin, 'pg_dump'), fail ? '#!/bin/bash\nexit 3\n' : '#!/bin/bash\nprintf "SELECT 1;\\n"\n', { mode: 0o700 });
   const backupRoot = path.join(f.root, 'new-backups');
   const result = spawnSync('bash', ['scripts/backup_production_state.sh'], { encoding: 'utf8', env: {
-    PATH: `${bin}:/usr/bin:/bin`, HOME: f.root, PGUSER: 'synthetic', PGDATABASE: 'synthetic',
+    PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, HOME: f.root, PGUSER: 'synthetic', PGDATABASE: 'synthetic',
+    BFMR_INTAKE_MODE: 'testing', DATABASE_URL_TEST: 'postgresql://synthetic@db.invalid/testing',
+    DATABASE_URL_PRODUCTION: 'postgresql://synthetic@db.invalid/production',
     BFMR_BACKUP_DIR: backupRoot, BFMR_STATE_DIR: f.state, BFMR_BACKUP_WORKER_STOPPED: 'YES',
   } });
   const target = path.join(backupRoot, (await readdir(backupRoot))[0]);
@@ -110,7 +116,7 @@ for (const fail of [false, true]) test(`coordinated backup ${fail ? 'retains an 
   } else {
     assert.equal(result.status, 0, result.stderr);
     const entries = (await readFile(path.join(target, 'SHA256SUMS'), 'utf8')).trim().split('\n');
-    assert.equal(entries.length, 2);
+    assert.equal(entries.length, 3);
     for (const entry of entries) {
       const [digest, file] = entry.split('  ');
       assert.equal(createHash('sha256').update(await readFile(path.join(target, file))).digest('hex'), digest);
@@ -151,4 +157,45 @@ test('restore rejects archive links before invoking SQL', async t => {
   assert.notEqual(result.status, 0);
   await assert.rejects(stat(f.capture), { code: 'ENOENT' });
   assert.equal(await readFile(path.join(f.state, 'old.json'), 'utf8'), 'old');
+});
+
+test('restore production mode passes only the production URL to the PostgreSQL process', async t => {
+  const f = await restoreFixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(path.join(f.backup, 'ENVIRONMENT'), 'production\n');
+  await f.checksums();
+  const result = f.run({ BFMR_INTAKE_MODE: 'production' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(await readFile(path.join(f.root, 'target'), 'utf8'), 'postgresql://synthetic@db.invalid/production');
+});
+
+test('restore refuses missing test URL instead of using configured production or PG defaults', async t => {
+  const f = await restoreFixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  const result = f.run({ DATABASE_URL_TEST: '' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /DATABASE_URL_TEST is required/);
+  await assert.rejects(stat(f.capture), { code: 'ENOENT' });
+  assert.equal(await readFile(path.join(f.state, 'old.json'), 'utf8'), 'old');
+});
+
+test('restore refuses a backup labelled for the other environment before invoking SQL', async t => {
+  const f = await restoreFixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await writeFile(path.join(f.backup, 'ENVIRONMENT'), 'production\n');
+  await f.checksums();
+  const result = f.run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /different environment/);
+  await assert.rejects(stat(f.capture), { code: 'ENOENT' });
+});
+
+test('testing restore refuses an unlabelled legacy production backup', async t => {
+  const f = await restoreFixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await rm(path.join(f.backup, 'ENVIRONMENT'));
+  const result = f.run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /environment-labelled/);
+  await assert.rejects(stat(f.capture), { code: 'ENOENT' });
 });

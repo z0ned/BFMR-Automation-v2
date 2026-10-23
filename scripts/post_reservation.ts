@@ -1,3 +1,4 @@
+import { environmentPaths } from '../src/config/environment';
 import os from 'node:os';
 import path from 'node:path';
 import { readAmazonSupplier, type ReservationReference } from '../src/services/amazonEvaluation';
@@ -8,7 +9,7 @@ import { postReservationJournal } from '../src/services/postReservationJournal';
 
 function dependencies(beforeMutation?: () => Promise<void>) {
   return {
-    journal: postReservationJournal(process.env.BFMR_POST_RESERVATION_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/post-reservation.json')),
+    journal: postReservationJournal(process.env.BFMR_POST_RESERVATION_STATE_PATH || path.join(environmentPaths().state, 'post-reservation.json')),
     readAmazon: readAmazonSupplier,
     cancel: (reference: ReservationReference, recoveryOnly: boolean) => cancelConfirmedReservation(reference, recoveryOnly,
       beforeMutation ? { readRows: readRecentReservedRows, request: fetch,

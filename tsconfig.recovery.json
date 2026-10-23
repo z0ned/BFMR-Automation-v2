@@ -14,6 +14,20 @@
     "tests/review_fixes.test.ts",
     "tests/recovery_operations.test.ts",
     "tests/database_validator.test.ts",
-    "tests/informational_and_checkout_payout.test.ts"
+    "tests/informational_and_checkout_payout.test.ts",
+    "scripts/select_database.ts",
+    "scripts/import_gmail_intake.ts",
+    "scripts/inspect_deal_email.ts",
+    "scripts/prepare_fresh_start_cutover.ts",
+    "scripts/reconcile_relational_cutover.ts",
+    "scripts/record_reimbursement.ts",
+    "tests/database_selection.test.ts",
+    "scripts/database_target.ts",
+    "scripts/supervise_worker.ts",
+    "scripts/auth_gmail_oauth.ts",
+    "scripts/clone_test_database.ts",
+    "scripts/environment_command.ts",
+    "tests/environment_isolation.test.ts",
+    "tests/database_clone.test.ts"
   ]
 }

@@ -21,7 +21,20 @@
     "unblock": "node --import tsx scripts/reconcile_incident.ts",
     "test:recovery": "node --import tsx tests/review_fixes.test.ts && node --import tsx tests/recovery_operations.test.ts",
     "typecheck:recovery": "tsc --project tsconfig.recovery.json --noEmit",
-    "inspect-email": "node --import tsx scripts/inspect_deal_email.ts"
+    "inspect-email": "node --import tsx scripts/inspect_deal_email.ts",
+    "test:database-selection": "node --import tsx tests/database_selection.test.ts && node --import tsx tests/database_validator.test.ts",
+    "database:target": "node --import tsx scripts/database_target.ts",
+    "database:clone-test": "bash scripts/clone_test_database.sh",
+    "start:prod": "node --import tsx scripts/environment_command.ts production run_bfmr",
+    "supervise:prod": "node --import tsx scripts/environment_command.ts production supervise_worker",
+    "health:prod": "node --import tsx scripts/environment_command.ts production health_check",
+    "config:prod": "node --import tsx scripts/environment_command.ts production database_target",
+    "start:test": "node --import tsx scripts/environment_command.ts testing run_bfmr",
+    "supervise:test": "node --import tsx scripts/environment_command.ts testing supervise_worker",
+    "health:test": "node --import tsx scripts/environment_command.ts testing health_check",
+    "config:test": "node --import tsx scripts/environment_command.ts testing database_target",
+    "database:clone-test:remote": "node --import tsx scripts/clone_test_database.ts",
+    "test:environment-isolation": "node --import tsx tests/environment_isolation.test.ts && node --import tsx tests/database_clone.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",

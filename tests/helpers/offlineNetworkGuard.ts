@@ -17,7 +17,7 @@ syncBuiltinESMExports();
 
 for (const name of Object.keys(process.env)) {
   if (/^(BFMR_|GMAIL_|GOOGLE_|TELEGRAM_|AMAZON_)/.test(name)
-      || ['DATABASE_URL', 'PGHOST', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD'].includes(name)) {
+      || ['DATABASE_URL', 'DATABASE_URL_PRODUCTION', 'DATABASE_URL_TEST', 'PGHOST', 'PGPORT', 'PGDATABASE', 'PGUSER', 'PGPASSWORD'].includes(name)) {
     delete process.env[name];
   }
 }

@@ -1,3 +1,5 @@
+import { environmentPaths } from '../src/config/environment';
+import { selectDatabase } from '../src/db/databaseConfig';
 import './loadEnv';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -32,9 +34,9 @@ async function main(): Promise<void> {
   const mailbox = process.env.GMAIL_ACCOUNT_EMAIL?.trim().toLowerCase();
   const subscription = process.env.GOOGLE_PUBSUB_SUBSCRIPTION?.trim();
   const topic = process.env.GOOGLE_PUBSUB_TOPIC?.trim();
-  const connection = process.env.DATABASE_URL;
+  const connection = selectDatabase().connectionString;
   if (!account || !mailbox || !subscription || !topic || !connection) throw new Error('Private account/mailbox/PubSub/database configuration is required.');
-  const source = values.get('--source') ?? process.env.BFMR_GMAIL_QUEUE_PATH ?? path.join(os.homedir(), '.local/state/bfmr/gmail-intake.json');
+  const source = values.get('--source') ?? process.env.BFMR_GMAIL_QUEUE_PATH ?? path.join(environmentPaths().state, 'gmail-intake.json');
   const bytes = await fs.readFile(source);
   const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
   const queue: unknown = JSON.parse(bytes.toString('utf8'));

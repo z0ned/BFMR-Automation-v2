@@ -1,0 +1,162 @@
+-- Run privately as the PostgreSQL administrator with workers stopped.
+-- This provisions only the explicit bfmr_test clone; it never changes bfmr.
+\set ON_ERROR_STOP on
+\connect bfmr
+BEGIN;
+CREATE ROLE bfmr_test_app LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
+    NOREPLICATION NOBYPASSRLS;
+DO $$ BEGIN
+ IF has_database_privilege('bfmr_test_app', 'bfmr', 'CONNECT') OR EXISTS (
+   SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','f')
+     AND (has_any_column_privilege('bfmr_test_app', c.oid, 'SELECT,INSERT,UPDATE,REFERENCES')
+       OR has_table_privilege('bfmr_test_app', c.oid, 'DELETE,TRUNCATE,TRIGGER'))
+ ) THEN
+   RAISE EXCEPTION 'Production grants expose bfmr to the new test role. Review production ACLs separately; provisioning rolled back.';
+ END IF;
+END $$;
+COMMIT;
+
+\connect bfmr_test
+BEGIN;
+DO $$ BEGIN
+ IF current_database() <> 'bfmr_test' THEN RAISE EXCEPTION 'Expected bfmr_test'; END IF;
+END $$;
+REVOKE ALL ON DATABASE bfmr_test FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC;
+GRANT CONNECT ON DATABASE bfmr_test TO bfmr_test_app;
+GRANT USAGE ON SCHEMA public TO bfmr_test_app;
+-- Read access, excluding the card-security-code column.
+GRANT SELECT ON
+    public.reservation_status,
+    public.order_status,
+    public.shipment_status,
+    public.retailers,
+    public.deals,
+    public.deal_retailers,
+    public.emails,
+    public.email_deals,
+    public.reservations,
+    public.orders,
+    public.shipments,
+    public.reimbursements,
+    public.workflow_evidence,
+    public.sync_runs,
+    public.provider_observations,
+    public.gmail_intake_state,
+    public.gmail_intake_runs,
+    public.gmail_intake_notifications,
+    public.gmail_intake_work
+TO bfmr_test_app;
+
+GRANT SELECT (id, retailer_id, email, retailer_account_ranking)
+    ON public.retailer_accounts TO bfmr_test_app;
+
+-- Insert only the columns written by the current application.
+GRANT INSERT (gmail_message_id, subject, email_type, received_at)
+    ON public.emails TO bfmr_test_app;
+
+GRANT INSERT (email_id, deal_id, reference_type)
+    ON public.email_deals TO bfmr_test_app;
+
+GRANT INSERT
+    (bfmr_deal_id, slug, title, reimbursement_amount, description)
+    ON public.deals TO bfmr_test_app;
+
+GRANT INSERT (deal_id, retailer_id)
+    ON public.deal_retailers TO bfmr_test_app;
+
+GRANT INSERT
+    (bfmr_reservation_id, deal_id, source_email_id,
+     quantity, payout_per_item, reservation_status_id)
+    ON public.reservations TO bfmr_test_app;
+
+GRANT INSERT
+    (order_id, reservation_id, deal_id, retailer_id,
+     retailer_account_id, status_id, quantity, canceled_quantity,
+     total_cost, purchase_date, product_identifier,
+     order_time_estimated_delivery_date)
+    ON public.orders TO bfmr_test_app;
+
+GRANT INSERT
+    (order_id, tracking_number, shipping_company, quantity, status_id)
+    ON public.shipments TO bfmr_test_app;
+
+GRANT INSERT
+    (reservation_id, payment_email_id, amount, paid_at, payment_reference)
+    ON public.reimbursements TO bfmr_test_app;
+
+GRANT INSERT
+    (email_id, reservation_id, order_id, correlation_id,
+     action_type, phase, outcome, evidence, recorded_at)
+    ON public.workflow_evidence TO bfmr_test_app;
+
+GRANT INSERT
+    (email_id, deal_id, reservation_id, order_id, shipment_id,
+     reimbursement_id, sync_run_id, provider, resource_type,
+     observed_at, is_complete, response_data)
+    ON public.provider_observations TO bfmr_test_app;
+
+GRANT INSERT
+    (provider, scope, target_order_id, started_at, completed_at,
+     status, records_received, is_complete, error_message)
+    ON public.sync_runs TO bfmr_test_app;
+
+GRANT INSERT (account_namespace, mailbox, subscription, topic)
+    ON public.gmail_intake_state TO bfmr_test_app;
+
+GRANT INSERT (id, account_namespace, state)
+    ON public.gmail_intake_runs TO bfmr_test_app;
+
+GRANT INSERT
+    (subscription, message_id, account_namespace, run_id,
+     payload_sha256, history_id, rejection, state, consumed_at)
+    ON public.gmail_intake_notifications TO bfmr_test_app;
+
+GRANT INSERT
+    (account_namespace, gmail_message_id, state,
+     payload, payload_sha256, received_at)
+    ON public.gmail_intake_work TO bfmr_test_app;
+
+-- Updates are restricted to the columns used by current code.
+GRANT UPDATE (slug, title, reimbursement_amount, description)
+    ON public.deals TO bfmr_test_app;
+
+GRANT UPDATE (reservation_status_id)
+    ON public.reservations TO bfmr_test_app;
+
+GRANT UPDATE (status_id, canceled_quantity)
+    ON public.orders TO bfmr_test_app;
+
+GRANT UPDATE (status_id)
+    ON public.shipments TO bfmr_test_app;
+
+GRANT UPDATE
+    (status, records_received, completed_at, is_complete, error_message)
+    ON public.sync_runs TO bfmr_test_app;
+
+GRANT UPDATE
+    (consumed_cursor, history_gap, watch_baseline,
+     watch_expires_at, watch_renewed_at, updated_at,
+     legacy_source_sha256, legacy_import_fingerprint)
+    ON public.gmail_intake_state TO bfmr_test_app;
+
+GRANT UPDATE (state, activated_at, stopped_at)
+    ON public.gmail_intake_runs TO bfmr_test_app;
+
+GRANT UPDATE (state, consumed_at)
+    ON public.gmail_intake_notifications TO bfmr_test_app;
+
+GRANT UPDATE (state, payload, updated_at)
+    ON public.gmail_intake_work TO bfmr_test_app;
+
+COMMIT;
+ALTER ROLE bfmr_test_app IN DATABASE bfmr_test SET search_path = pg_catalog, public;
+SET password_encryption = 'scram-sha-256';
+\password bfmr_test_app
+-- This permits the separate role to connect; provider/account/cutover startup
+-- gates still apply. No worker or provider action is invoked by this script.
+ALTER DATABASE bfmr_test CONNECTION LIMIT -1;

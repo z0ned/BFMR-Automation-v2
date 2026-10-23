@@ -1,3 +1,4 @@
+import { selectDatabase } from '../src/db/databaseConfig';
 import './loadEnv';
 import { Pool } from 'pg';
 import { resolveWorkingConnectionString } from '../src/services/relationalRuntime';
@@ -12,11 +13,7 @@ async function inspectLastEmail() {
   console.log(`${bold}  BFMR Automation v2 - Email Ingestion Inspection   ${reset}`);
   console.log(`${bold}====================================================${reset}\n`);
 
-  const rawUrl = process.env.DATABASE_URL;
-  if (!rawUrl) {
-    console.error('ERROR: DATABASE_URL is not set.');
-    return;
-  }
+  const rawUrl = selectDatabase().connectionString;
 
   const connStr = await resolveWorkingConnectionString(rawUrl);
   const pool = new Pool({ connectionString: connStr, max: 1 });

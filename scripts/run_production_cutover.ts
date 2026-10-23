@@ -1,3 +1,4 @@
+import { environmentPaths } from '../src/config/environment';
 import './loadEnv';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -76,7 +77,7 @@ export async function runProductionCutover(options: CutoverCliOptions = {}): Pro
   }
 
   const connStr = await resolveWorkingConnectionString();
-  const stateDirectory = options.stateDir ?? process.env.BFMR_STATE_DIR ?? path.join(os.homedir(), '.local/state/bfmr');
+  const stateDirectory = options.stateDir ?? process.env.BFMR_STATE_DIR ?? environmentPaths().state;
 
   console.log(`[Config] Target Account:    ${bold}${account}${reset}`);
   console.log(`[Config] State Directory:   ${stateDirectory}`);

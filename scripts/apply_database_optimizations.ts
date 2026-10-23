@@ -1,3 +1,4 @@
+import { selectDatabase } from '../src/db/databaseConfig';
 import './loadEnv';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,6 +23,7 @@ export async function applyDatabaseOptimizations(): Promise<boolean> {
     return false;
   }
 
+  const selected = selectDatabase();
   const sqlContent = fs.readFileSync(sqlFile, 'utf8');
 
   // The operator must explicitly choose Docker; otherwise use the configured
@@ -33,7 +35,7 @@ export async function applyDatabaseOptimizations(): Promise<boolean> {
       execFileSync('docker', ['exec', '-i', '--env', 'PGHOST', '--env', 'PGPORT', '--env', 'PGUSER',
         '--env', 'PGPASSWORD', '--env', 'PGDATABASE', container, 'psql', '-X', '--set=ON_ERROR_STOP=1'], {
         input: sqlContent, stdio: ['pipe', 'inherit', 'inherit'], env: { ...process.env,
-          PGDATABASE: process.env.DATABASE_URL ?? process.env.PGDATABASE ?? 'bfmr', PGUSER: process.env.PGUSER ?? 'bfmr' },
+          PGDATABASE: selected.connectionString, PGUSER: process.env.PGUSER ?? 'bfmr' },
       });
 
       console.log(`\n${green}${bold}[SUCCESS] Database optimizations applied successfully via the selected container!${reset}`);

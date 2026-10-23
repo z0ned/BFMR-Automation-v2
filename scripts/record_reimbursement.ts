@@ -1,3 +1,4 @@
+import { selectDatabase } from '../src/db/databaseConfig';
 import './loadEnv';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -22,12 +23,13 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     throw new Error('A private verified-payment manifest and the cutover legacy ledger path are required.');
   }
   const account = String(options['--account'] ?? process.env.BFMR_EXPECTED_ACCOUNT ?? '').trim().toLowerCase();
-  if (!account || !process.env.DATABASE_URL) throw new Error('An exact account and DATABASE_URL are required.');
+  const connection = selectDatabase().connectionString;
+  if (!account) throw new Error('An exact account is required.');
   const raw = await readFile(options['--manifest']);
   const input = validateVerifiedPaymentNotice(JSON.parse(raw.toString('utf8')));
   const manifestSha256 = createHash('sha256').update(raw).digest('hex');
-  const ownership = new PostgresAccountOwnership(process.env.DATABASE_URL, account);
-  const db = new RelationalDatabase(process.env.DATABASE_URL, () => ownership.verifyOwnership());
+  const ownership = new PostgresAccountOwnership(connection, account);
+  const db = new RelationalDatabase(connection, () => ownership.verifyOwnership());
   try {
     if (!await ownership.claimAccount(`bfmr_worker_lock_${account}`)) throw new Error('Another account worker is active.');
     await db.validateSchema();

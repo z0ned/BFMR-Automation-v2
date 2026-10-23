@@ -1,12 +1,7 @@
+import './loadEnv';
 import fs from 'node:fs';
 import { parseBfmrEmail as parseIncomingEmail } from '../src/services/bfmrEmailLinks';
 
-// Load .env
-if (fs.existsSync('.env')) {
-  try {
-    process.loadEnvFile();
-  } catch {}
-}
 
 async function debugGmailIntake() {
   console.log('='.repeat(80));

@@ -4,6 +4,16 @@
 
 ## Current recovery checkpoint
 
+The operator now supplies DATABASE_URL_PRODUCTION and DATABASE_URL_TEST instead
+of DATABASE_URL. Use BFMR_INTAKE_MODE=production (default) or testing to select
+one; missing selections stop without fallback. See [database modes](DATABASE_MODES.md).
+The previous interrupted work stays in its original database, and the tracker
+coverage mismatch is still open. Source now isolates configuration, browser profiles, journals, heartbeat and
+backups, and requires explicit test credentials/identities. Use config:prod/test
+before any live start. The new clone command is prepared but no actual bfmr_test
+has been created here; test role/provider/account/cutover provisioning remains
+required. See the environment runbook before attempting host setup.
+
 The operator subsequently confirmed a legacy COMPLETE snapshot with a RESERVING
 deal and PROCESSING queue item. The report-only loader now recognizes only an
 exact status-only copy of a valid immediate predecessor; no queue/state mutation

@@ -1,5 +1,32 @@
 # Decision register
 
+## 23 October 2026 — isolate test resources and explicitly clone production
+
+Select exactly one private file per mode; preserve production journal/profile
+locations and use sibling test roots. Test provider credentials/approval flags
+require explicit _TEST settings, plus distinct account identity checks. Remove
+global Chromium killing and verify the profile on CDP attachment. Label backups
+by mode and use separate OS users for host-enforced boundaries. Testing remains
+a live provider workflow rather than a sandbox/dry run.
+
+The operator requested a point-in-time bfmr_test copy. Provide an explicit
+consistent dump/restore command that refuses existing targets and leaves a new
+clone administrator-only; separately provision narrow runtime grants and test
+accounts/cutover. Preserve copied history and the original production incident.
+No clone or provisioning has been executed here. See [setup](DATABASE_MODES.md).
+
+
+## 23 October 2026 — explicit production/testing database URLs
+
+The operator removed DATABASE_URL and introduced DATABASE_URL_PRODUCTION and
+DATABASE_URL_TEST. Adopt the existing BFMR_INTAKE_MODE as the selector:
+production/default selects the former, testing selects the latter. Centralize
+application and maintenance connections, refuse missing/cross-mode fallback,
+and bind recovery reports to mode/target. This is a source/configuration change;
+no provisioning, migration, cursor reset, incident repair, provider action or
+live runner is authorized by changing URL names. See [database modes](DATABASE_MODES.md).
+
+
 ## 23 October 2026 — narrow recovery of forced legacy completion
 
 Read-only operator evidence showed COMPLETE with a RESERVING deal, so normal

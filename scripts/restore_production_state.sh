@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+case "${BFMR_INTAKE_MODE:-production}" in
+  production) BFMR_MODE_NAME=bfmr ;;
+  testing) BFMR_MODE_NAME=bfmr-testing ;;
+  *) echo 'BFMR_INTAKE_MODE must be production or testing.' >&2; exit 1 ;;
+esac
 
 # Restore into an EMPTY replacement database with every writer stopped.
 # SQL and filesystem publication cannot form one transaction. A failure marker
@@ -18,7 +23,8 @@ if [ -e "${BACKUP_DIR}/INCOMPLETE" ]; then
     echo 'The backup is incomplete; restore refused.' >&2
     exit 1
 fi
-STATE_DIR="${BFMR_STATE_DIR:-$HOME/.local/state/bfmr}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="$(cd -- "${SCRIPT_DIR}/.." && node --import tsx scripts/select_database.ts --state-dir)"
 STATE_PARENT="$(dirname "${STATE_DIR}")"
 mkdir -p "${STATE_PARENT}"
 MARKER="${STATE_DIR}.restore-incomplete"
@@ -29,6 +35,13 @@ fi
 if [ ! -f "${BACKUP_DIR}/SHA256SUMS" ] || [ ! -f "${BACKUP_DIR}/local_state.tar.gz" ]; then
     echo 'A checksummed database dump and local-state archive are required.' >&2
     exit 1
+fi
+if [ -f "${BACKUP_DIR}/ENVIRONMENT" ]; then
+    if [ "$(cat "${BACKUP_DIR}/ENVIRONMENT")" != "${BFMR_INTAKE_MODE:-production}" ]; then
+        echo 'Backup belongs to a different environment; restore refused.' >&2; exit 1
+    fi
+elif [ "${BFMR_INTAKE_MODE:-production}" != production ]; then
+    echo 'Testing restore requires an environment-labelled backup.' >&2; exit 1
 fi
 shopt -s nullglob
 DUMPS=("${BACKUP_DIR}"/database_*.sql.gz)
@@ -46,7 +59,11 @@ for line in open(sys.argv[1]):
     if not match or match[2] in entries or match[2] in ('.', '..'):
         raise SystemExit('Invalid checksum manifest.')
     entries[match[2]] = match[1]
-if set(entries) != {sys.argv[2], 'local_state.tar.gz'}:
+import pathlib
+expected = {sys.argv[2], 'local_state.tar.gz'}
+if pathlib.Path(sys.argv[1]).with_name('ENVIRONMENT').is_file():
+    expected.add('ENVIRONMENT')
+if set(entries) != expected:
     raise SystemExit('Checksum manifest must cover exactly database and local state.')
 PY
 (cd "${BACKUP_DIR}" && sha256sum --status -c SHA256SUMS)
@@ -83,13 +100,15 @@ for directory, _, files in os.walk(staging):
 if not (pathlib.Path(staging) / name).is_dir():
     raise SystemExit('State root is missing.')
 PY
-# Use EXPORTED PG* credentials (or DATABASE_URL), never evaluate .env as shell.
+# Use the mode-selected exported database URL, never evaluate .env as shell.
 # Explicit container selection avoids accidentally restoring another database.
+BFMR_POSTGRES_CONTAINER="$(cd -- "${SCRIPT_DIR}/.." && node --import tsx scripts/select_database.ts --container)"
 PSQL=(psql -X --set=ON_ERROR_STOP=1 --single-transaction --file=-)
 if [ -n "${BFMR_POSTGRES_CONTAINER:-}" ]; then
     PSQL=(docker exec -i --env PGHOST --env PGPORT --env PGUSER --env PGPASSWORD --env PGDATABASE "${BFMR_POSTGRES_CONTAINER}" "${PSQL[@]}")
 fi
-export PGDATABASE="${DATABASE_URL:-${PGDATABASE:-bfmr}}"
+SELECTED_DATABASE_URL="$(cd -- "${SCRIPT_DIR}/.." && node --import tsx scripts/select_database.ts)"
+export PGDATABASE="${SELECTED_DATABASE_URL}"
 : "${PGUSER:?Export the reviewed restore administrator PGUSER}"
 export PGUSER
 # Record the boundary BEFORE SQL; even a lost COMMIT response must stop restart.

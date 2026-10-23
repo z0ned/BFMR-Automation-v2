@@ -1,5 +1,30 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — separate production and live testing
+
+The [environment setup/runbook](DATABASE_MODES.md) now controls the selected
+PostgreSQL URL, private config file, local state/profile/heartbeat/backup roots,
+provider credential suffixes and explicit prod/test launch commands. Testing
+refuses inherited production credentials, known shared identities/paths and
+cloned production Amazon account selection. Recovery reports bind mode/target.
+The optional systemd template uses separate users/homes and process groups.
+Backup labels prevent ordinary cross-environment restores.
+
+`npm run database:clone-test` is an explicit Docker operator command to copy
+`bfmr` schema/data into a new administrator-only `bfmr_test`, refusing overwrite.
+The separate test-role provisioning script grants only the application columns
+and checks production isolation. Neither command was run against a real server.
+The existing interrupted work and account-coverage conflict remain unresolved;
+no provider workflow, migration, replay or recovery apply occurred here.
+
+Offline validation: 52/52 focused cases passed (9 URL/validator, 10 environment/
+clone-tool and 33 recovery/operations), plus scoped TypeScript, shell syntax and
+whitespace checks. Clone subprocess tests use fake PostgreSQL/Docker commands;
+recovery SQL uses disposable PGlite. Native clone/provisioning, provider accounts/
+IAM and both host startup/service acceptance remain open. Prior rerun counts are
+not additional distinct cases. Source implementation is not live acceptance.
+
+
 ## 23 October 2026 — legacy COMPLETE/RESERVING snapshot recovery
 
 Operator-supplied read-only output confirmed a latest workflow marked COMPLETE

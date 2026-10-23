@@ -1,3 +1,4 @@
+import { environmentPaths } from '../src/config/environment';
 import './loadEnv';
 import { createInterface } from 'node:readline/promises';
 import { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
@@ -106,7 +107,7 @@ async function main() {
     if (result === 'PLACED') {
       console.log('[Amazon purchase test] Amazon confirmed the order. Reading Order # from this purchase confirmation.');
       const orderId = await retrieveAmazonOrderId(page, TARGET_ASIN, expectedTitle, review.totalCents);
-      const ledger = amazonOrderLedger(process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(os.homedir(), '.local/state/bfmr/amazon-orders.json'));
+      const ledger = amazonOrderLedger(process.env.BFMR_AMAZON_ORDER_LEDGER_PATH || path.join(environmentPaths().state, 'amazon-orders.json'));
       await ledger.add({ orderId, reserveId: null, dealId: null, asin: TARGET_ASIN,
         totalCents: review.totalCents, purchasedAt: new Date().toISOString(), status: 'PENDING', packages: [] });
       console.log(`[Amazon purchase test] Order #: ${orderId}`);

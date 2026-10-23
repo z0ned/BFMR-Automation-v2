@@ -1,3 +1,4 @@
+import { databaseIdentity } from '../src/db/databaseConfig';
 import { sourceIdentity } from './sourceIdentity';
 import './loadEnv';
 import { runBfmrWorker } from '../src/services/bfmrWorker';
@@ -17,6 +18,7 @@ if (args.length === 1 && args[0] === '--help') {
 } else {
   Promise.resolve().then(() => {
     console.log(`[BFMR worker] Source: ${JSON.stringify(sourceIdentity())}`);
+    console.log(`[BFMR worker] Database selection: ${JSON.stringify(databaseIdentity())}`);
     return runBfmrWorker();
   }).catch((err: any) => {
     console.error(`\n[BFMR worker] Startup/Runtime Error: ${err?.message || err}`);

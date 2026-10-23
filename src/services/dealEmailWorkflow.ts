@@ -1,3 +1,4 @@
+import { environmentPaths } from '../config/environment';
 import { createHash, randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -47,8 +48,8 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
     throw new Error('Workflow requires authenticated Gmail provenance or the explicitly invoked local PDF test.');
   }
   if (!localPdf) assertEmailSinceCutover(runtime.baselineStartsAt, email.receivedAt);
-  const batch = await multiDealJournal(process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/multi-deal.json')).load();
-  const post = await postReservationJournal(process.env.BFMR_POST_RESERVATION_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/post-reservation.json')).load();
+  const batch = await multiDealJournal(process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(environmentPaths().state, 'multi-deal.json')).load();
+  const post = await postReservationJournal(process.env.BFMR_POST_RESERVATION_STATE_PATH || path.join(environmentPaths().state, 'post-reservation.json')).load();
   if (batch && batch.stage !== 'COMPLETE' || post && !['KEPT', 'CANCELLED'].includes(post.state)) {
     throw new Error('Legacy batch or post-reservation work is unfinished; preserve/reconcile it before new workflow enrollment.');
   }

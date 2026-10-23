@@ -1,3 +1,4 @@
+import { environmentPaths } from '../config/environment';
 import { verifyBfmrAccountIdentity } from '../services/bfmrAccountIdentity';
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import path from 'node:path';
@@ -18,6 +19,7 @@ export interface ReservationSubmissionResult {
 interface ChromiumCdpTarget {
   endpoint: string;
   port: number;
+  profile: string;
 }
 
 function readFlag(args: string[], name: string): string | undefined {
@@ -79,7 +81,7 @@ function resolveCdpTarget(pid: number): ChromiumCdpTarget {
     port = Number(portLine);
   }
   if (port < 1 || port > 65535) throw new Error(`Chromium PID ${pid} has an invalid remote debugging port.`);
-  return { endpoint: `http://127.0.0.1:${port}`, port };
+  return { endpoint: `http://127.0.0.1:${port}`, port, profile: fs.realpathSync(userDataDir) };
 }
 
 async function hasAccessChallenge(page: Page): Promise<boolean> {
@@ -117,7 +119,7 @@ export class PlaywrightBfmrBrowser {
     this.browserPid = options?.browserPid ?? readBrowserPid();
     this.profilePath = options?.profilePath || 
       process.env.CHROMIUM_PROFILE_PATH || 
-      path.resolve(process.env.HOME || '/home/wardmatt', '.config/bfmr/chromium-profile');
+      environmentPaths().profile;
     
     // Default to HEADED mode per v1.5 Page 4/15 specification
     this.isHeadless = options?.headless !== undefined 
@@ -136,6 +138,7 @@ export class PlaywrightBfmrBrowser {
 
     if (this.browserPid !== null) {
       const target = resolveCdpTarget(this.browserPid);
+      if (fs.realpathSync(this.profilePath) !== target.profile) throw new Error('Chromium profile does not match the selected environment.');
       console.log(`[Playwright] Attaching to Chromium PID ${this.browserPid} over loopback CDP port ${target.port}`);
       this.connectedBrowser = await chromium.connectOverCDP(target.endpoint);
       try {
@@ -627,7 +630,7 @@ export class PlaywrightBfmrBrowser {
     try {
       const activePage = this.page;
       if (!activePage || activePage.isClosed()) return null;
-      const baseDir = process.env.BFMR_STATE_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.local/state/bfmr');
+      const baseDir = process.env.BFMR_STATE_DIR || environmentPaths().state;
       const screenshotsDir = path.join(baseDir, 'screenshots');
       fs.mkdirSync(screenshotsDir, { recursive: true });
       const filename = `error_${label.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}.png`;

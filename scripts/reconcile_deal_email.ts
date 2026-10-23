@@ -1,3 +1,4 @@
+import { databaseIdentity, DatabaseConfigurationError } from '../src/db/databaseConfig';
 import { sourceIdentity } from './sourceIdentity';
 import { assertIntakePrivileges, IntakePrivilegeError } from '../src/db/intakePrivileges';
 import './loadEnv';
@@ -40,7 +41,7 @@ async function main() {
   const directory = await stat(directoryPath);
   if (resolve(file) !== resolve(directoryPath, file.slice(file.lastIndexOf('/') + 1))) throw new Error('Report directory symlinks require an explicit canonical path.');
   if (!directory.isDirectory() || (directory.mode & 0o077) !== 0) throw new Error('Report directory must already exist with owner-only permissions.');
-  let reviewed: (EmailReconciliationReport & { source: ReturnType<typeof sourceIdentity> }) | undefined;
+  let reviewed: (EmailReconciliationReport & { source: ReturnType<typeof sourceIdentity>; database: ReturnType<typeof databaseIdentity> }) | undefined;
   let reviewedHash: string | undefined;
   if (apply) {
     const info = await stat(file);
@@ -48,13 +49,15 @@ async function main() {
     const bytes = await readFile(file);
     reviewedHash = createHash('sha256').update(bytes).digest('hex');
     if (reviewedHash !== values.get('--confirm-report-sha256')) throw new Error('Exact reviewed report hash is required.');
-    reviewed = JSON.parse(bytes.toString('utf8')) as EmailReconciliationReport & { source: ReturnType<typeof sourceIdentity> };
+    reviewed = JSON.parse(bytes.toString('utf8')) as EmailReconciliationReport & { source: ReturnType<typeof sourceIdentity>; database: ReturnType<typeof databaseIdentity> };
     if (!reviewed.ready) throw new Error('Report is not ready; regenerate/review it.');
   } else if (values.has('--confirm-report-sha256')) throw new Error('Confirmation hash is valid only with --apply.');
 
   const source = sourceIdentity();
-  if (apply && (!reviewed?.source || canonicalWorkflowJson(reviewed.source) !== canonicalWorkflowJson(source))) {
-    throw new Error('Source revision/content differs from the reviewed report; regenerate/review it.');
+  const database = databaseIdentity();
+  if (apply && (!reviewed?.source || canonicalWorkflowJson(reviewed.source) !== canonicalWorkflowJson(source) ||
+      canonicalWorkflowJson(reviewed.database) !== canonicalWorkflowJson(database))) {
+    throw new Error('Source revision/content or database mode/target differs from the reviewed report; regenerate/review it.');
   }
   const runtime = await openRelationalRuntime();
   const browser = new PlaywrightBfmrBrowser({ browserPid: Number(pid) });
@@ -79,7 +82,7 @@ async function main() {
     });
     if (!bfmr || !await verifyBfmrAccountIdentity(bfmr, runtime.account)) throw new Error('Verified BFMR browser/API alignment is required.');
     const report = { ...await reconcileDealEmail(runtime, checkpoint, { readTracker: readRecentReservedRows,
-      createRetailerPage: () => browser.createRetailerTab() }), source };
+      createRetailerPage: () => browser.createRetailerTab() }), source, database };
     if (apply) {
       const stable = (r: EmailReconciliationReport) => { const { generatedAt: _observed, ...rest } = r; return canonicalWorkflowJson(rest); };
       if (!reviewed || stable(reviewed) !== stable(report)) throw new Error('Fresh provider evidence/state differs from the reviewed plan.');
@@ -96,7 +99,7 @@ async function main() {
   } finally { try { await browser.close(); } finally { await runtime.close(); } }
 }
 main().catch(error => {
-  if (error instanceof IntakePrivilegeError || error instanceof LegacyWorkflowSnapshotError) console.error(error.message);
+  if (error instanceof DatabaseConfigurationError || error instanceof IntakePrivilegeError || error instanceof LegacyWorkflowSnapshotError) console.error(error.message);
   else if (typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)) console.error(`Database reconciliation failed (${error.code}).`);
   console.error('Workflow reconciliation stopped. Preserve the private report and exact provider evidence; no external action was retried.');
   process.exitCode = 1;

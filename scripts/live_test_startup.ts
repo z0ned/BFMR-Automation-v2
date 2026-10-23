@@ -1,3 +1,4 @@
+import { environmentPaths } from '../src/config/environment';
 import path from 'node:path';
 import os from 'node:os';
 import type { PlaywrightBfmrBrowser } from '../src/adapters/playwrightBrowser';
@@ -21,7 +22,7 @@ export async function runLiveTestStartup(browser: PlaywrightBfmrBrowser, hooks: 
   afterRecovery?(task: PostReservationTask): Promise<void>;
 } = {}) {
   await browser.init();
-  const file = process.env.BFMR_STARTUP_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/startup-reservation.json');
+  const file = process.env.BFMR_STARTUP_STATE_PATH || path.join(environmentPaths().state, 'startup-reservation.json');
   return withReservationFailureAlert('Startup reservation processing stopped. Inspect the browser, journal and terminal.', async () => {
     if (hooks.beforeStartup) {
       let session = await browser.verifySession(process.env.BFMR_EXPECTED_ACCOUNT);

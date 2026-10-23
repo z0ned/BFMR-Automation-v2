@@ -1,10 +1,11 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { loadConfiguration } from '../src/config/loadConfiguration';
+import { selectDatabase, databaseIdentity, DatabaseConfigurationError } from '../src/db/databaseConfig';
 import { Client } from 'pg';
-import { parse } from 'dotenv';
 import { missingIntakePrivileges } from '../src/db/intakePrivileges';
 import { sourceIdentity } from './sourceIdentity';
 
 async function main() {
+  loadConfiguration();
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--help') {
     console.log('Usage: npm run recovery:diagnose -- --message-id <private Gmail ID> [--expect-revision <full commit SHA>]');
@@ -23,11 +24,11 @@ async function main() {
   const expected = values.get('--expect-revision');
   if (expected && (!/^[0-9a-f]{40}$/.test(expected) || source.revision !== expected)) throw new Error('Checkout revision differs from the expected full commit SHA.');
   // Parse only the selected local file; do not chmod files or inspect home config.
-  const envFile = process.env.BFMR_ENV_FILE || '.env';
-  if (existsSync(envFile)) for (const [key, value] of Object.entries(parse(readFileSync(envFile)))) process.env[key] ??= value;
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();
   if (!account) throw new Error('BFMR_EXPECTED_ACCOUNT is required.');
-  const client = new Client(process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : undefined);
+  const selected = selectDatabase();
+  console.log(JSON.stringify({ database: databaseIdentity(selected) }));
+  const client = new Client({ connectionString: selected.connectionString });
   await client.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -59,6 +60,7 @@ async function main() {
   } finally { await client.end(); }
 }
 main().catch(error => {
+  if (error instanceof DatabaseConfigurationError) console.error(error.message);
   const code = typeof error?.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'DIAGNOSTIC_STOPPED';
   console.error(`Recovery diagnostic stopped (${code}); verify revision, configuration and database access. No state was changed.`);
   process.exitCode = 1;

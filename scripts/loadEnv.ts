@@ -1,16 +1,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { loadConfiguration } from '../src/config/loadConfiguration';
 
 const home = process.env.HOME || os.homedir();
-const configuredEnvFile = process.env.BFMR_ENV_FILE;
-const envFiles = [
-  configuredEnvFile,
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(home, '.env.bfmr_automation'),
-  path.resolve(home, '.env'),
-].filter((file): file is string => Boolean(file));
-
 /**
  * Verifies and enforces secure POSIX permissions (0600) on sensitive credential and environment files.
  * On Windows systems, POSIX mode bits do not apply, so this check runs on Linux/macOS.
@@ -32,18 +25,8 @@ export function secureSecretFile(filePath: string): void {
   }
 }
 
-for (const envFile of [...new Set(envFiles)]) {
-  if (!fs.existsSync(envFile)) continue;
-
-  secureSecretFile(envFile);
-
-  try {
-    // Existing shell values win; later files only fill in unset variables.
-    process.loadEnvFile(envFile);
-  } catch (error) {
-    console.warn(`[Config] Could not load ${envFile}: ${(error as Error).message}`);
-  }
-}
+const envFile = loadConfiguration();
+secureSecretFile(envFile);
 
 // Normalize path separators on Windows to avoid backslash escaping issues
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -53,7 +36,7 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   if (process.platform !== 'win32') {
     const rawPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
     const winMatch = /^([a-zA-Z]):[\\/](.*)$/.exec(rawPath);
-    if (winMatch) {
+    if (winMatch && process.env.BFMR_INTAKE_MODE !== 'testing') {
       const drive = winMatch[1].toLowerCase();
       const relativePart = winMatch[2].replace(/\\/g, '/');
       const candidates = [
@@ -73,7 +56,7 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
 
 // The BFMR setup stores the service account file outside the repository. Use it
 // as Application Default Credentials unless the operator configured another path.
-if (!process.env.GOOGLE_APPLICATION_CREDENTIALS || !fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+if (process.env.BFMR_INTAKE_MODE !== 'testing' && (!process.env.GOOGLE_APPLICATION_CREDENTIALS || !fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS))) {
   const localCandidates = [
     path.resolve(home, '.bfmr/gcp-credentials.json'),
     path.resolve(process.cwd(), 'gcp-credentials.json'),

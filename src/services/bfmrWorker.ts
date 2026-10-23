@@ -1,3 +1,5 @@
+import { environmentPaths, assertTestingProviders } from '../config/environment';
+import { selectDatabase } from '../db/databaseConfig';
 import { stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,9 +25,9 @@ import { bfmrStatusStore, runDueBfmrStatusCheck } from './bfmrDailyStatus';
 import { DealEmailWorkflowStore } from './dealEmailWorkflowStore';
 import { processEmail, WorkflowReviewRequiredError } from './dealEmailWorkflow';
 
-const legacyIntakeFile = process.env.BFMR_GMAIL_QUEUE_PATH || path.join(os.homedir(), '.local/state/bfmr/gmail-intake.json');
-const batchJournal = multiDealJournal(process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/multi-deal.json'));
-const statusStore = bfmrStatusStore(process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(os.homedir(), '.local/state/bfmr/bfmr-status.json'));
+const legacyIntakeFile = process.env.BFMR_GMAIL_QUEUE_PATH || path.join(environmentPaths().state, 'gmail-intake.json');
+const batchJournal = multiDealJournal(process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(environmentPaths().state, 'multi-deal.json'));
+const statusStore = bfmrStatusStore(process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(environmentPaths().state, 'bfmr-status.json'));
 
 function admitGmailEmail(email: QueuedEmail): boolean {
   console.log(`\n[Gmail Intake] Evaluating incoming message ${email.id}: from="${email.sender}", subject="${email.subject || ''}"`);
@@ -61,9 +63,11 @@ function admitGmailEmail(email: QueuedEmail): boolean {
 }
 
 export async function runBfmrWorker(options: { beforeProcessing?: (browser: PlaywrightBfmrBrowser, runtime: RelationalRuntime, guard: () => Promise<void>) => Promise<void> } = {}) {
+  assertTestingProviders();
   requireReservationAlerts();
   const account = process.env.BFMR_EXPECTED_ACCOUNT?.trim().toLowerCase();
-  if (!account || !process.env.DATABASE_URL) throw new Error('BFMR_EXPECTED_ACCOUNT and DATABASE_URL are required for durable account ownership.');
+  selectDatabase();
+  if (!account) throw new Error('BFMR_EXPECTED_ACCOUNT is required for durable account ownership.');
   const adapters = makeGmailPushAdapters();
   let runtime: RelationalRuntime;
   try { runtime = await openRelationalRuntime(); }
@@ -101,8 +105,8 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
   browser.setActionGuard(assertActionsReady);
   ownership.onOwnershipLost(() => { void intake.stop(); void browser.close(); });
   const auditRecovery = async () => control.auditRecovery(async () => {
-    const startupPath = process.env.BFMR_STARTUP_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/startup-reservation.json');
-    const postPath = process.env.BFMR_POST_RESERVATION_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/post-reservation.json');
+    const startupPath = process.env.BFMR_STARTUP_STATE_PATH || path.join(environmentPaths().state, 'startup-reservation.json');
+    const postPath = process.env.BFMR_POST_RESERVATION_STATE_PATH || path.join(environmentPaths().state, 'post-reservation.json');
     const eventsPath = `${startupPath}.events.jsonl`;
     let eventsPresent = false;
     try { const info = await stat(eventsPath); if (!info.isFile()) throw new Error('Invalid startup event journal.'); eventsPresent = true; }
@@ -116,9 +120,9 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
       startupEvents: { path: eventsPath, present: eventsPresent, unresolved: eventsPresent && startup === null },
       postReservation: { path: postPath, present: post !== null,
         unresolved: Boolean(post && !['KEPT', 'CANCELLED'].includes(post.state)) },
-      batch: { path: process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(os.homedir(), '.local/state/bfmr/multi-deal.json'),
+      batch: { path: process.env.BFMR_MULTI_DEAL_STATE_PATH || path.join(environmentPaths().state, 'multi-deal.json'),
         present: batch !== null, unresolved: Boolean(batch && batch.stage !== 'COMPLETE') },
-      status: { path: process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(os.homedir(), '.local/state/bfmr/bfmr-status.json'),
+      status: { path: process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(environmentPaths().state, 'bfmr-status.json'),
         present: status !== null, unresolved: Boolean(status && status.nextAlert < status.pendingAlerts.length) },
     } satisfies Record<string, RecoveryFileState>;
   }, ['YES', 'TRUE', '1'].includes(process.env.BFMR_ACCEPT_RECOVERY_BASELINE?.trim().toUpperCase() ?? ''));

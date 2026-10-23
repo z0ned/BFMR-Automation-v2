@@ -1,3 +1,4 @@
+import { selectDatabase } from '../src/db/databaseConfig';
 import './loadEnv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +26,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     throw new Error('Supply --manifest and --legacy-order-ledger; default mode is a read-only report.');
   }
   const account = String(options['--account'] ?? process.env.BFMR_EXPECTED_ACCOUNT ?? '').trim().toLowerCase();
-  if (!account || !process.env.DATABASE_URL) throw new Error('An exact account and DATABASE_URL are required.');
-  const ownership = new PostgresAccountOwnership(process.env.DATABASE_URL, account);
-  const db = new RelationalDatabase(process.env.DATABASE_URL, () => ownership.verifyOwnership());
+  const connection = selectDatabase().connectionString;
+  if (!account) throw new Error('An exact account is required.');
+  const ownership = new PostgresAccountOwnership(connection, account);
+  const db = new RelationalDatabase(connection, () => ownership.verifyOwnership());
   try {
     if (!await ownership.claimAccount(`bfmr_worker_lock_${account}`)) throw new Error('Another account worker is active.');
     await db.validateSchema();

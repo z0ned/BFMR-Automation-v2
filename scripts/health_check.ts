@@ -1,3 +1,5 @@
+import { environmentPaths } from '../src/config/environment';
+import './loadEnv';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -63,7 +65,7 @@ export async function checkSystemHealth(dependencies: { connect?: () => Promise<
   }
 
   // 3. Worker Heartbeat Check
-  const heartbeatPath = dependencies.heartbeatPath || process.env.BFMR_HEARTBEAT_PATH || path.join(os.tmpdir(), 'bfmr-worker-heartbeat.json');
+  const heartbeatPath = dependencies.heartbeatPath || process.env.BFMR_HEARTBEAT_PATH || environmentPaths().heartbeat;
   try {
     if (fs.existsSync(heartbeatPath)) {
       const raw = fs.readFileSync(heartbeatPath, 'utf-8');

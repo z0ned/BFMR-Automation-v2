@@ -1,3 +1,5 @@
+import { environmentPaths } from '../src/config/environment';
+import { selectDatabase } from '../src/db/databaseConfig';
 import './loadEnv';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,13 +13,14 @@ async function main(): Promise<void> {
   if (args.length !== 1 || args[0] !== '--confirm-no-outstanding-work') {
     throw new Error('Requires explicit confirmation that no outstanding or uncertain work needs migration.');
   }
-  if (!process.env.BFMR_EXPECTED_ACCOUNT?.trim() || !process.env.DATABASE_URL) {
+  selectDatabase();
+  if (!process.env.BFMR_EXPECTED_ACCOUNT?.trim()) {
     throw new Error('Private account/database configuration is required.');
   }
   const candidate = await prepareFreshStartCutover({
     account: process.env.BFMR_EXPECTED_ACCOUNT,
     confirmedNoOutstandingWork: true,
-    directory: path.join(os.homedir(), '.local/state/bfmr'),
+    directory: environmentPaths().state,
     stateOverrides: {
       BFMR_AMAZON_ORDER_LEDGER_PATH: process.env.BFMR_AMAZON_ORDER_LEDGER_PATH,
       BFMR_GMAIL_QUEUE_PATH: process.env.BFMR_GMAIL_QUEUE_PATH,
