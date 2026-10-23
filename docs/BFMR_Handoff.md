@@ -2,6 +2,16 @@
 
 **As of 23 October 2026.** Compact context for the next LLM; consult linked references for implementation details rather than reconstructing historical decisions.
 
+## Incoming Ubuntu mini-PC
+
+The same fresh-host bootstrap supports Ubuntu 24.04 and a Windows-launched Ubuntu
+Docker rehearsal. See [UBUNTU_INSTALL.md](UBUNTU_INSTALL.md). It creates separate
+production/testing users/profiles/roles/databases and private password files;
+workers remain stopped. Native provider/account/cutover/state-transfer and real
+mini-PC systemd/desktop acceptance remain separate. The prior production incident
+is still pending and is not cleared by creating new empty databases.
+
+
 ## Current recovery checkpoint
 
 The operator now supplies DATABASE_URL_PRODUCTION and DATABASE_URL_TEST instead

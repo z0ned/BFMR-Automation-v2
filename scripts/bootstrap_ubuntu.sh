@@ -106,6 +106,9 @@ PY
 chown -R bfmr-build:bfmr-build "$RUNTIME"
 runuser -u bfmr-build -- env HOME=/var/lib/bfmr-build npm --prefix "$RUNTIME" ci --include=dev --no-audit --no-fund
 ln -s "$RUNTIME/node_modules" "$APP/node_modules"
+# The repository's directory-only node_modules/ ignore does not cover a symlink.
+# Exclude this installation artifact without modifying tracked source files.
+printf '/node_modules\n' >> "$APP/.git/info/exclude"
 node "$RUNTIME/node_modules/playwright/cli.js" install-deps chromium
 if [ "$SKIP_BROWSERS" = 0 ]; then
     runuser -u bfmr-build -- env HOME=/var/lib/bfmr-build PLAYWRIGHT_BROWSERS_PATH="$BROWSERS" \

@@ -1,5 +1,34 @@
 # Implementation plan and evidence
 
+## 23 October 2026 — fresh Ubuntu bootstrap
+
+`scripts/bootstrap_ubuntu.sh` provisions a clean Ubuntu 24.04 host or unprivileged
+Ubuntu Docker rehearsal with native PostgreSQL, official verified Node 22,
+lockfile-matched worker dependencies, Playwright Chromium, separate OS/database
+users, private config/profiles and fresh bfmr/bfmr_test schemas. It installs the
+canonical business/Gmail/exposure SQL and shared narrow runtime grants, then
+runs read-only native infrastructure checks with each actual runtime login.
+The root package.json/lockfile discrepancy is isolated by generating a matching
+worker manifest under /opt/bfmr/runtime; source manifests are not rewritten.
+
+Native evidence: a clean Ubuntu 24.04 amd64 `--container --skip-browsers`
+installation completed with Node 22.23.4/PostgreSQL 16.15. Both actual runtime
+logins passed schema/intake-grant checks and were denied cross-database login
+(SQLSTATE 42501). Private config/home isolation, read-only application/source
+identity, no-worker/no-container-service behavior and configuration-preserving
+completed rerun passed. Exact Git trust and dependency-symlink exclusion were
+verified under the runtime users. Scoped TypeScript/shell/docs checks passed.
+The normal Chromium download was blocked by the workspace CDN policy (403), so
+browser download/launch, mini-PC systemd and desktop/provider acceptance remain
+open. No browser/TLS restriction was bypassed and no provider action occurred.
+
+The mini-PC systemd template uses the installed Node PATH and stays disabled.
+No provider login, account seed, cutover, live worker, production import or
+original incident repair is performed. Complete private account/provider setup
+and any reviewed state transfer separately. Existing/partial installations are
+preserved/refused. See [Ubuntu setup and Windows Docker rehearsal](UBUNTU_INSTALL.md).
+
+
 ## 23 October 2026 — separate production and live testing
 
 The [environment setup/runbook](DATABASE_MODES.md) now controls the selected

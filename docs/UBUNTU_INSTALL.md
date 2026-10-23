@@ -118,7 +118,10 @@ headed login/MFA or hardware browser behavior.
 The databases are initially empty business stores. This **does not transfer your
 current production reservations, Gmail cursors, incidents, workflow evidence or
 cutover**. Move existing operation only with a coordinated reviewed backup/restore
-and the original durable private state. Keep the old worker stopped during the
+and the original durable private state. Restore into a separately named empty
+replacement database and update the production URL after review; the installer
+has already populated the new bfmr schema, so ordinary restore correctly refuses
+to overwrite it. Keep the old worker stopped during the
 actual transfer. Do not accept a fresh baseline to bypass the unresolved original
 incident. An intentionally fresh test environment requires its own account/
 provider/cutover acceptance; a copied production database is not that acceptance.
@@ -138,6 +141,21 @@ separate operator step. Review current [open issues](OPEN_ISSUES.md); infrastruc
 installation does not establish live provider or production acceptance.
 
 ## Validation evidence
+
+A clean Ubuntu 24.04 amd64 container rehearsal completed with `--container
+--skip-browsers`: Node 22.23.4, PostgreSQL 16.15, lockfile-matched dependencies,
+Chromium Linux dependencies, both real database schemas and runtime grants.
+Actual cross-database login attempts were denied in both directions (SQLSTATE
+42501). Opposite private configuration/home access was denied, code was immutable
+to runtime users, source identity worked, and a completed rerun preserved configs.
+No systemd worker unit or live worker was started in the container.
+
+The default Chromium download was attempted first, but this development
+workspace blocked cdn.playwright.dev with HTTP 403 Domain forbidden. No TLS/network
+policy was bypassed. Browser download/launch and real host systemd/desktop remain
+unverified; the distributed default still downloads Chromium and fails safely
+if it cannot. The skip flag is for limited rehearsals, not live readiness.
+Shell syntax, scoped TypeScript and documentation/whitespace checks passed.
 
 Source, shell and native Docker rehearsal results are recorded in the current
 [v22 implementation reference](BFMR_Implementation_v22..md). A container rehearsal

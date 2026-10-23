@@ -6,6 +6,22 @@ This is the current-only checklist of unfinished implementation, provider eviden
 
 Remove an item when its stated completion evidence is recorded in the implementation reference or project registers. Synthetic coverage does not establish a live provider contract, installed database enforcement or production acceptance.
 
+## New mini-PC installation acceptance
+
+- Verify the fresh Ubuntu bootstrap on the operator's Docker host and mini-PC,
+  including the Chromium download/launch, real systemd boot, desktop login/MFA
+  and resource behavior. Native dependency/schema/role/private-state/rerun checks
+  passed in clean Ubuntu 24.04 with browser download explicitly skipped after a
+  workspace CDN-policy denial; do not treat that as complete browser acceptance.
+  Container schema/role validation does not establish those hardware/provider
+  contracts. Follow [Ubuntu setup](UBUNTU_INSTALL.md); populate private provider
+  credentials, distinct ranked retailer accounts and accepted cutover separately.
+- Transfer existing production DB/local state only through a coordinated reviewed
+  backup/restore; reconcile the existing interrupted work rather than conceal it
+  behind newly empty host databases. Neither a fresh schema nor a test copy is
+  an accepted production migration.
+
+
 ## Recovery review: operator-host acceptance remains open
 
 - Validate the new production/testing URL mapping on the operator host. Provision

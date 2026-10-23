@@ -1,5 +1,16 @@
 # Decision register
 
+## 23 October 2026 — clean Ubuntu host provisioning
+
+Use Ubuntu 24.04 LTS with native PostgreSQL and the same bootstrap script for
+bare-metal systemd and Docker-without-systemd. Install isolated app users/roles,
+root-owned code and locked runtime dependencies, fresh schemas and private random
+passwords; keep live workers disabled. Reuse canonical SQL and expose a read-only
+infrastructure verifier. Do not clone laptop production state, invent accounts,
+seed private payment data, or accept cutover as an installation side effect.
+See [Ubuntu installation](UBUNTU_INSTALL.md).
+
+
 ## 23 October 2026 — isolate test resources and explicitly clone production
 
 Select exactly one private file per mode; preserve production journal/profile

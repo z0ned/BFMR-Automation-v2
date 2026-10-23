@@ -1,5 +1,14 @@
 # BFMR database schema
 
+## Fresh Ubuntu bootstrap
+
+The [Ubuntu installer](../docs/UBUNTU_INSTALL.md) installs each fresh isolated
+schema, exposure hardening and `runtime_grants.psql` with its explicit runtime
+role. It does not rerun the legacy account/CCV seed or apply historical upgrades.
+Existing databases are refused. `scripts/verify_installation.ts` checks installed
+schema/Gmail privileges and cross-database role isolation without provider actions.
+
+
 ## Separate test database
 
 See [environment setup](../docs/DATABASE_MODES.md) for the explicit consistent
