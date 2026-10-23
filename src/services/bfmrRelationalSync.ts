@@ -245,7 +245,14 @@ export class BfmrRelationalSync {
         for (const observation of normalized) {
           if (!observation) continue;
           const current = knownByProviderId.get(observation.reserveId);
-          if (!current) { issues.push('LEGACY_RESERVATION_REQUIRES_CREATION_EVIDENCE'); continue; }
+          if (!current) {
+            // Prior completed/closed activity excluded at cutover is expected not to exist in PostgreSQL.
+            const isTerminal = observation.classification === 'TERMINAL' ||
+              ['paid', 'completed', 'cancelled', 'canceled', 'released', 'expired'].includes(observation.status.toLowerCase());
+            if (isTerminal) continue;
+            issues.push('LEGACY_RESERVATION_REQUIRES_CREATION_EVIDENCE');
+            continue;
+          }
           const deal = await tx.deals.findByBfmrId(observation.dealId);
           if (!deal || current.deal_id !== deal.id) issues.push('RESERVATION_DEAL_IDENTITY_MISMATCH');
           if (current.quantity !== observation.quantity || usdToCents(current.expected_payout) !== observation.expectedPayoutCents ||
@@ -268,6 +275,9 @@ export class BfmrRelationalSync {
         }
         const uniqueIssues = [...new Set(issues)];
         const promoted = uniqueIssues.length === 0;
+        if (!promoted) {
+          console.warn(`\n[BFMR Reconciliation] Detected issues blocking promotion: ${uniqueIssues.join(', ')}\n`);
+        }
         // Observations and review evidence are committed even when promotion is blocked.
         for (let index = 0; index < rows.length; index++) {
           const observation = normalized[index];
