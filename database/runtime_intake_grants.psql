@@ -1,0 +1,43 @@
+-- Existing installed operational schema only. Stop worker; review backup and role.
+-- Apply separately as its owner/admin; never rerun the fresh installer.
+\set ON_ERROR_STOP on
+\if :{?runtime_role}
+\else
+\set runtime_role bfmr_app
+\endif
+BEGIN;
+GRANT USAGE ON SCHEMA public TO :"runtime_role";
+GRANT SELECT ON public.gmail_intake_state, public.gmail_intake_runs,
+    public.gmail_intake_notifications, public.gmail_intake_work TO :"runtime_role";
+GRANT INSERT (account_namespace, mailbox, subscription, topic)
+    ON public.gmail_intake_state TO :"runtime_role";
+
+GRANT INSERT (id, account_namespace, state)
+    ON public.gmail_intake_runs TO :"runtime_role";
+
+GRANT INSERT
+    (subscription, message_id, account_namespace, run_id,
+     payload_sha256, history_id, rejection, state, consumed_at)
+    ON public.gmail_intake_notifications TO :"runtime_role";
+
+GRANT INSERT
+    (account_namespace, gmail_message_id, state,
+     payload, payload_sha256, received_at)
+    ON public.gmail_intake_work TO :"runtime_role";
+
+GRANT UPDATE
+    (consumed_cursor, history_gap, watch_baseline,
+     watch_expires_at, watch_renewed_at, updated_at,
+     legacy_source_sha256, legacy_import_fingerprint)
+    ON public.gmail_intake_state TO :"runtime_role";
+
+GRANT UPDATE (state, activated_at, stopped_at)
+    ON public.gmail_intake_runs TO :"runtime_role";
+
+GRANT UPDATE (state, consumed_at)
+    ON public.gmail_intake_notifications TO :"runtime_role";
+
+GRANT UPDATE (state, payload, updated_at)
+    ON public.gmail_intake_work TO :"runtime_role";
+
+COMMIT;

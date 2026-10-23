@@ -1,5 +1,52 @@
 # Implementation plan and evidence
 
+## 23 October 2026 — origin/work integration into main
+
+Merged `origin/work` at `044472e` with `origin/main` at `09f9d2b`. The actual
+screenshot revision is now available after fetching main; earlier statements
+that it was unavailable describe the initial review checkout. Main's Docker
+connection/configuration, headless-browser, intake/parser and email-inspection
+changes are retained. Both npm command sets remain available. The conflicting
+bulk incident-reset script is replaced by work's exact-message report/apply
+compatibility entrypoint; it does not terminate arbitrary advisory-lock holders,
+mark all mail complete, or rewrite the recovery inventory.
+
+TypeScript checking found that main's account-proof path could dereference a
+missing expected account. A missing/blank account now returns false before any
+page access. Merge validation: `npm run test:recovery` passed **22/22** existing
+focused offline cases, and `npm run typecheck:recovery` passed after this guard.
+These are reruns, not additions to the earlier 66-case evidence. No live worker,
+provider operation, SQL application or actual incident repair was performed.
+Native/provider acceptance remains open. Remote publication is verified
+separately after the merge commit is pushed.
+
+
+## 23 October 2026 — implementation committed; documentation handoff
+
+Recovery/operations fixes are committed locally as `ee183ef` on `work`.
+Implementation evidence is **66/66 focused offline cases passed**, source/scoped
+TypeScript checks and shell/whitespace checks; see the
+[amendment](RECOVERY_REVIEW_20261023.md#evidence-and-remaining-host-work).
+The initial push was rejected before publication. The user subsequently requested
+updated documentation and another commit/push to the configured repository.
+Remote publication, operator-host installation and production acceptance are
+separate checkpoints; none is inferred from a local commit or documentation.
+
+Next work is exact-message host diagnostics and privilege review, authoritative
+provider reconciliation with reviewed atomic repair, native concurrent-session
+ceiling acceptance and a replacement-database restore drill. Preserve the
+accepted cutover and Gmail cursor. This follow-up adds document QA, not a new
+software-test result or live action. See the [handoff](BFMR_Handoff.md#next-steps).
+
+## 23 October 2026 — recovery review amendment
+
+The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
+revision/grant diagnostics, atomic exact-message repair, creation-locked checkout
+payouts, partial-payment exposure accounting, and coordinated backup/restore.
+Earlier source/native acceptance claims retain their dated scope. These changes
+have not been installed on the operator host or used to clear its incident.
+
+
 ## 22 October 2026 — shared single-/multi-deal source implemented
 
 Extracted worker coordination to `bfmrWorker.ts`, per-message/per-reservation processing to `dealEmailWorkflow.ts`, reservation actions to `emailReservation.ts` and checkout orchestration to `reservedDealPurchase.ts`. `DealEmailWorkflowStore` persists append-only SQL checkpoints with optimistic revision checks and immutable identity for both message types. Single-deal mail now reaches the same guarded order path. Multi-deal reservation/evaluation barriers and existing financial/account/uncertainty safeguards remain. Report-first reconciliation supports freshly validated, reviewed local repair of safe interrupted states, atomic queue/snapshot/local-record repair and exact workflow-scoped email incident resolution; unknown effects cannot be replayed or invented. See [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md).

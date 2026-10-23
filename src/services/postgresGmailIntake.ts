@@ -1,3 +1,4 @@
+import { assertIntakePrivileges } from '../db/intakePrivileges';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { GmailQueueState, QueuedEmail } from './gmailIntakeQueue';
@@ -154,6 +155,7 @@ export class PostgresGmailIntakeStore {
   async validateSchema(): Promise<void> {
     this.validated = false;
     await this.transaction(async client => {
+      await assertIntakePrivileges(client);
       const expected: Record<string, Record<string, [string, boolean]>> = {
         gmail_intake_state: { account_namespace: ['text', true], mailbox: ['text', true], subscription: ['text', true], topic: ['text', true],
           consumed_cursor: ['text', false], history_gap: ['boolean', true], watch_baseline: ['text', false],

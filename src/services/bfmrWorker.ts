@@ -146,7 +146,7 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
     await workflows.assertNoUnfinished();
     await control.assertNoUncertainActions();
     const queued = await store.load();
-    if (queued?.work.some(item => item.state === 'PROCESSING')) throw new Error('Interrupted Gmail work requires reconciliation before startup.');
+    if (queued?.work.some(item => item.state === 'PROCESSING')) throw new Error('Interrupted Gmail work requires reconciliation before startup. Keep the worker stopped; use npm run recovery:diagnose with the exact private message ID, then review a recovery:report.');
     const orders = await orderLedger.load();
     if (orders.some(order => order.lastError || order.bfmrPurchaseIntentAt && !order.bfmrPurchaseId ||
         order.bfmrShipmentIntent && !order.bfmrShipmentId)) {

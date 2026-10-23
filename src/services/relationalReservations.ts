@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { numericToCents } from '../db/relationalRepositories';
 import type { RelationalRuntime } from './relationalRuntime';
 import type { ReservationReference } from './amazonEvaluation';
 import { readAmazonPurchaseEvidence } from './amazonEvaluation';
@@ -127,37 +128,32 @@ export async function readLockedPurchaseEvidence(
 ) {
   const observed = await (dependencies.readAmazonEvidence ?? readAmazonPurchaseEvidence)(reference);
   if (!observed) throw new Error('Live Amazon purchase evidence could not be read.');
-  let livePayoutCents: number | null = null;
-
-  await runtime.db.withTransaction(async tx => {
+  // Fetch outside the SQL transaction. Unknown provider evidence stops checkout;
+  // a database error must never be mistaken for an optional network refresh.
+  const identity = await runtime.db.withTransaction(async tx => {
     const reservation = await tx.reservations.findByBfmrId(reference.reserveId);
-    if (!reservation) throw new Error('Checkout reservation is missing in database.');
     const deal = await tx.deals.findByBfmrId(reference.dealId);
-    if (!deal) throw new Error('Checkout deal is missing in database.');
-
-    try {
-      const fetcher = dependencies.fetchLivePayout ?? fetchLiveBfmrDealPayout;
-      livePayoutCents = await fetcher(deal.slug);
-      await tx.reservations.updatePayout(reservation.id, livePayoutCents);
-      await tx.evidence.appendWorkflow({
-        reservationId: reservation.id,
-        correlationId: randomUUID(),
-        actionType: 'CHECKOUT_PAYOUT',
-        phase: 'CONFIRMED',
-        outcome: 'PAYOUT_REFRESHED',
-        evidence: {
-          bfmr_reservation_id: reference.reserveId,
-          bfmr_deal_id: reference.dealId,
-          slug: deal.slug,
-          previous_payout_cents: Math.round(Number(reservation.payout_per_item) * 100),
-          live_payout_cents: livePayoutCents,
-        },
-      });
-    } catch {
-      // Fall back to stored payout if live network call fails
-      livePayoutCents = Math.round(Number(reservation.payout_per_item) * 100);
-    }
+    if (!reservation || !deal || reservation.deal_id !== deal.id || reservation.quantity !== 1 ||
+        reservation.reservation_status_id !== '1') throw new Error('Checkout reservation/deal identity or status conflicts.');
+    return { reservation, deal };
   });
-
-  return { ...observed, payoutCents: livePayoutCents ?? observed.payoutCents };
+  const currentDealPayoutCents = await (dependencies.fetchLivePayout ?? fetchLiveBfmrDealPayout)(identity.deal.slug, undefined, reference.dealId);
+  if (!Number.isSafeInteger(currentDealPayoutCents) || currentDealPayoutCents < 0) throw new Error('Invalid current deal payout.');
+  const lockedPayoutCents = await runtime.db.withTransaction(async tx => {
+    const reservation = await tx.reservations.findByBfmrId(reference.reserveId);
+    const deal = await tx.deals.findByBfmrId(reference.dealId);
+    if (!reservation || !deal || reservation.id !== identity.reservation.id || reservation.deal_id !== deal.id ||
+        deal.id !== identity.deal.id || deal.slug !== identity.deal.slug || reservation.quantity !== 1 ||
+        reservation.reservation_status_id !== '1' || reservation.expected_payout !== identity.reservation.expected_payout ||
+        reservation.payout_per_item !== identity.reservation.payout_per_item) throw new Error('Checkout evidence changed during collection.');
+    const locked = numericToCents(reservation.expected_payout);
+    await tx.deals.upsert({ bfmrDealId: deal.bfmr_deal_id, slug: deal.slug, title: deal.title,
+      reimbursementAmountCents: currentDealPayoutCents, description: deal.description });
+    await tx.evidence.appendWorkflow({ reservationId: reservation.id, correlationId: randomUUID(),
+      actionType: 'CHECKOUT_PAYOUT', phase: 'CONFIRMED', outcome: 'CREATION_PAYOUT_PRESERVED', evidence: {
+        bfmr_reservation_id: reference.reserveId, bfmr_deal_id: reference.dealId,
+        locked_payout_cents: locked, current_deal_payout_cents: currentDealPayoutCents } });
+    return locked;
+  });
+  return { ...observed, payoutCents: lockedPayoutCents };
 }

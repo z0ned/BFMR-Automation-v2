@@ -10,6 +10,7 @@ export async function verifyBfmrAccountIdentity(page: Page, expectedAccount: str
   readRows: () => Promise<TrackerReservationRow[]> = readRecentReservedRows,
   config = process.env,
   prepareProofPage?: (proofPage: Page) => Promise<void>): Promise<boolean> {
+  if (!expectedAccount?.trim()) return false;
   const identitySelector = config.BFMR_ACCOUNT_IDENTITY_SELECTOR;
   const trackerUrl = config.BFMR_TRACKER_BROWSER_URL;
   const reserveId = config.BFMR_ACCOUNT_PROOF_RESERVE_ID;

@@ -1,5 +1,14 @@
 # BFMR Automation v2 — Solution Design Specification
 
+## 23 October 2026 — recovery review amendment
+
+The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
+revision/grant diagnostics, atomic exact-message repair, creation-locked checkout
+payouts, partial-payment exposure accounting, and coordinated backup/restore.
+Earlier source/native acceptance claims retain their dated scope. These changes
+have not been installed on the operator host or used to clear its incident.
+
+
 ## 22 October 2026 — unified message workflow source amendment
 
 The approved new-only single-/multi-deal purchase behavior now has one source implementation with durable per-message/per-reservation SQL snapshots and a strict reservation-pass barrier. Exact causal results precede local persistence/reporting; interrupted external effects require current provider reconciliation before reviewed local repair. Completed Gmail tombstones and historical email records cannot be enrolled into purchasing. See [shared workflow runbook](SHARED_EMAIL_WORKFLOW.md) for source paths and failure/recovery boundaries. Source/static checks do not establish behavioral, native-provider or production acceptance; the separate 14-day delivery rule remains unimplemented.

@@ -12,7 +12,7 @@ interface ColumnContract { type: string; required?: boolean }
 const column = (type: string, required = true): ColumnContract => ({ type, required });
 const requiredColumns: Record<string, Record<string, ColumnContract>> = {
   retailers: { id: column('bigint'), name: column('text'), primary_url: column('text') },
-  retailer_accounts: { id: column('bigint'), retailer_id: column('bigint'), email: column('text'), ccv: column('text', false),
+  retailer_accounts: { id: column('bigint'), retailer_id: column('bigint'), email: column('text'),
     retailer_account_ranking: column('integer') },
   reservation_status: { id: column('bigint'), description: column('text') },
   order_status: { id: column('bigint'), description: column('text') },

@@ -1,5 +1,48 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — origin/work integration into main
+
+Merged `origin/work` at `044472e` with `origin/main` at `09f9d2b`. The actual
+screenshot revision is now available after fetching main; earlier statements
+that it was unavailable describe the initial review checkout. Main's Docker
+connection/configuration, headless-browser, intake/parser and email-inspection
+changes are retained. Both npm command sets remain available. The conflicting
+bulk incident-reset script is replaced by work's exact-message report/apply
+compatibility entrypoint; it does not terminate arbitrary advisory-lock holders,
+mark all mail complete, or rewrite the recovery inventory.
+
+TypeScript checking found that main's account-proof path could dereference a
+missing expected account. A missing/blank account now returns false before any
+page access. Merge validation: `npm run test:recovery` passed **22/22** existing
+focused offline cases, and `npm run typecheck:recovery` passed after this guard.
+These are reruns, not additions to the earlier 66-case evidence. No live worker,
+provider operation, SQL application or actual incident repair was performed.
+Native/provider acceptance remains open. Remote publication is verified
+separately after the merge commit is pushed.
+
+
+## 23 October 2026 — recovery review amendment
+
+The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
+revision/grant diagnostics, atomic exact-message repair, creation-locked checkout
+payouts, partial-payment exposure accounting, and coordinated backup/restore.
+Earlier source/native acceptance claims retain their dated scope. These changes
+have not been installed on the operator host or used to clear its incident.
+
+Validation for this amendment: **66/66 focused offline cases passed**, no
+failures/skips, plus source and scoped script/test TypeScript checks, shell syntax
+and whitespace checks. Exact commands and limitations are in the amendment;
+this does not add reruns to older historical case totals or establish native
+restore/concurrency/provider acceptance.
+
+Implementation checkpoint: **`ee183ef`** on `work`, based on `575f9bd`. Its first
+push was blocked before publication by automatic approval review. The subsequent
+user request covers documentation updates and another commit/push to the
+configured origin; verify the remote ref separately from deployment. This
+follow-up runs document QA only. No software tests or live operations were rerun.
+See the [current handoff](BFMR_Handoff.md#current-recovery-checkpoint).
+
+
 ## 22 October 2026 — shared durable email workflow source
 
 Production coordination now lives in `src/services/bfmrWorker.ts` and `dealEmailWorkflow.ts`; the test-named script is a thin explicitly invoked startup-test wrapper. Single- and multi-new-deal messages share the same reservation-first/evaluation/purchase phases and guards. Append-only SQL snapshots bind per-message/per-reservation intent, causal confirmation, source identity and account. Newly processed SQL PROCESSING mail only may enroll; completed or historical mail cannot be backfilled. `reconcile_deal_email.ts` supplies read-only report/freshly revalidated, reviewed-hash local repair without provider replay. Queue repair, scoped incident resolution and supported local records commit together. Exact configuration, action boundaries, unsupported uncertain outcomes and acceptance limits are in [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md).
@@ -21,7 +64,7 @@ Evidence: `npm run typecheck`, strict TypeScript checking of `scripts/*.ts`, and
 **Prepared:** 19 October 2026  
 **Project:** BFMR Automation v2  
 **Source baseline:** [Solution Design Specification v20](https://github.com/z0ned/BFMR-Automation-v2/blob/21ef194/docs/BFMR_Solution_Design_Specification_v20.md), compiled 16 October 2026
-**Updated:** 22 October 2026
+**Updated:** 23 October 2026
 
 **Change type:** Current relational source integration, offline validation, configuration and controlled-cutover reference. No actual schema installation, legacy cutover, provider action or deployment was performed.
 

@@ -2,8 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseIncomingEmail } from '../src/services/emailParser';
 import { fetchLiveBfmrDealPayout } from '../src/services/relationalDealTerms';
-import { readLockedPurchaseEvidence } from '../src/services/relationalReservations';
-import type { RelationalRuntime } from '../src/services/relationalRuntime';
 
 test('parseIncomingEmail classifies payout increase as informational and not a new deal', () => {
   const raw = {
@@ -86,77 +84,10 @@ test('fetchLiveBfmrDealPayout fetches latest payout price in cents from BFMR Dea
   assert.equal(payoutCents, 14999);
 });
 
-test('readLockedPurchaseEvidence calls live BFMR Deal API at checkout and updates reservations.payout_per_item', async () => {
-  let updatedReservationPayout: { id: string; payoutPerItemCents: number } | null = null;
-  const workflowEvents: any[] = [];
-
-  const mockRuntime = {
-    db: {
-      withTransaction: async (fn: (tx: any) => Promise<any>) => {
-        const mockTx = {
-          reservations: {
-            findByBfmrId: async (id: string) => ({
-              id: 'res-101',
-              bfmr_reservation_id: id,
-              deal_id: 'deal-202',
-              payout_per_item: '139.99', // Old payout rate at creation
-              quantity: 1,
-            }),
-            updatePayout: async (id: string, payoutPerItemCents: number) => {
-              updatedReservationPayout = { id, payoutPerItemCents };
-              return { id, payout_per_item: (payoutPerItemCents / 100).toFixed(2) };
-            },
-          },
-          deals: {
-            findByBfmrId: async (id: string) => ({
-              id: 'deal-202',
-              bfmr_deal_id: id,
-              slug: 'sample-product-a',
-              title: 'Sample Product A',
-            }),
-          },
-          evidence: {
-            appendWorkflow: async (wf: any) => { workflowEvents.push(wf); },
-          },
-        };
-        return fn(mockTx);
-      },
-    },
-    sync: {
-      readLockedPayoutCents: async () => 13999,
-    },
-  } as unknown as RelationalRuntime;
-
-  const mockReference = {
-    dealId: 'deal-202',
-    reserveId: 'reserve-303',
-    quantity: 1,
-    payoutCents: 13999,
-  };
-
-  // Mock live payout returning $149.99 (payout increased)
-  const mockFetchLivePayout = async (_slug: string) => 14999;
-  const mockReadAmazonEvidence = async () => ({
-    productUrl: 'https://www.amazon.com/dp/B09V3HN1KC',
-    payoutCents: 13999,
-  });
-
-  const evidence = await readLockedPurchaseEvidence(mockRuntime, mockReference, {
-    fetchLivePayout: mockFetchLivePayout,
-    readAmazonEvidence: mockReadAmazonEvidence,
-  });
-
-  // Check that the returned evidence contains the fresh live payout price
-  assert.equal(evidence.payoutCents, 14999);
-  // Check that reservations.payout_per_item was updated in the database
-  assert.ok(updatedReservationPayout);
-  assert.equal(updatedReservationPayout.payoutPerItemCents, 14999);
-  // Check that workflow audit evidence recorded the refresh
-  assert.equal(workflowEvents.length, 1);
-  assert.equal(workflowEvents[0].actionType, 'CHECKOUT_PAYOUT');
-  assert.equal(workflowEvents[0].outcome, 'PAYOUT_REFRESHED');
-  assert.equal(workflowEvents[0].evidence.live_payout_cents, 14999);
-  assert.equal(workflowEvents[0].evidence.previous_payout_cents, 13999);
+test('current deal payout rejects conflicting aliases and wrong deal identities', async () => {
+  const request = (deal: object) => (async () => new Response(JSON.stringify({ deal }), { status: 200 })) as typeof fetch;
+  await assert.rejects(fetchLiveBfmrDealPayout('synthetic', request({ deal_id: 'D101', payout: '80.00', payout_price: '95.00' }), 'D101'), /conflicting/);
+  await assert.rejects(fetchLiveBfmrDealPayout('synthetic', request({ deal_id: 'D102', payout: '80.00' }), 'D101'), /identity conflicts/);
 });
 
 test('parseIncomingEmail classifies NEW DEAL with above retail as a single actionable deal', () => {

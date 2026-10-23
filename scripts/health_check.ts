@@ -1,13 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { Client } from 'pg';
-import { getDatabaseConfig, connectDatabaseClient } from './validate_database_environment';
+import type { Client } from 'pg';
 
 export interface HealthStatus {
   database: 'HEALTHY' | 'UNHEALTHY';
   worker: 'RUNNING' | 'STOPPED' | 'DEGRADED' | 'NOT_STARTED';
-  exposure: 'OK' | 'EXCEEDED';
+  exposure: 'OK' | 'EXCEEDED' | 'UNKNOWN';
   details: {
     postgresVersion?: string;
     workerPid?: number;
@@ -17,19 +16,21 @@ export interface HealthStatus {
   };
 }
 
-export async function checkSystemHealth(): Promise<HealthStatus> {
+export async function checkSystemHealth(dependencies: { connect?: () => Promise<Pick<Client, 'query' | 'end'>>; heartbeatPath?: string } = {}): Promise<HealthStatus> {
   const issues: string[] = [];
   let dbStatus: HealthStatus['database'] = 'UNHEALTHY';
   let workerStatus: HealthStatus['worker'] = 'NOT_STARTED';
-  let exposureStatus: HealthStatus['exposure'] = 'OK';
+  let exposureStatus: HealthStatus['exposure'] = 'UNKNOWN';
   let postgresVersion: string | undefined;
   let workerPid: number | undefined;
   let workerLastHeartbeat: string | undefined;
-  let exposureDollars = 0;
+  let exposureDollars: number | undefined;
+  let client: Pick<Client, 'query' | 'end'> | undefined;
 
   // 1. Database Check
   try {
-    const client = await connectDatabaseClient();
+    const connect = dependencies.connect ?? (await import('./validate_database_environment')).connectDatabaseClient;
+    client = await connect();
 
     const verRes = await client.query<{ full: string }>('SELECT version() as full;');
     postgresVersion = verRes.rows[0].full.split(' ')[1];
@@ -38,14 +39,14 @@ export async function checkSystemHealth(): Promise<HealthStatus> {
     // 2. Open Exposure Check
     try {
       const expRes = await client.query<{ total: string }>(`
-        SELECT COALESCE(SUM(r.expected_payout), 0) AS total
+        SELECT COALESCE(SUM(GREATEST(r.expected_payout - COALESCE(re.amount, 0), 0)), 0) AS total
         FROM public.reservations r
+        LEFT JOIN public.reimbursements re ON re.reservation_id=r.id
         WHERE r.reservation_status_id != 2
-          AND NOT EXISTS (
-            SELECT 1 FROM public.reimbursements re WHERE re.reservation_id = r.id
-          );
       `);
       exposureDollars = parseFloat(expRes.rows[0].total);
+      if (!Number.isFinite(exposureDollars)) throw new Error('Invalid exposure result.');
+      exposureStatus = 'OK';
       if (exposureDollars > 200.00) {
         exposureStatus = 'EXCEEDED';
         issues.push(`Open financial exposure ($${exposureDollars.toFixed(2)}) exceeds configured limit of $200.00`);
@@ -54,14 +55,15 @@ export async function checkSystemHealth(): Promise<HealthStatus> {
       issues.push(`Failed to calculate exposure: ${err.message}`);
     }
 
-    await client.end();
   } catch (err: any) {
     dbStatus = 'UNHEALTHY';
     issues.push(`Database connection failed: ${err.message}`);
+  } finally {
+    await client?.end().catch(() => { issues.push('Database diagnostic connection did not close cleanly.'); });
   }
 
   // 3. Worker Heartbeat Check
-  const heartbeatPath = process.env.BFMR_HEARTBEAT_PATH || path.join(os.tmpdir(), 'bfmr-worker-heartbeat.json');
+  const heartbeatPath = dependencies.heartbeatPath || process.env.BFMR_HEARTBEAT_PATH || path.join(os.tmpdir(), 'bfmr-worker-heartbeat.json');
   try {
     if (fs.existsSync(heartbeatPath)) {
       const raw = fs.readFileSync(heartbeatPath, 'utf-8');
@@ -70,6 +72,7 @@ export async function checkSystemHealth(): Promise<HealthStatus> {
       workerLastHeartbeat = data.timestamp;
 
       const ageMs = Date.now() - new Date(data.timestamp).getTime();
+      if (!Number.isFinite(ageMs) || ageMs < 0 || !Number.isSafeInteger(data.pid) || data.pid < 1) throw new Error('Invalid worker heartbeat.');
       if (data.status === 'RUNNING') {
         if (ageMs > 120000) {
           // Heartbeat older than 2 minutes
@@ -126,7 +129,7 @@ export function printHealthReport(health: HealthStatus): void {
   console.log(`  Worker:    ${workerColor}${bold}${health.worker}${reset} (PID: ${health.details.workerPid ?? 'None'}, Last Heartbeat: ${health.details.workerLastHeartbeat ?? 'None'})`);
 
   const expColor = health.exposure === 'OK' ? green : red;
-  console.log(`  Exposure:  ${expColor}${bold}${health.exposure}${reset} ($${health.details.exposureDollars?.toFixed(2) ?? '0.00'} open / $200.00 max)`);
+  console.log(`  Exposure:  ${expColor}${bold}${health.exposure}${reset} ($${health.details.exposureDollars?.toFixed(2) ?? 'unknown'} open / $200.00 max)`);
 
   if (health.details.issues.length > 0) {
     console.log(`\n${yellow}${bold}Reported Issues:${reset}`);
@@ -143,7 +146,7 @@ if (import.meta.url === `file://${process.argv[1]}` || (process.argv[1] && path.
   checkSystemHealth()
     .then(health => {
       printHealthReport(health);
-      const isCritical = health.database === 'UNHEALTHY' || health.worker === 'DEGRADED';
+      const isCritical = health.database === 'UNHEALTHY' || health.worker !== 'RUNNING' || health.exposure !== 'OK';
       process.exit(isCritical ? 1 : 0);
     })
     .catch(err => {
