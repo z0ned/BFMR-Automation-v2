@@ -81,6 +81,13 @@ Implemented automated backup and restore tooling (`commit 7a697d1`):
 
 Verified on native PostgreSQL 17 via `npm run validate-db`. Stored generated column `expected_payout = (quantity * payout_per_item)` is automatically calculated and stored by the engine. Least-privilege runtime role grants allow status transitions and live checkout payout updates while rejecting arbitrary structural mutations.
 
+### Production Database Optimizations & Financial Exposure Hard Cap (VALIDATED)
+
+Applied and validated live on native PostgreSQL 17 via `npm run validate-db`:
+- Indexes applied: `idx_workflow_evidence_cutover`, `idx_reservations_open_exposure`, and `idx_orders_order_id`.
+- Trigger applied: `trg_enforce_exposure_cap` on `public.reservations`.
+- Active Probe F verified: PostgreSQL strictly rejected a $250.00 reservation attempt with error `23514 check_violation`, providing engine-level defense-in-depth against exceeding the $200.00 exposure boundary.
+
 ## Remaining application work
 
 ### Tracking across ranked retailer accounts
