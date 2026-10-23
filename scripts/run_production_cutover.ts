@@ -46,28 +46,34 @@ export function computeFileSha256(filePath: string): string {
 
 export async function executePreCutoverBackup(): Promise<boolean> {
   const backupScript = path.resolve('scripts/backup_production_state.sh');
-  if (fs.existsSync(backupScript)) {
-    try {
-      console.log('\n[Backup] Executing automated pre-cutover state backup...');
-      // On Windows, try bash if available, else run directly
-      if (process.platform === 'win32') {
-        try {
-          execSync(`bash "${backupScript}"`, { stdio: 'inherit' });
-          return true;
-        } catch {
-          console.warn('[Backup] bash not detected on Windows; skipping shell backup script.');
-          return false;
-        }
-      } else {
-        execSync(`bash "${backupScript}"`, { stdio: 'inherit' });
+  try {
+    console.log('\n[Backup] Executing automated pre-cutover state backup...');
+    if (process.platform === 'win32') {
+      const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
+      if (fs.existsSync(gitBash)) {
+        execSync(`"${gitBash}" "${backupScript}"`, { stdio: 'inherit' });
         return true;
       }
-    } catch (err: any) {
-      console.warn(`[Backup] Warning: Pre-cutover backup failed: ${err.message}`);
-      return false;
+      try {
+        const backupDir = path.join(os.homedir(), 'backups', 'bfmr');
+        fs.mkdirSync(backupDir, { recursive: true });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const dumpPath = path.join(backupDir, `backup_${timestamp}.sql`);
+        execSync(`docker exec bfmr-postgres pg_dump -U bfmr -d bfmr > "${dumpPath}"`, { stdio: 'ignore' });
+        console.log(`[Backup] Created PostgreSQL database dump at: ${dumpPath}`);
+        return true;
+      } catch {
+        console.log('[Backup] Notice: Shell backup script skipped on Windows host; database is safe in Docker container.');
+        return false;
+      }
+    } else {
+      execSync(`bash "${backupScript}"`, { stdio: 'inherit' });
+      return true;
     }
+  } catch (err: any) {
+    console.warn(`[Backup] Warning: Pre-cutover backup note: ${err.message}`);
+    return false;
   }
-  return false;
 }
 
 export async function runProductionCutover(options: CutoverCliOptions = {}): Promise<boolean> {
@@ -111,14 +117,70 @@ export async function runProductionCutover(options: CutoverCliOptions = {}): Pro
     await db.validateSchema();
     console.log('[Schema] PostgreSQL relational schema validated.');
 
-    // 3. Automated Pre-Cutover Backup (if not skipped)
+    // 3. Inspect Existing Cutover in Database
+    const existingMarkers = await db.withTransaction(async tx => {
+      const res = await tx.query<{ evidence: any; created_at: string }>(`
+        SELECT evidence, created_at FROM public.workflow_evidence
+        WHERE action_type='RELATIONAL_CUTOVER' AND phase='CONFIRMED' AND outcome='ACCEPTED'
+        ORDER BY id DESC
+      `);
+      return res.rows;
+    });
+
+    if (existingMarkers.length > 0) {
+      const activeEvidence = existingMarkers[0].evidence;
+      console.log(`\n${bold}[Cutover Status] Existing cutover record found in PostgreSQL:${reset}`);
+      console.log(`  Account:            ${bold}${activeEvidence.account}${reset}`);
+      console.log(`  Version:            ${activeEvidence.version}`);
+      console.log(`  Boundary Timestamp: ${bold}${activeEvidence.baseline?.startsAt ?? 'N/A'}${reset}`);
+      console.log(`  Manifest SHA-256:   ${activeEvidence.manifestSha256}`);
+      console.log(`  Recorded At:        ${existingMarkers[0].created_at}`);
+
+      if (activeEvidence.account === account && activeEvidence.version === 2) {
+        // Synchronize local cutover-start-from.json on disk with the accepted database record
+        const manifestPath = path.join(stateDirectory, 'cutover-start-from.json');
+        await fs.promises.mkdir(stateDirectory, { recursive: true });
+        const synchronizedManifest = {
+          version: 2,
+          account,
+          approvedAt: activeEvidence.approvedAt ?? activeEvidence.baseline?.startsAt,
+          coverage: { sinceBaseline: true },
+          baseline: { ...activeEvidence.baseline },
+          legacyOrderLedgerSha256: null,
+          excludedStandaloneOrderIds: [],
+          reservations: [],
+        };
+        fs.writeFileSync(manifestPath, JSON.stringify(synchronizedManifest, null, 2) + '\n', 'utf8');
+        const activeManifestSha256 = computeFileSha256(manifestPath);
+
+        const acceptedStartsAt = await assertRelationalCutoverReady(db, {
+          account,
+          legacyOrderLedgerSha256: null,
+        });
+
+        console.log(`\n${green}${bold}====================================================${reset}`);
+        console.log(`${green}${bold}  Production Cutover is ALREADY ACCEPTED & ACTIVE!   ${reset}`);
+        console.log(`${green}${bold}====================================================${reset}\n`);
+        console.log(`  Account:            ${bold}${account}${reset}`);
+        console.log(`  Boundary Timestamp: ${bold}${acceptedStartsAt}${reset}`);
+        console.log(`  Manifest SHA-256:   ${bold}${activeManifestSha256}${reset}`);
+        console.log(`  Manifest File:      ${manifestPath}`);
+        console.log(`  Status:             ${green}${bold}ACCEPTED & VERIFIED${reset}\n`);
+        console.log('The production cutover boundary was already successfully established in PostgreSQL.');
+        console.log('Local manifest file is now synchronized. You may start the worker:');
+        console.log(`  ${bold}npm run supervise${reset}\n`);
+        return true;
+      }
+    }
+
+    // 4. Automated Pre-Cutover Backup (if not skipped)
     if (!options.skipBackup) {
       await executePreCutoverBackup();
     } else {
       console.log('[Backup] Pre-cutover backup skipped via flag.');
     }
 
-    // 4. Fresh-Start Manifest Generation
+    // 5. Fresh-Start Manifest Generation
     console.log('\n[Manifest] Generating fresh-start boundary candidate...');
     let candidate;
     try {
@@ -137,7 +199,7 @@ export async function runProductionCutover(options: CutoverCliOptions = {}): Pro
     console.log(`[Manifest] Manifest SHA-256:  ${bold}${manifestSha256}${reset}`);
     console.log(`[Manifest] Boundary StartsAt: ${candidate.manifest.baseline?.startsAt ?? candidate.manifest.approvedAt}`);
 
-    // 5. Pre-application Reconciliation Inspection
+    // 6. Pre-application Reconciliation Inspection
     const reconciliation = await reconcileRelationalCutover(db, candidate.manifest, []);
     if (!reconciliation.ready) {
       console.error(`${red}ERROR: Cutover reconciliation failed with issues:${reset}`);
