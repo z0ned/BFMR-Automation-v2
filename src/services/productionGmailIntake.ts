@@ -73,8 +73,11 @@ export class ProductionGmailIntake {
 
   private fail(error: unknown): void {
     if (this.failure || this.stopped) return;
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`\n[Gmail Intake Fatal Error] ${msg}`);
+    if ((error as any)?.stack) console.error((error as any).stack);
     this.failure = error instanceof GmailHistoryGapError ? error
-      : new Error('Production Gmail intake stopped; inspect its durable state and provider configuration before restarting.');
+      : new Error(`Production Gmail intake stopped (${msg}); inspect its durable state and provider configuration before restarting.`);
     clearTimeout(this.watchTimer);
     this.abort.abort();
     this.wake();
