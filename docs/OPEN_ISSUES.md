@@ -98,8 +98,6 @@ Implemented and covered by 10 unit tests in `tests/payment_intake.test.ts` and `
 
 Implemented and covered by 11 unit tests in `tests/delivery_cutoff.test.ts` (commit `b1957be`): exactly 14 calendar days passes; later dates reject checkout, trigger Amazon cart purging via `removePreparedAmazonCartItem`, and cancel the reservation with readback from My Tracker. Date ranges use the latest date in the range; explicitly absent estimates proceed under standard guards; ambiguous or contradictory estimates stop for review without speculative cancellation. Calendar day calculation uses `America/New_York` converted to UTC midnight to avoid DST hour skew.
 
-Implemented and covered by 11 unit tests in `tests/delivery_cutoff.test.ts` (commit `b1957be`): exactly 14 calendar days passes; later dates reject checkout, trigger Amazon cart purging via `removePreparedAmazonCartItem`, and cancel the reservation with readback from My Tracker. Date ranges use the latest date in the range; explicitly absent estimates proceed under standard guards; ambiguous or contradictory estimates stop for review without speculative cancellation. Calendar day calculation uses `America/New_York` converted to UTC midnight to avoid DST hour skew.
-
 ### Operator repair for uncertain actions and replacements
 
 Complete reviewed restart/repair procedures for uncertain reservation, checkout, BFMR Purchase/Shipment and notification outcomes. Resolve replacement/refund cases within the one-order-per-reservation model without fabricating identities, discarding evidence or silently inserting another order. Recovery must reconcile authoritative outcomes before any separately authorized retry.
