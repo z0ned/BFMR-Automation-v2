@@ -14,6 +14,13 @@ and whitespace checks. Exact commands and limitations are in the amendment;
 this does not add reruns to older historical case totals or establish native
 restore/concurrency/provider acceptance.
 
+Implementation checkpoint: **`ee183ef`** on `work`, based on `575f9bd`. Its first
+push was blocked before publication by automatic approval review. The subsequent
+user request covers documentation updates and another commit/push to the
+configured origin; verify the remote ref separately from deployment. This
+follow-up runs document QA only. No software tests or live operations were rerun.
+See the [current handoff](BFMR_Handoff.md#current-recovery-checkpoint).
+
 
 ## 22 October 2026 — shared durable email workflow source
 
@@ -36,7 +43,7 @@ Evidence: `npm run typecheck`, strict TypeScript checking of `scripts/*.ts`, and
 **Prepared:** 19 October 2026  
 **Project:** BFMR Automation v2  
 **Source baseline:** [Solution Design Specification v20](https://github.com/z0ned/BFMR-Automation-v2/blob/21ef194/docs/BFMR_Solution_Design_Specification_v20.md), compiled 16 October 2026
-**Updated:** 22 October 2026
+**Updated:** 23 October 2026
 
 **Change type:** Current relational source integration, offline validation, configuration and controlled-cutover reference. No actual schema installation, legacy cutover, provider action or deployment was performed.
 

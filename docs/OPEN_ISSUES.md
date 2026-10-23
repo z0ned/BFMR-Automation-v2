@@ -8,6 +8,12 @@ Remove an item when its stated completion evidence is recorded in the implementa
 
 ## Recovery review: operator-host acceptance remains open
 
+Implementation is committed as `ee183ef`; its first push was blocked before
+publication. Verify the final remote `work` ref and operator-installed revision
+independently. The 66 passing offline cases cover source behavior only; the
+[handoff](BFMR_Handoff.md#next-steps) orders the remaining host work. Do not create
+a new cutover boundary or reset intake to work around the interrupted message.
+
 - Deploy/identify the reviewed revision and inspect the exact interrupted message
   from the supplied screenshot. Its reported `09f9d2b` object was unavailable in
   this checkout. No actual incident or queue row has been cleared.

@@ -1,5 +1,18 @@
 # Production Gmail intake — implementation and operator runbook
 
+## 23 October 2026 — interrupted-work recovery
+
+Commit `ee183ef` adds source/revision and intake-privilege diagnostics, startup
+privilege checks and exact-message atomic repair receipts. Use the
+[recovery amendment](RECOVERY_REVIEW_20261023.md) and
+[current handoff](BFMR_Handoff.md#next-steps) for commands and host acceptance.
+The screenshot's failed reconciliation has not been repaired here. Never clear
+all PROCESSING work, reset a cursor, reinitialize Gmail or replay completed mail
+to make startup pass. `npm run unblock` without arguments refuses a bulk reset.
+The first publication attempt was blocked; verify the remote and installed
+revisions separately. This documentation update performs no provider or SQL work.
+
+
 **Updated 22 October 2026 — source implementation and offline tests.** The source was implemented on 21 October; the user subsequently requested offline intake testing. Current results and limits are recorded below. No native database installation/import, Gmail watch, Pub/Sub connection, BFMR/Amazon action or deployment was invoked. Earlier test counts describe their own revisions.
 
 ## Contract and source

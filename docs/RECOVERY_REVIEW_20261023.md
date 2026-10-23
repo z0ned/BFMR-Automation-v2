@@ -4,6 +4,23 @@ This amendment supersedes conflicting payout-refresh, bulk-unblock, restore and
 exposure-acceptance descriptions in the 22 October material. It records source
 changes and offline evidence, not a repair of the operator's installed system.
 
+## Implementation and publication checkpoint
+
+The reviewed fixes are committed as **`ee183ef`** (`fix: harden incident recovery
+and operational safeguards`) on `work`, based on `575f9bd`. The configured remote
+is `https://github.com/z0ned/BFMR-Automation-v2.git`. The first push was rejected
+by automatic approval review as an unverified external-destination transfer; it
+did not publish the commit. The user then requested this documentation update
+and another commit/push to that configured repository. Verify the resulting
+remote `work` ref before treating any publication as successful.
+
+This follow-up changes documentation only. The 66 passing cases below belong to
+the implementation validation; they were not rerun or counted again. Publication
+does not install the code, grant database privileges, resolve the screenshot's
+message, or establish native/provider acceptance. The
+[handoff](BFMR_Handoff.md#current-recovery-checkpoint) identifies the next host
+steps without reopening the accepted start-from boundary.
+
 ## Revision and interrupted-message recovery
 
 The supplied screenshot identifies commit `09f9d2b`; that object was unavailable

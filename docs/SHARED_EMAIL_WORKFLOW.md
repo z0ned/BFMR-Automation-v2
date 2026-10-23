@@ -8,6 +8,11 @@ payouts, partial-payment exposure accounting, and coordinated backup/restore.
 Earlier source/native acceptance claims retain their dated scope. These changes
 have not been installed on the operator host or used to clear its incident.
 
+The implementation checkpoint is `ee183ef` on `work`; the initial push was
+blocked before publication. The [handoff](BFMR_Handoff.md#next-steps) records the
+next host checks. Its 66-case focused validation does not establish native
+provider recovery. This documentation follow-up adds no software-test evidence.
+
 
 **22 October 2026 — source implementation; behavioral/native/provider acceptance remains pending.**
 
@@ -15,7 +20,7 @@ have not been installed on the operator host or used to clear its incident.
 
 `npm start` loads private configuration in `scripts/run_bfmr.ts` and invokes `src/services/bfmrWorker.ts`. The worker delegates both qualifying message types to `dealEmailWorkflow.ts`. `scripts/test_real_email_e2e.ts` is a compatibility/test entrypoint that explicitly injects the temporary startup reservation; production does not import or invoke it. `reservedDealPurchase.ts` owns checkout orchestration; the historical purchase script re-exports that implementation.
 
-Authenticated single-new-deal and supported multiple-new-deal emails now use the same phases and safeguards. The single-deal early return is removed. Every announced distinct offer receives its quantity-one reservation pass before any supplier evaluation; an uncertain reservation stops the batch. All confirmed offers finish supplier evaluation/cancellation before purchasing starts. A bundle remains one offer. Duplicate/open deals and explicitly unavailable pages remain skips. Existing account, supplier, gift, free non-Prime delivery, $100 complete-total, locked-payout coverage and $200 exposure guards apply to both message types. The separate 14-day delivery rule remains unimplemented.
+Authenticated single-new-deal and supported multiple-new-deal emails now use the same phases and safeguards. The single-deal early return is removed. Every announced distinct offer receives its quantity-one reservation pass before any supplier evaluation; an uncertain reservation stops the batch. All confirmed offers finish supplier evaluation/cancellation before purchasing starts. A bundle remains one offer. Duplicate/open deals and explicitly unavailable pages remain skips. Existing account, supplier, gift, free non-Prime delivery, $100 complete-total, locked-payout coverage and $200 exposure guards apply to both message types. Later 22 October source adds the 14-day latest-delivery check; its provider acceptance remains separate.
 
 No live workflow, provider action, schema installation, SQL import, repair or deployment was invoked by this source change. Source is not permission to run a worker or apply a repair.
 

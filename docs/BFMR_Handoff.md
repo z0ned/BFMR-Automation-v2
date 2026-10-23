@@ -1,6 +1,28 @@
 # BFMR_Handoff
 
-**As of 22 October 2026.** Compact context for the next LLM; consult linked references for implementation details rather than reconstructing historical decisions.
+**As of 23 October 2026.** Compact context for the next LLM; consult linked references for implementation details rather than reconstructing historical decisions.
+
+## Current recovery checkpoint
+
+Implementation commit **`ee183ef`**, on branch `work`, addresses the 23 October
+review. The [recovery amendment](RECOVERY_REVIEW_20261023.md) owns exact commands,
+source paths, failure boundaries and evidence. It supersedes older claims about
+bulk unblocking, refreshing reservation payouts and safe restore/ceiling acceptance.
+The first push attempt was rejected by automatic approval review before remote
+publication; a local commit is not evidence that the operator host has the fixes.
+The user subsequently requested documentation updates and another commit/push.
+Verify the remote branch and installed revision separately; do not infer deployment.
+
+The screenshot's repair failed on `gmail_intake_work` permissions, and startup
+then found interrupted `PROCESSING` mail. No real queue row or incident has been
+cleared here. Keep the worker/supervisor stopped pending exact-message diagnostics,
+authoritative provider reconciliation and a reviewed report/apply repair.
+
+The focused implementation validation passed **66/66 cases**, plus source and
+scoped TypeScript, shell syntax and whitespace checks. This documentation refresh
+adds document QA only; it does not rerun or increase those software-test totals.
+Native concurrent-session ceiling checks, a replacement-database restore drill,
+installed role/grant acceptance and live provider outcomes remain open.
 
 ## Goal and authority
 
@@ -12,16 +34,16 @@ Work in `BFMR-Automation-v2` (`/workspace/BFMR-Automation-v2` in this workspace)
 
 Completed work includes relational business persistence, production push-intake source, offline validation and consolidation of schema/application into one repository. **The project is not an accepted unattended production service.** No actual schema installation, historical cutover or deployment was performed by that work; live provider contracts remain open.
 
-- Worker: `npm start` → `scripts/run_bfmr.ts`; shared processing lives in `src/services/bfmrWorker.ts` and `dealEmailWorkflow.ts`; the test-named script is now a thin compatibility/test wrapper. Production startup skips the temporary test reservation. New source implements Gmail watch/owned Pub/Sub StreamingPull, SQL notification-before-ACK, atomic admissions/cursor progress, daily watch renewal and startup/reconnect catch-up. No periodic Gmail polling or Inbox sweep. Offline intake tests are available through `npm run test:gmail-intake`; native SQL/provider/service acceptance remains open. See current results in the [intake runbook](GMAIL_PRODUCTION_INTAKE.md).
+- Worker: `npm start` → `scripts/run_bfmr.ts`; shared processing lives in `src/services/bfmrWorker.ts` and `dealEmailWorkflow.ts`; the test-named script is now a thin compatibility/test wrapper. Production startup skips the temporary test reservation. New source implements Gmail watch/owned Pub/Sub StreamingPull, SQL notification-before-ACK, atomic admissions/cursor progress, daily watch renewal and startup/reconnect catch-up. No periodic Gmail polling or Inbox sweep. The 23 October run directly exercised `tests/postgres_gmail_intake.test.ts` (14/14); native SQL/provider/service acceptance remains open. See current results in the [intake runbook](GMAIL_PRODUCTION_INTAKE.md).
 - Implemented source includes quantity-one website reservations, exact confirmation, supplier evaluation/cancellation, multi-deal Amazon ordering, tracking, BFMR Purchase/Shipment writes and daily discrepancy alerts. Each still depends on current verified provider contracts.
 - Relational runtime implements schema/account/cutover validation, advisory ownership, serializable transactions, locked creation terms, reconciliation, SQL order/shipment ledger, verified payments and exposure. Require one retailer named `Amazon`, then select its account by lowest `retailer_account_ranking`; multiple accounts are valid; zero linked accounts stop startup. IDs/email/rank come only from SQL, never `ccv`. Pin the account for the run; changed selection stops without switching. Startup does no DDL/import; ownership loss stops work and closes the browser. Operator-reported native ranking/schema/account checks passed; see the implementation reference for scope and remaining acceptance.
 - SQL business records, dedicated SQL Gmail intake, private batch/recovery/status/notification journals, and the legacy JSONB engine aggregate remain separate stores. No transaction spans them and external providers. The active email runner uses SQL business records; the legacy/manual order file remains a preserved cutover/hash source and standalone manual store. Evidence rows are not retry commands.
 - Single- and multi-deal ordering now share durable SQL per-message/per-reservation action states and purchasing guards. New PROCESSING mail only can enroll. Interrupted work requires report-first reconciliation and reviewed local repair; completed messages cannot be backfilled. See [SHARED_EMAIL_WORKFLOW.md](SHARED_EMAIL_WORKFLOW.md); source/static evidence is not behavioral or production acceptance.
-- The approved 14-day latest-delivery cutoff is **unimplemented**. The React dashboard is simulated, with no accepted live operations API/service.
+- Later 22 October source implements the 14-day delivery cutoff and payment/informational-email ingestion. Their earlier focused results retain their dated scope; no new provider acceptance is implied. The 23 October recovery fixes preserve creation-time payouts rather than refreshing existing reservation rates. There is no accepted live dashboard operations API/service.
 
 ## 22 October action-control source update
 
-See [ACTION_CONTROL.md](ACTION_CONTROL.md). The worker now requires exact Amazon account/address/card evidence, explicit cancellation status, persistent incident blocks and startup recovery audits even without the test reservation. Configure only verified account selectors and review/restore all journals before accepting the first recovery inventory. Static source/script checks passed; the full compiler check lacks PGlite. No software tests, provider action or production acceptance was performed. General reviewed repair and native/provider/regression acceptance remain open.
+See [ACTION_CONTROL.md](ACTION_CONTROL.md). The worker now requires exact Amazon account/address/card evidence, explicit cancellation status, persistent incident blocks and startup recovery audits even without the test reservation. Configure only verified account selectors and review/restore all journals before accepting the first recovery inventory. The original action-control update had static evidence only. The subsequent 23 October recovery amendment records focused software coverage and passing source/scoped compiler checks after restoring the locked PGlite package locally. Exact-message reviewed repair is source-implemented; general uncertain-action resolution and native/provider acceptance remain open.
 
 ## Settled rules to preserve
 
@@ -38,7 +60,12 @@ See [ACTION_CONTROL.md](ACTION_CONTROL.md). The worker now requires exact Amazon
 
 [database/schema.sql](../database/schema.sql) is authoritative: **16 tables**, including `deal_retailers`; no dedicated `reservation_history` or `order_tracking`. Original files came unchanged from former `BFMR_DB_Schema` main `a67a0715ef040b0dd65de17ce63a0a5e34898699`; 22 October source adds integer `retailer_account_ranking NOT NULL`, unique with `retailer_id`, without defaults/autofill. Existing DBs require prepare → reviewed manual backfill → finalization; the validator rejects the intermediate schema. Grant application SELECT on ranking, never rank UPDATE or `ccv` reads. See [database guide](../database/README.md) and [relational runbook](RELATIONAL_INTEGRATION.md#retailer-account-ranking-upgrade--22-october-2026). One account is automated per run; review outstanding other-account orders before changing priorities. Existing orders keep their original account; multi-account tracking is open. Historical `src/db/migrations/` are a separate engine schema. `database/gmail_intake.sql` adds four operational tables separately (20 total with both contracts).
 
-The explicit [initial Amazon seed](../database/seed_amazon_account.psql) assigns rank 1 and keeps CCV required, supplied privately via `BFMR_INITIAL_ACCOUNT_CCV`. [Creation installer](../database/bfmr-postgres-db-install.psql) includes the seed under the owner role and grants worker SELECT on ranking. Both remain uninstalled; [offline tests](../database/README.md#offline-account-ranking-validation--22-october-2026) cover selection, staged upgrades and synthetic seed SQL/input; never copy CCV into tracked files/logs. This seed does not backfill existing account ranks.
+The historical [initial Amazon seed](../database/seed_amazon_account.psql) and
+ranking upgrades retain their original scope. Later 22 October work removed CCV
+storage from the native schema; current worker validation accepts its absence and
+never reads it. Do not reintroduce or supply a card security code merely because
+an older installation example mentions it. Use the actual reviewed installation
+baseline and preserve original account/order identities.
 
 At most one order per reservation, one shipment/tracking number per order, and one actual reimbursement per reservation. Reimbursement links directly to reservation and payment email; no order is required. Multiple same-account/deal orders across different reservations are allowed. Extra shipments/payments and replacement/refund conflicts require review/design decisions, not silent merging or extra rows.
 
@@ -46,25 +73,45 @@ At most one order per reservation, one shipment/tracking number per order, and o
 
 ## Evidence already recorded
 
-22 October operator-reported local setup: PostgreSQL 17 contains 20 tables; `bfmr_app` connects from Ubuntu and the six requested owner/schema/CCV/payout/delete/truncate restriction checks returned false. The operator created the Amazon retailer; account-row insertion has not been confirmed. These bounded reports do not establish native schema-validator, cutover or provider acceptance.
+22 October operator-reported native results include PostgreSQL 17 role/schema
+checks, an accepted start-from cutover at `2026-10-22T17:36:11.084Z`, and bounded
+health/service checks recorded in the implementation reference and project
+registers. These reports describe their original revisions and do not validate
+the revised intake grants, payout handling, ceiling or restore tooling in
+`ee183ef`. Do not prepare another fresh-start baseline or reset Gmail to clear
+the interrupted work shown in the screenshot.
 
 21 October offline evidence: **142 distinct cases across runs: 141 passed, zero failed, one native PostgreSQL integration skipped**. Final focused relational suite: **23/23** on disposable PGlite; typechecks/build passed. Consolidation separately reran 23/23 using bundled schema with no override; do not double-count reruns. Browser fixtures used system Chromium 154, not authenticated provider layouts. These results establish neither native mini-PC installation nor live/production acceptance. A prior fixed-item purchase success was bounded user-reported evidence only. Exact commands/limits are in the relational runbook; newer intake results are recorded separately in the intake runbook linked above.
 
 ## Next steps
 
-Current operator decision: start from a new exact UTC boundary and exclude prior
-completed activity; no outstanding work needs migration. Version-2 cutover source
-and `scripts/prepare_fresh_start_cutover.ts --confirm-no-outstanding-work` prepare
-a private candidate/report only. No marker is applied. Review boundary/hash before
-explicit apply; never substitute full-history coverage or reset Gmail state.
-See [fresh-start runbook](RELATIONAL_INTEGRATION.md#explicit-start-from-today-boundary--22-october-2026).
-Operator reports native schema/account/intake checks and lock exclusivity passed;
-the new boundary has [offline coverage](RELATIONAL_INTEGRATION.md#offline-fresh-start-validation--22-october-2026) but remains unapplied locally. Provider acceptance and
-coverage between boundary and first watch remain open.
+1. Verify the published and installed revision, preserving all existing state.
+   Run `npm run recovery:diagnose -- --message-id <private-Gmail-ID>` on the
+   configured operator host; optionally require the exact reviewed full SHA with
+   `--expect-revision`. The diagnostic reports source identity, connected role,
+   missing intake grants and the exact message's state without provider actions.
+2. With writers stopped and a coordinated backup preserved, review the actual
+   grants against `database/runtime_intake_grants.psql`. Apply only separately
+   reviewed maintenance to the correct existing schema/role; do not rerun the
+   fresh installer or grant ownership/superuser rights.
+3. Reconcile the exact message's BFMR/Amazon effects. Use
+   `npm run recovery:report -- --help`, review a fresh private report/hash, then
+   separately authorize its local apply. Unknown outcomes remain blocked.
+   `npm run unblock` without arguments refuses a bulk reset. Never mark all
+   workflows complete, reset the cursor, or replay completed messages.
+4. Accept the revised optional payout ceiling under native competing sessions,
+   partial payments and status/payment changes, and perform a coordinated restore
+   drill into an empty replacement database. Preserve an incomplete-restore
+   marker until the SQL/local-state pair is reconciled. The authoritative checkout
+   exposure check still requires full fresh provider/payment coverage.
+5. Close provider gates EV-001–EV-006 and the remaining crash/recovery,
+   notification, supervision and ranked-account tracking acceptance in
+   [OPEN_ISSUES.md](OPEN_ISSUES.md) before unattended operation. Real provider
+   reads/mutations and worker startup remain separately scoped actions.
 
-1. Close provider evidence gates using sanitized, nonmutating evidence first: Gmail auth/templates; BFMR browser/API account alignment (including an empty-account alternative); full tracker paging/retention/status/supplier/creation-payout/payment semantics; Amazon Business checkout/confirmation/tracking DOM; actual payment-mail contract. See EV-001–EV-006 in `OPEN_ISSUES.md`. EV-001's standalone `npm run inspect-bfmr-identity -- --browser-pid <PID>` diagnostic is prepared; run it on the operator's configured local mini-PC/Ubuntu session. Cloud preflight had no BFMR access/configuration, so live proof remains pending. Any live mutation needs separately authorized exact scope.
-2. Accept the source-implemented shared email workflow using explicitly requested behavioral/native/provider recovery validation. Add the delivery cutoff: latest date ≤14 calendar days passes; >14 rejects with exact cancellation/readback; range uses latest; explicitly absent estimate may proceed; unreadable/conflicting estimate stops. Settle order-date timezone and final-review estimate changes.
-3. Prepare separately authorized native PostgreSQL 15+ acceptance on the mini-PC: correct baseline/schema upgrade, non-owning role/grants, installed generated formula/immutable guard, exact accounts and ownership. Reconcile real historical creation/payment proofs and complete coverage; preserve backups/source hashes. Review the cutover tool's default report before any explicitly authorized reviewed-hash apply. Import must never replay provider actions.
-4. Complete supervised startup/reboot/manual-auth access, persistent private storage, coordinated backup/restore and stale-state recovery, uncertain-action/operator repair, scheduling, monitoring and notification recovery. Follow offline intake validation with reviewed native intake SQL, real topic/subscription/mailbox contracts, explicit legacy import or authentic first setup, and process-crash/reconnect/restore evidence. The importer defaults to a report and never runs at startup. Broader SQL operational-store/outbox migration remains separate work. Accept provider/operations evidence before unattended deployment or live dashboard claims.
-
-Keep `OPEN_ISSUES.md` current-only and record completed work/evidence in the implementation reference/registers. Do not run/add software tests unless requested. Missing journals or interrupted `PROCESSING` work require restore/reconciliation; expired Gmail history remains a persistent stop, with no silent reset/Inbox sweep. Keep credentials, CVV, raw emails/account pages, browser profiles, actual order/tracking data and backups out of Git/logs. Email PDFs and their classification taxonomy are parser references only, never action authority or Gmail authentication evidence.
+Keep completed evidence in the implementation reference/registers and unfinished
+work in `OPEN_ISSUES.md`. Credentials, raw mail/account pages, authenticated
+profiles, real order/tracking identities and backups remain private. Email PDFs
+are parser references, not Gmail provenance or action authority. This documentation
+and publication request authorizes no installed SQL change, incident repair,
+provider action, deployment or live worker invocation.

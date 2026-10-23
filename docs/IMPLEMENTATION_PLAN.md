@@ -1,5 +1,22 @@
 # Implementation plan and evidence
 
+## 23 October 2026 — implementation committed; documentation handoff
+
+Recovery/operations fixes are committed locally as `ee183ef` on `work`.
+Implementation evidence is **66/66 focused offline cases passed**, source/scoped
+TypeScript checks and shell/whitespace checks; see the
+[amendment](RECOVERY_REVIEW_20261023.md#evidence-and-remaining-host-work).
+The initial push was rejected before publication. The user subsequently requested
+updated documentation and another commit/push to the configured repository.
+Remote publication, operator-host installation and production acceptance are
+separate checkpoints; none is inferred from a local commit or documentation.
+
+Next work is exact-message host diagnostics and privilege review, authoritative
+provider reconciliation with reviewed atomic repair, native concurrent-session
+ceiling acceptance and a replacement-database restore drill. Preserve the
+accepted cutover and Gmail cursor. This follow-up adds document QA, not a new
+software-test result or live action. See the [handoff](BFMR_Handoff.md#next-steps).
+
 ## 23 October 2026 — recovery review amendment
 
 The [recovery review amendment](RECOVERY_REVIEW_20261023.md) controls current
