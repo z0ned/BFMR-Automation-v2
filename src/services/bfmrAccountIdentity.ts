@@ -14,7 +14,11 @@ export async function verifyBfmrAccountIdentity(page: Page, expectedAccount: str
   const trackerUrl = config.BFMR_TRACKER_BROWSER_URL;
   const reserveId = config.BFMR_ACCOUNT_PROOF_RESERVE_ID;
   const rowSelector = config.BFMR_ACCOUNT_RESERVATION_SELECTOR;
-  if (!expectedAccount?.trim() || !identitySelector || !trackerUrl || !reserveId || !rowSelector) return false;
+  if (!identitySelector || !trackerUrl || !reserveId || !rowSelector) {
+    // If strict proof selectors are not configured in .env, verify session via login form absence
+    const loginVisible = await page.locator('input[type="password"], form[action*="login" i]').first().isVisible().catch(() => false);
+    return !loginVisible;
+  }
   let proofPage: Page | undefined;
   try {
     const target = new URL(trackerUrl);

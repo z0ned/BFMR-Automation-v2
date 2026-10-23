@@ -19,6 +19,10 @@ export async function reserveEmailDeal(
   console.log(`\n[BFMR workflow] Reserving one BFMR offer: ${dealUrl}`);
 
   const session = await browser.verifySession(process.env.BFMR_EXPECTED_ACCOUNT, dealUrl);
+  if (session === 'PAGE_ERROR' || session === 'DEAL_PAGE_MISMATCH') {
+    console.log(`\n[BFMR workflow] SKIPPED: Deal ${dealUrl} is currently unavailable or closed on BFMR (${session}). No reservation was attempted.\n`);
+    return null;
+  }
   if (session !== 'AUTHENTICATED' && session !== 'CHALLENGE') {
     throw new Error(`BFMR session/deal verification failed: ${session}. No reservation was attempted.`);
   }

@@ -310,7 +310,7 @@ export class PlaywrightBfmrBrowser {
       }
     }
     if (badResponse || !pageHasContent) {
-      console.error('[Playwright] BFMR did not return a usable deal page.');
+      console.error(`[Playwright] BFMR did not return a usable deal page (status: ${response?.status()}, url: ${page.url()}, pageHasContent: ${pageHasContent}).`);
       return 'PAGE_ERROR';
     }
 

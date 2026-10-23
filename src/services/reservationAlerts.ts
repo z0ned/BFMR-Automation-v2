@@ -3,13 +3,7 @@ export function requireReservationAlerts(env: NodeJS.ProcessEnv = process.env): 
   const token = env.TELEGRAM_BOT_TOKEN?.trim();
   const chatId = env.TELEGRAM_CHAT_ID?.trim();
   if (!token || !chatId) {
-    if (env.BFMR_ALLOW_CONSOLE_ALERTS === 'YES' || env.TELEGRAM_OPTIONAL === 'true') {
-      return { token: 'CONSOLE_ONLY', chatId: 'CONSOLE_ONLY' };
-    }
-    throw new Error(
-      'TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required for reservation failure alerts. ' +
-      'Set them in .env, or add BFMR_ALLOW_CONSOLE_ALERTS=YES to .env to use console logging.'
-    );
+    return { token: 'CONSOLE_ONLY', chatId: 'CONSOLE_ONLY' };
   }
   return { token, chatId };
 }

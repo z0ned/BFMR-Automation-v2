@@ -16,8 +16,9 @@ export function isTrustedBfmrHost(hostname: string): boolean {
 export function isTrustedBfmrDealsListingUrl(value: string): boolean {
   try {
     const url = new URL(value);
+    const validPort = !url.port || url.port === '443';
     return url.protocol === 'https:' && isTrustedBfmrHost(url.hostname) &&
-      !url.username && !url.password && !url.port && /^\/deals\/?$/i.test(url.pathname);
+      !url.username && !url.password && validPort && /^\/deals\/?$/i.test(url.pathname);
   } catch {
     return false;
   }
@@ -26,11 +27,12 @@ export function isTrustedBfmrDealsListingUrl(value: string): boolean {
 export function isTrustedBfmrDealUrl(value: string): boolean {
   try {
     const url = new URL(value);
+    const validPort = !url.port || url.port === '443';
     return url.protocol === 'https:' &&
       isTrustedBfmrHost(url.hostname) &&
       !url.username &&
       !url.password &&
-      !url.port &&
+      validPort &&
       /^\/(?:deals?|offers?|item)\/[a-zA-Z0-9_-]+(?:\/|$)/i.test(url.pathname);
   } catch {
     return false;
