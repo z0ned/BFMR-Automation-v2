@@ -82,7 +82,7 @@ done
 useradd --system --user-group --create-home --home-dir /var/lib/bfmr-build --shell /usr/sbin/nologin bfmr-build
 chmod 0700 /var/lib/bfmr-build
 # Git copies committed code only: no source .env, credentials, browser or state files.
-git -c safe.directory="$SOURCE_DIR" clone --no-hardlinks -- "$SOURCE_DIR" "$APP"
+git -c safe.directory="$SOURCE_DIR" -c safe.directory="$SOURCE_DIR/.git" clone --no-hardlinks -- "$SOURCE_DIR" "$APP"
 git -C "$APP" remote set-url origin https://github.com/z0ned/BFMR-Automation-v2.git
 chmod 0755 /opt/bfmr "$APP"
 install -d -o bfmr-build -g bfmr-build -m 0755 "$RUNTIME" "$BROWSERS"
@@ -109,6 +109,10 @@ fi
 chown -R root:root /opt/bfmr
 chmod -R a+rX /opt/bfmr
 chmod -R go-w /opt/bfmr
+# Services read root-owned code; trust only this exact immutable checkout.
+for mode in production testing; do
+    runuser -u "bfmr-$mode" -- env HOME="/var/lib/bfmr-$mode" git config --global --add safe.directory "$APP"
+done
 # Ubuntu's package creates a local PostgreSQL cluster. Start it without Docker.
 PG_VERSION="$(pg_lsclusters --no-header | awk '$2 == "main" {print $1}')"
 [ -n "$PG_VERSION" ] && [ "$(printf '%s\n' "$PG_VERSION" | wc -l)" = 1 ] || {
