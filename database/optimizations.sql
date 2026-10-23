@@ -58,3 +58,7 @@ CREATE TRIGGER trg_enforce_exposure_cap
     BEFORE INSERT ON public.reservations
     FOR EACH ROW
     EXECUTE FUNCTION check_max_unreimbursed_exposure();
+
+-- 3. PCI-DSS Compliance: Drop unused plaintext CCV storage
+ALTER TABLE public.retailer_accounts DROP COLUMN IF EXISTS ccv;
+

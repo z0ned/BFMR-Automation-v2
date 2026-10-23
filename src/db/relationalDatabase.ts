@@ -12,7 +12,7 @@ interface ColumnContract { type: string; required?: boolean }
 const column = (type: string, required = true): ColumnContract => ({ type, required });
 const requiredColumns: Record<string, Record<string, ColumnContract>> = {
   retailers: { id: column('bigint'), name: column('text'), primary_url: column('text') },
-  retailer_accounts: { id: column('bigint'), retailer_id: column('bigint'), email: column('text'), ccv: column('text'),
+  retailer_accounts: { id: column('bigint'), retailer_id: column('bigint'), email: column('text'), ccv: column('text', false),
     retailer_account_ranking: column('integer') },
   reservation_status: { id: column('bigint'), description: column('text') },
   order_status: { id: column('bigint'), description: column('text') },
@@ -47,11 +47,78 @@ export class RelationalDatabase {
   private validated = false;
   private closed = false;
   private failed = false;
-  constructor(connectionString: string, private readonly verifyOwnership: () => Promise<void>, options: { pool?: RelationalPool } = {}) {
+  private externalVerifyOwnership?: () => Promise<void>;
+  private ownerClient: RelationalClient | null = null;
+  private ownerKey: string | null = null;
+  private lostOwnership = false;
+
+  constructor(
+    connectionString: string,
+    verifyOwnership?: () => Promise<void>,
+    options: { pool?: RelationalPool } = {}
+  ) {
     if (!connectionString) throw new Error('A dedicated PostgreSQL connection is required.');
+    this.externalVerifyOwnership = verifyOwnership;
     this.pool = options.pool ?? new Pool({ connectionString, max: 4, connectionTimeoutMillis: 10000, application_name: 'bfmr:relational' });
     this.pool.on?.('error', () => { this.failed = true; });
   }
+
+  /** Acquires exclusive advisory lock for the target account namespace directly on this pool. */
+  async claimAccount(account: string): Promise<boolean> {
+    const key = `bfmr_worker_lock_${account.trim().toLowerCase()}`;
+    if (this.ownerClient || this.lostOwnership) return false;
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ acquired: boolean }>(
+        'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired',
+        [key]
+      );
+      if (!result.rows[0].acquired) {
+        client.release();
+        return false;
+      }
+      this.ownerClient = client;
+      this.ownerKey = key;
+      return true;
+    } catch (err) {
+      client.release(true);
+      throw err;
+    }
+  }
+
+  /** Verifies that the exclusive account ownership lock remains active. */
+  async verifyOwnership(): Promise<void> {
+    if (this.externalVerifyOwnership) {
+      await this.externalVerifyOwnership();
+      return;
+    }
+    if (!this.ownerClient || this.lostOwnership) {
+      throw new Error('PostgreSQL account ownership is absent or lost. Stop external actions.');
+    }
+    try {
+      await this.ownerClient.query('SELECT 1');
+    } catch (err) {
+      this.lostOwnership = true;
+      throw err;
+    }
+  }
+
+  /** Releases the account ownership advisory lock. */
+  async relinquishAccount(): Promise<void> {
+    const client = this.ownerClient;
+    this.ownerClient = null;
+    if (client && this.ownerKey) {
+      try {
+        if (!this.lostOwnership) {
+          await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [this.ownerKey]);
+        }
+      } finally {
+        client.release(this.lostOwnership);
+        this.ownerKey = null;
+      }
+    }
+  }
+
   private assertAvailable(): void {
     if (this.closed || this.failed) throw new Error('Relational database connection is unavailable; stop processing.');
   }
@@ -210,6 +277,11 @@ export class RelationalDatabase {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    await this.pool.end();
+    try {
+      await this.relinquishAccount();
+    } finally {
+      await this.pool.end();
+    }
   }
 }
+
