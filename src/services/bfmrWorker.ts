@@ -28,19 +28,35 @@ const batchJournal = multiDealJournal(process.env.BFMR_MULTI_DEAL_STATE_PATH || 
 const statusStore = bfmrStatusStore(process.env.BFMR_STATUS_SNAPSHOT_PATH || path.join(os.homedir(), '.local/state/bfmr/bfmr-status.json'));
 
 function admitGmailEmail(email: QueuedEmail): boolean {
-  if (!email.inboxAtFetch) return false;
+  console.log(`\n[Gmail Intake] Evaluating incoming message ${email.id}: from="${email.sender}", subject="${email.subject || ''}"`);
+  if (!email.inboxAtFetch) {
+    console.log(`[Gmail Intake] Skipped: message ${email.id} is not in INBOX (check if Gmail routed it to Spam).`);
+    return false;
+  }
   const parsed = parseIncomingEmail({ ...email, messageId: email.id });
   const isProcessable =
     Boolean(parsed.isSingleDeal && parsed.dealUrl) ||
     Boolean(parsed.isMultiDealAnnouncement) ||
     Boolean(parsed.isPaymentNotice) ||
     Boolean(parsed.isInformationalUpdate);
-  if (!isProcessable) return false;
+  if (!isProcessable) {
+    console.log(`[Gmail Intake] Skipped: email content does not contain a BFMR deal link or payment notice.`);
+    return false;
+  }
   const mode = intakeMode(process.env.BFMR_INTAKE_MODE);
   const sender = exactSender(email.sender);
-  const recognized = sender === 'deals@buyformeretail.com' || mode === 'testing' && sender === 'matt.ward@live.com';
+  console.log(`[Gmail Intake] Current intake mode: "${mode}", sender: "${sender}"`);
+  const recognized = sender === 'deals@buyformeretail.com' || (mode === 'testing' && sender === 'matt.ward@live.com');
   const authenticated = authenticateGmailSender(email.sender, email.headers ?? [], mode);
-  if (recognized && !authenticated) throw new Error('Candidate Gmail message lacks verified sender provenance; cursor retained for review.');
+  if (recognized && !authenticated) {
+    console.error(`[Gmail Intake] REJECTED: Sender "${sender}" lacks verified SPF/DKIM provenance.`);
+    throw new Error('Candidate Gmail message lacks verified sender provenance; cursor retained for review.');
+  }
+  if (authenticated) {
+    console.log(`[Gmail Intake] ✔ Email verified and ADMITTED for execution!\n`);
+  } else {
+    console.log(`[Gmail Intake] Skipped: sender "${sender}" is not recognized for mode "${mode}".`);
+  }
   return authenticated;
 }
 

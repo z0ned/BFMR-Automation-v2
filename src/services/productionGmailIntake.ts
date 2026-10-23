@@ -163,6 +163,11 @@ export class ProductionGmailIntake {
       await this.options.store.recordNotification(this.runId!, {
         messageId: delivery.id, payloadSha256: createHash('sha256').update(delivery.data).digest('hex'), historyId, rejection,
       });
+      if (rejection) {
+        console.warn(`[PubSub Notification] Warning: notification rejected with "${rejection}" (mailbox in event: "${(value as any)?.emailAddress}", expected: "${this.options.mailbox}")`);
+      } else {
+        console.log(`[PubSub Notification] Received real-time push notification from Gmail (historyId: ${historyId})`);
+      }
       // ACK (including poison/verified duplicate delivery) follows the successful
       // database commit. Storage errors can never fall through to ACK.
       await delivery.ack();
@@ -260,6 +265,7 @@ export class ProductionGmailIntake {
       }
       await onIdle(() => this.hasIncomingMail());
       if (this.stopped || this.failure || version !== this.revision) continue;
+      console.log('[BFMR worker] Ready and listening for incoming deal & payment emails...');
       await new Promise<void>(resolve => {
         const done = () => { clearTimeout(timer); this.waiters.delete(done); resolve(); };
         // Local browser/maintenance scheduling only: no Gmail call on this timer.
