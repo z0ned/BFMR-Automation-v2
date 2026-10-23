@@ -161,15 +161,18 @@ export class ProductionGmailIntake {
         const value = JSON.parse(delivery.data.toString('utf8')) as Record<string, unknown>;
         eventPayload = value;
         if (!value || Array.isArray(value) || typeof value !== 'object') rejection = 'INVALID_SHAPE';
-        else if (typeof value.emailAddress !== 'string' || value.emailAddress.trim().toLowerCase() !== this.options.mailbox) rejection = 'MAILBOX_MISMATCH';
-        else if (typeof value.historyId !== 'string' || !/^[1-9]\d*$/.test(value.historyId)) rejection = 'INVALID_HISTORY_ID';
-        else historyId = value.historyId;
+        const rawHistoryId = typeof value.historyId === 'number' || typeof value.historyId === 'string'
+          ? String(value.historyId).trim()
+          : '';
+        if (typeof value.emailAddress !== 'string' || value.emailAddress.trim().toLowerCase() !== this.options.mailbox) rejection = 'MAILBOX_MISMATCH';
+        else if (!/^[1-9]\d*$/.test(rawHistoryId)) rejection = 'INVALID_HISTORY_ID';
+        else historyId = rawHistoryId;
       } catch { rejection = 'INVALID_JSON'; }
       await this.options.store.recordNotification(this.runId!, {
         messageId: delivery.id, payloadSha256: createHash('sha256').update(delivery.data).digest('hex'), historyId, rejection,
       });
       if (rejection) {
-        console.warn(`[PubSub Notification] Warning: notification rejected with "${rejection}" (mailbox in event: "${eventPayload?.emailAddress}", expected: "${this.options.mailbox}")`);
+        console.warn(`[PubSub Notification] Warning: notification rejected with "${rejection}" (mailbox in event: "${eventPayload?.emailAddress}", historyId: ${JSON.stringify(eventPayload?.historyId)}, expected: "${this.options.mailbox}")`);
       } else {
         console.log(`[PubSub Notification] Received real-time push notification from Gmail (historyId: ${historyId})`);
       }
