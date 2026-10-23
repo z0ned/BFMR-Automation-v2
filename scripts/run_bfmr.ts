@@ -14,8 +14,12 @@ if (args.length === 1 && args[0] === '--help') {
   console.error('[BFMR worker] Unknown argument. Use --help; no workflow was started.');
   process.exitCode = 2;
 } else {
-  runBfmrWorker().catch(() => {
-    console.error('[BFMR worker] Stopped. Inspect the durable intake/recovery state and private runtime configuration.');
+  runBfmrWorker().catch((err: any) => {
+    console.error(`\n[BFMR worker] Startup/Runtime Error: ${err?.message || err}`);
+    if (err?.stack) {
+      console.error(err.stack);
+    }
+    console.error('\n[BFMR worker] Stopped. Inspect the durable intake/recovery state and private runtime configuration.\n');
     process.exitCode = 1;
   });
 }
