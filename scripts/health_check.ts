@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { Client } from 'pg';
-import { getDatabaseConfig } from './validate_database_environment';
+import { getDatabaseConfig, connectDatabaseClient } from './validate_database_environment';
 
 export interface HealthStatus {
   database: 'HEALTHY' | 'UNHEALTHY';
@@ -29,9 +29,7 @@ export async function checkSystemHealth(): Promise<HealthStatus> {
 
   // 1. Database Check
   try {
-    const config = getDatabaseConfig();
-    const client = new Client(config);
-    await client.connect();
+    const client = await connectDatabaseClient();
 
     const verRes = await client.query<{ full: string }>('SELECT version() as full;');
     postgresVersion = verRes.rows[0].full.split(' ')[1];

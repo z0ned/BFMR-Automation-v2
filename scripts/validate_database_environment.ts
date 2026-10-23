@@ -52,6 +52,27 @@ export function getDatabaseConfig(): ClientConfig {
   };
 }
 
+export async function connectDatabaseClient(): Promise<Client> {
+  const config = getDatabaseConfig();
+  let client = new Client(config);
+  try {
+    await client.connect();
+    return client;
+  } catch (err: any) {
+    if (
+      err.code === 'ENOTFOUND' &&
+      typeof config.connectionString === 'string' &&
+      config.connectionString.includes('bfmr-postgres')
+    ) {
+      const fallbackUrl = config.connectionString.replace(/@bfmr-postgres(:|\/)/, '@localhost$1');
+      client = new Client({ connectionString: fallbackUrl });
+      await client.connect();
+      return client;
+    }
+    throw err;
+  }
+}
+
 export async function runDatabaseValidation(client: Client): Promise<ValidationSummary> {
   const results: CheckResult[] = [];
 
@@ -511,28 +532,7 @@ function isMainScript(): boolean {
 }
 
 if (isMainScript()) {
-  const config = getDatabaseConfig();
-  let client = new Client(config);
-
-  async function connectWithFallback(): Promise<Client> {
-    try {
-      await client.connect();
-      return client;
-    } catch (err: any) {
-      // If running from host machine outside the Docker network, bfmr-postgres container name
-      // is not in host DNS, but port 5432 is forwarded to localhost.
-      if (err.code === 'ENOTFOUND' && typeof config.connectionString === 'string' && config.connectionString.includes('bfmr-postgres')) {
-        console.log('Host "bfmr-postgres" not found in host DNS; connecting via mapped port on "localhost"...');
-        const fallbackUrl = config.connectionString.replace(/@bfmr-postgres(:|\/)/, '@localhost$1');
-        client = new Client({ connectionString: fallbackUrl });
-        await client.connect();
-        return client;
-      }
-      throw err;
-    }
-  }
-
-  connectWithFallback()
+  connectDatabaseClient()
     .then(async activeClient => {
       try {
         const summary = await runDatabaseValidation(activeClient);
