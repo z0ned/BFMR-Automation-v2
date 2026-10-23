@@ -14,7 +14,8 @@
     "supervise": "node --import tsx scripts/supervise_worker.ts",
     "health": "node --import tsx scripts/health_check.ts",
     "cutover": "node --import tsx scripts/run_production_cutover.ts",
-    "test": "node --import tsx --test tests/delivery_cutoff.test.ts tests/payment_intake.test.ts tests/informational_and_checkout_payout.test.ts tests/database_validator.test.ts tests/milestone5_operations.test.ts tests/cutover.test.ts"
+    "optimize-db": "node --import tsx scripts/apply_database_optimizations.ts",
+    "test": "node --import tsx --test tests/delivery_cutoff.test.ts tests/payment_intake.test.ts tests/informational_and_checkout_payout.test.ts tests/database_validator.test.ts tests/milestone5_operations.test.ts tests/cutover.test.ts tests/optimizations.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",

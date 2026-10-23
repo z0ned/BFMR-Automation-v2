@@ -621,4 +621,23 @@ export class PlaywrightBfmrBrowser {
     const bfmrPage = await this.init();
     return bfmrPage.context().newPage();
   }
+
+  /** Captures diagnostic screenshot of current page state on unexpected failure or layout drift. */
+  public async captureErrorScreenshot(label: string): Promise<string | null> {
+    try {
+      const activePage = this.page;
+      if (!activePage || activePage.isClosed()) return null;
+      const baseDir = process.env.BFMR_STATE_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.local/state/bfmr');
+      const screenshotsDir = path.join(baseDir, 'screenshots');
+      fs.mkdirSync(screenshotsDir, { recursive: true });
+      const filename = `error_${label.replace(/[^a-zA-Z0-9_]/g, '_')}_${Date.now()}.png`;
+      const fullPath = path.join(screenshotsDir, filename);
+      await activePage.screenshot({ path: fullPath, fullPage: true });
+      console.log(`[Playwright] Captured diagnostic error screenshot: ${fullPath}`);
+      return fullPath;
+    } catch {
+      return null;
+    }
+  }
 }
+

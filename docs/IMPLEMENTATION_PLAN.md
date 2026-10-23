@@ -412,5 +412,18 @@ Implemented interactive production cutover CLI workflow:
   - Operator Confirmation: Prompts the operator with `Type 'YES' to confirm and apply this production cutover boundary:` (with `--dry-run` and `--non-interactive` flag support).
   - Atomic Commitment: Atomically applies the cutover to PostgreSQL via `applyRelationalCutover()` recording the cutover marker in `public.workflow_evidence`.
   - Verification: Confirms cutover acceptance with `assertRelationalCutoverReady()`.
-- `package.json`: Added `"cutover": "node --import tsx scripts/run_production_cutover.ts"` and updated `"test"` to run all 30 tests.
 - `tests/cutover.test.ts`: Added 4 unit tests covering CLI argument parsing, SHA-256 hashing, compliant fresh-start manifest creation and validation, and missing confirmation rejection. All 30 tests across all 6 test suites pass.
+
+## 22 October 2026 — Architecture & Database Optimization Hardening
+
+Implemented production optimizations, index additions, and process hygiene:
+- `database/optimizations.sql`:
+  - Added partial index `idx_workflow_evidence_cutover` on `public.workflow_evidence (action_type, phase, outcome)` for cutover and order state lookups.
+  - Added partial index `idx_reservations_open_exposure` on `public.reservations (id, expected_payout) WHERE reservation_status_id != 2` to accelerate exposure boundary calculation.
+  - Added index `idx_orders_order_id` on `public.orders (order_id)` for rapid retailer order number lookups.
+  - Added trigger `trg_enforce_exposure_cap` (`check_max_unreimbursed_exposure()`) on `public.reservations` to strictly enforce the $200.00 exposure limit at the database engine level.
+- `scripts/apply_database_optimizations.ts`: Dedicated CLI tool (`npm run optimize-db`) to apply optimizations to the target database.
+- `scripts/supervise_worker.ts`: Added `reapOrphanBrowserProcesses()` to automatically sweep and terminate lingering headless browser instances on supervisor startup and shutdown.
+- `src/adapters/playwrightBrowser.ts`: Added `captureErrorScreenshot()` to capture full-page diagnostic PNG screenshots into `~/.local/state/bfmr/screenshots/` upon unexpected failure or DOM layout changes.
+- `package.json`: Added `"optimize-db"` script and updated `"test"` to run all 33 tests across all 7 test suites.
+- `tests/optimizations.test.ts`: Added 3 unit tests verifying process reaper safety, screenshot method resilience, and SQL optimization syntax. All 33 unit tests pass.

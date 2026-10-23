@@ -55,8 +55,20 @@ export class WorkerSupervisor {
     }
   }
 
+  public static reapOrphanBrowserProcesses(): void {
+    try {
+      if (process.platform !== 'win32') {
+        const { execSync } = require('node:child_process');
+        execSync('pkill -f "playwright.*chrome|chrome.*--headless" 2>/dev/null || true', { stdio: 'ignore' });
+      }
+    } catch {
+      // Non-fatal process sweep
+    }
+  }
+
   public async start(): Promise<void> {
     console.log(`[Supervisor] Starting BFMR Automation v2 Supervisor (PID: ${process.pid})...`);
+    WorkerSupervisor.reapOrphanBrowserProcesses();
     this.setupSignals();
     this.writeHeartbeat('STARTING');
 
