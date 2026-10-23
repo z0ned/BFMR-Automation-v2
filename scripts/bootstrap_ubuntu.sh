@@ -82,7 +82,12 @@ done
 useradd --system --user-group --create-home --home-dir /var/lib/bfmr-build --shell /usr/sbin/nologin bfmr-build
 chmod 0700 /var/lib/bfmr-build
 # Git copies committed code only: no source .env, credentials, browser or state files.
-git -c safe.directory="$SOURCE_DIR" -c safe.directory="$SOURCE_DIR/.git" clone --no-hardlinks -- "$SOURCE_DIR" "$APP"
+# Git's local upload-pack must also trust a differently owned bind mount.
+# Use exact root-global paths rather than a wildcard or command-scoped config
+# that Git's local transport does not retain.
+git config --global --add safe.directory "$SOURCE_DIR"
+git config --global --add safe.directory "$SOURCE_DIR/.git"
+git clone --no-hardlinks -- "$SOURCE_DIR" "$APP"
 git -C "$APP" remote set-url origin https://github.com/z0ned/BFMR-Automation-v2.git
 chmod 0755 /opt/bfmr "$APP"
 install -d -o bfmr-build -g bfmr-build -m 0755 "$RUNTIME" "$BROWSERS"
