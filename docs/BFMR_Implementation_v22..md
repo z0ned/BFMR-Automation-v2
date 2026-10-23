@@ -1,5 +1,13 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 23 October 2026 — Windows clone launcher
+
+The operator's PowerShell host has no WSL Bash; the application container has no
+Docker CLI. `scripts/clone_test_database.ps1` invokes Docker from Windows and
+executes the existing reviewed clone body inside PostgreSQL, with line-ending
+normalization. No native Windows/PowerShell execution or real clone is claimed;
+see the [host commands](DATABASE_MODES.md#create-the-requested-database-copy).
+
 ## 23 October 2026 — separate production and live testing
 
 The [environment setup/runbook](DATABASE_MODES.md) now controls the selected

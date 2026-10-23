@@ -13,6 +13,16 @@ On the computer/container where you normally run BFMR, from the updated checkout
 npm run database:clone-test
 ```
 
+On a Windows host in PowerShell (no WSL/Bash required):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\clone_test_database.ps1
+```
+
+Docker Desktop must be running. Run on the host, outside the BFMR app container.
+The PowerShell wrapper sends the same clone body to Bash inside PostgreSQL and
+normalizes Windows line endings; it does not need Bash installed on Windows.
+
 This uses the existing `bfmr-postgres` Docker container's local `postgres`
 administrator. If its name differs, set BFMR_POSTGRES_CONTAINER to that container
 name for this command. No password is requested or printed. The command:
