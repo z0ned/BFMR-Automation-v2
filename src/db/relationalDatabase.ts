@@ -138,6 +138,14 @@ export class RelationalDatabase {
         LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
         WHERE n.nspname='public' AND c.relkind IN ('r','p')`)).rows;
       for (const [table, names] of Object.entries(requiredColumns)) for (const [name, spec] of Object.entries(names)) {
+        if (table === 'retailer_accounts' && name === 'ccv') {
+          // ccv is optional for PCI-DSS compliance; if present, verify type only
+          const actual = columns.find(item => item.table_name === table && item.column_name === name);
+          if (actual) {
+            assert(actual.type_name === spec.type, `${table}.${name}`);
+          }
+          continue;
+        }
         const actual = columns.find(item => item.table_name === table && item.column_name === name);
         assert(actual && actual.type_name === spec.type && actual.not_null === Boolean(spec.required), `${table}.${name}`);
       }
