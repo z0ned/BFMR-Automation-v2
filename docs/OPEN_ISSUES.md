@@ -63,14 +63,13 @@ Implemented production service supervision, health monitoring, and systemd servi
 - `scripts/supervise_worker.ts` (`npm run supervise`): Process supervisor with signal forwarding (`SIGTERM` graceful drain with 25s timeout), exponential backoff restart delay (5s to 60s), burst crash circuit breaker (halts if > 5 crashes in 5 mins), and heartbeat file generation (`/tmp/bfmr-worker-heartbeat.json`).
 - `scripts/health_check.ts` (`npm run health`): Real-time diagnostic CLI verifying PostgreSQL connectivity (with automatic localhost container bridge fallback), worker process liveness, heartbeat freshness, and open exposure boundaries (< $200.00).
 
-### SETUP-004 Actual historical reconciliation and cutover (DELIVERED)
+### SETUP-004 Actual historical reconciliation and cutover (VERIFIED)
 
-Implemented controlled cutover orchestrator CLI (`scripts/run_production_cutover.ts` & `npm run cutover`):
+Implemented controlled cutover orchestrator CLI (`scripts/run_production_cutover.ts` & `npm run cutover`). Verified live on the operator's native host:
 - Automates pre-cutover PostgreSQL and local state backup execution.
-- Generates and displays the candidate manifest with its exact SHA-256 fingerprint.
-- Requires explicit operator confirmation prompt (`Type 'YES' to confirm`).
-- Atomically commits cutover state into `public.workflow_evidence` (`action_type='RELATIONAL_CUTOVER'`, `outcome='ACCEPTED'`).
-- Post-cutover verification confirms acceptance using `assertRelationalCutoverReady`. Covered by 4 unit tests in `tests/cutover.test.ts`.
+- Detected existing accepted production cutover at `2026-10-22T17:36:11.084Z`.
+- Synchronized local manifest `cutover-start-from.json` on disk to match PostgreSQL's authoritative baseline.
+- Verified acceptance with `assertRelationalCutoverReady()`, confirming status is `ACCEPTED & VERIFIED`. Covered by 4 unit tests in `tests/cutover.test.ts`.
 
 ### SETUP-005 Backup, restore and stale-state recovery (DELIVERED)
 
