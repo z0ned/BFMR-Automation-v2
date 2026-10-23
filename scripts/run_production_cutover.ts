@@ -119,8 +119,8 @@ export async function runProductionCutover(options: CutoverCliOptions = {}): Pro
 
     // 3. Inspect Existing Cutover in Database
     const existingMarkers = await db.withTransaction(async tx => {
-      const res = await tx.query<{ evidence: any; created_at: string }>(`
-        SELECT evidence, created_at FROM public.workflow_evidence
+      const res = await tx.query<{ evidence: any; recorded_at: string }>(`
+        SELECT evidence, recorded_at FROM public.workflow_evidence
         WHERE action_type='RELATIONAL_CUTOVER' AND phase='CONFIRMED' AND outcome='ACCEPTED'
         ORDER BY id DESC
       `);
@@ -134,7 +134,7 @@ export async function runProductionCutover(options: CutoverCliOptions = {}): Pro
       console.log(`  Version:            ${activeEvidence.version}`);
       console.log(`  Boundary Timestamp: ${bold}${activeEvidence.baseline?.startsAt ?? 'N/A'}${reset}`);
       console.log(`  Manifest SHA-256:   ${activeEvidence.manifestSha256}`);
-      console.log(`  Recorded At:        ${existingMarkers[0].created_at}`);
+      console.log(`  Recorded At:        ${existingMarkers[0].recorded_at}`);
 
       if (activeEvidence.account === account && activeEvidence.version === 2) {
         // Synchronize local cutover-start-from.json on disk with the accepted database record
