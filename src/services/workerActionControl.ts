@@ -56,7 +56,7 @@ export class WorkerActionControl {
       if (prior.rows.length && (prior.rows[0].evidence.schemaVersion !== 1 || !stored || typeof stored !== 'object' || Array.isArray(stored))) {
         throw new Error('Recovery inventory evidence is invalid.');
       }
-      const previous = stored as JsonObject | undefined;
+      const previous = acceptFirstBaseline ? undefined : (stored as JsonObject | undefined);
       const observed: JsonObject = {};
       for (const [name, file] of Object.entries(files)) {
         const pathSha256 = createHash('sha256').update(resolve(file.path)).digest('hex');
