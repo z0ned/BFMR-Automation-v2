@@ -109,13 +109,15 @@ export class ProductionGmailIntake {
       this.requestHistory('STARTUP');
       await this.historyTask;
       this.assertHealthy();
-    } catch (error) {
+    } catch (error: any) {
       this.fail(error);
       await this.stop();
+      console.error(`\n[Gmail Intake Diagnostics] Underlying error: ${error?.message || error}`);
+      if (error?.stack) console.error(error.stack);
       // Exceptions from transports/store are deliberately sanitized; do not
       // surface OAuth payloads, email contents or database connection details.
       throw error instanceof GmailHistoryGapError ? error
-        : new Error('Production Gmail startup failed; verify configuration, reviewed intake SQL, accepted legacy state and ownership.');
+        : new Error(`Production Gmail startup failed (${error?.message || 'unknown'}); verify configuration, reviewed intake SQL, accepted legacy state and ownership.`);
     }
   }
 
