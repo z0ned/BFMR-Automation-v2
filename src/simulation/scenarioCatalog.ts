@@ -213,4 +213,32 @@ export const SCENARIO_CATALOG: ScenarioDefinition[] = [
       body: `<h2>NEW DEAL</h2><p>• Synthetic Budget Headphones</p><p>Retailer: Amazon</p><p>Payout: $90.00 | Retail: $75.00</p><a href="https://bfmr.com/deals/synthetic-budget-headphones">Synthetic Budget Headphones</a>`,
     },
   },
+  {
+    id: 'phase3-amazon-tracking',
+    name: 'Phase 3 — Amazon Shipment Tracking',
+    phase: 3,
+    trackingStart: 'SEEDED_ORDER',
+    description: 'Tracks either an order produced by the Phase 2 purchase workflow or a seeded confirmed order through simulated Amazon and BFMR states.',
+    expectedOutcome: 'Exact Amazon order and shipment evidence updates the application ledger; the matching synthetic BFMR Purchase and Shipment are confirmed by tracker readback. Amazon delivery updates do not change BFMR delivery status.',
+    initialDeals: [{
+      dealId: '30001', slug: 'synthetic-tracking-headphones', title: 'Synthetic Tracking Headphones',
+      dealUrl: 'https://bfmr.com/deals/synthetic-tracking-headphones', retailer: 'Amazon',
+      isClosed: false, availableSlots: 2, payoutCents: 9000, retailCents: 7500, asin: 'B0SIMPHASE',
+    }],
+    amazon: {
+      accountEmail: 'buyer@example.invalid', accountState: 'AUTHENTICATED', asin: 'B0SIMPHASE', available: true,
+      quantity: 1, itemSubtotalCents: 7500, shippingCents: 0, taxCents: 500, discountCents: 0,
+      isGift: true, isFreeNonPrimeDelivery: true, addressMatches: true, paymentCardMatches: true,
+      cartState: 'EMPTY', deliveryEstimate: { type: 'ABSENT', rawText: 'No delivery estimate shown' },
+      existingUnpaidPayoutCents: 0, orderVisibilityDelaySeconds: 0,
+    },
+    tracking: {
+      initialStatus: 'SHIPPED', trackingNumber: 'TBA1234567890', carrier: 'Amazon Logistics',
+      visibilityDelaySeconds: 0, purchaseAgeHours: 24, orderIdMatches: true, asinMatches: true, totalMatches: true,
+    },
+    sampleEmail: {
+      sender: 'deals@buyformeretail.com', subject: 'NEW DEAL | Synthetic Tracking Headphones | Amazon',
+      body: `<h2>NEW DEAL</h2><p>• Synthetic Tracking Headphones</p><p>Retailer: Amazon</p><p>Payout: $90.00 | Retail: $75.00</p><a href="https://bfmr.com/deals/synthetic-tracking-headphones">Synthetic Tracking Headphones</a>`,
+    },
+  },
 ];
