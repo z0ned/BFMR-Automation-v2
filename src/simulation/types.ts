@@ -3,6 +3,32 @@ import type { ProviderTrackerRow } from '../providers/interfaces';
 
 export type ScenarioPhase = 1 | 2 | 3 | 4 | 5 | 6;
 
+export type PurchaseScenarioStart = 'END_TO_END' | 'SEEDED_RESERVATION';
+
+export interface SimulatedAmazonScenario {
+  accountEmail: string;
+  accountState: 'AUTHENTICATED' | 'AUTH_REQUIRED' | 'CHALLENGE';
+  asin: string;
+  available: boolean;
+  quantity: number;
+  itemSubtotalCents: number;
+  shippingCents: number;
+  taxCents: number;
+  discountCents: number;
+  isGift: boolean;
+  isFreeNonPrimeDelivery: boolean;
+  addressMatches: boolean;
+  paymentCardMatches: boolean;
+  cartState: 'EMPTY' | 'EXPECTED_ITEM' | 'OTHER_ITEMS' | 'UNKNOWN';
+  deliveryEstimate: {
+    type: 'KNOWN' | 'ABSENT' | 'UNKNOWN';
+    rawText: string;
+    latestDate?: string;
+  };
+  existingUnpaidPayoutCents: number;
+  orderVisibilityDelaySeconds?: number;
+}
+
 export interface SimulatedDeal {
   dealId: string;
   slug: string;
@@ -30,11 +56,16 @@ export type FaultType =
   | 'DROP_CONFIRMATION_AFTER_COMMIT'
   | 'DELAY_VISIBILITY'
   | 'INCOMPLETE_READ'
-  | 'AUTH_CHALLENGE';
+  | 'AUTH_CHALLENGE'
+  | 'CART_STATE_UNKNOWN'
+  | 'DUPLICATE_SUBMISSION'
+  | 'APPLICATION_PERSISTENCE_FAILURE';
 
 export interface ScriptedFault {
   id: string;
-  targetOp: 'VERIFY_SESSION' | 'SUBMIT_RESERVATION' | 'RESOLVE_DEAL' | 'TRACKER_READ' | 'CANCEL_RESERVATION';
+  targetOp: 'VERIFY_SESSION' | 'SUBMIT_RESERVATION' | 'RESOLVE_DEAL' | 'TRACKER_READ' | 'CANCEL_RESERVATION' |
+    'AMAZON_ACCOUNT' | 'AMAZON_SUPPLIER_READ' | 'AMAZON_CART_READ' | 'AMAZON_CHECKOUT_PREPARE' |
+    'AMAZON_ORDER_SUBMIT' | 'AMAZON_ORDER_READ' | 'APPLICATION_ORDER_PERSIST';
   faultType: FaultType;
   triggerOnAttempt: number;
   errorDetail?: string;
@@ -48,6 +79,8 @@ export interface ScenarioDefinition {
   expectedOutcome: string;
   initialDeals: SimulatedDeal[];
   initialReservations?: SimulatedReservation[];
+  purchaseStart?: PurchaseScenarioStart;
+  amazon?: SimulatedAmazonScenario;
   faults?: ScriptedFault[];
   sampleEmail: {
     subject: string;
