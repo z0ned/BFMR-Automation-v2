@@ -1,6 +1,7 @@
 import type { ReservationReference } from '../services/amazonEvaluation';
 import type { ReservationSubmissionResult } from '../adapters/playwrightBrowser';
 import type { IpadReservationCheck, TrackerReservationRow } from '../services/bfmrTrackerApi';
+import type { TrackedPackage } from '../services/amazonOrderLedger';
 
 export type { ReservationSubmissionResult, IpadReservationCheck };
 export type ReservationCheckResult = IpadReservationCheck;
@@ -25,6 +26,7 @@ export interface BfmrDealDetail {
 export interface IBfmrApi {
   resolveDealId(dealUrl: string): Promise<string>;
   readRecentReservedRows(): Promise<ProviderTrackerRow[]>;
+  readTrackingTrackerRows?(): Promise<ProviderTrackerRow[]>;
   inspectReservations(
     dealId: string,
     dealTitle: string,
@@ -32,6 +34,7 @@ export interface IBfmrApi {
   ): Promise<ReservationCheckResult>;
   cancelReservation(reference: ReservationReference): Promise<boolean>;
   getDeal?(slug: string): Promise<BfmrDealDetail | null>;
+  submitPurchase?(order: { orderId: string; reserveId: string; dealId: string }): Promise<boolean>;
   submitPurchaseTracking?(orderId: string, trackingNumber: string, carrier: string): Promise<boolean>;
 }
 
@@ -92,6 +95,11 @@ export interface IAmazonProvider {
     | { status: 'FOUND'; orderId: string; asin: string; quantity: number; totalCents: number; purchasedAt: string }
     | { status: 'NOT_FOUND' | 'INCOMPLETE' }
   >;
+  readTracking?(orderId: string): Promise<
+    | { status: 'FOUND'; orderId: string; asin: string; totalCents: number;
+        shipmentStatus: 'PENDING' | 'SHIPPED' | 'DELIVERED'; packages: TrackedPackage[] }
+    | { status: 'NOT_FOUND' | 'INCOMPLETE'; evidence?: unknown }
+  >;
   removePreparedCartItem?(preparedCheckoutId: string): Promise<boolean>;
 }
 
@@ -124,6 +132,7 @@ export interface ProviderBundle {
   readonly simulationScenario?: {
     phase: 1 | 2 | 3 | 4 | 5 | 6;
     purchaseStart?: 'END_TO_END' | 'SEEDED_RESERVATION';
+    trackingStart?: 'PHASE2_PURCHASE' | 'SEEDED_ORDER';
     seededReservation?: { reserveId: string; dealId: string; accountId: string; quantity: number; status: string; createdAt: string };
   };
   readonly simulationFaults?: {
