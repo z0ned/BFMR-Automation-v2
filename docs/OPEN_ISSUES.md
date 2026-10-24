@@ -1,6 +1,6 @@
 # Open issues and release blockers
 
-**Updated:** 23 October 2026
+**Updated:** 24 October 2026
 
 This is the current-only checklist of unfinished implementation, provider evidence and operational acceptance. Requirements are defined in the [v22 solution design](BFMR_Solution_Design_Specification_v22.md); implemented behavior, configuration and evidence are recorded in the [v22 implementation reference](BFMR_Implementation_v22..md) and [relational integration runbook](RELATIONAL_INTEGRATION.md). Database installation and upgrade boundaries are in [database/README.md](../database/README.md).
 
@@ -177,6 +177,23 @@ confirmed. Fault targets/types/attempts/details are editable for the next run.
 Durable simulator run-context restoration after a full server restart, and
 implementation acceptance evidence remain open. No software tests or live
 provider actions are claimed for this work.
+
+### Phase 3 simulated Amazon tracking
+
+Tracking scenario source is implemented for both Phase 2 generated orders and
+seeded orders. It advances a virtual clock to the next daily 03:00
+America/New_York window, validates exact Amazon order/ASIN/total evidence,
+retains partial/mismatched/multiple-number evidence for review, and updates the
+application ledger from simulated Amazon observations. Synthetic BFMR Purchase
+and Shipment writes require exact tracker readback; Amazon delivery does not
+change BFMR delivery status. Rules remain fixed in the shared workflow.
+
+Remaining work: record implementation acceptance evidence when requested,
+restore active simulator context across full server restarts, and validate the
+real Amazon tracking extraction plus BFMR Purchase/Shipment request and
+readback contracts under EV-003/EV-004. This simulator implementation does not
+establish live provider behavior. No software tests or live provider actions
+are claimed for this work.
 
 ### Tracking across ranked retailer accounts
 
