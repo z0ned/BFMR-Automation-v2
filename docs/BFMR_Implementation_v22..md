@@ -1,5 +1,78 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 24 October 2026 — Phase 2 fault controls and uncertain-order re-entry
+
+Phase 2 purchase runs now expose editable, validated scripted faults for
+account/supplier/cart/checkout/order operations, Phase 1 reservation operations,
+and application order persistence. The console supports fault type, target,
+attempt number, and optional error detail. When a run pauses after an uncertain
+submit, its durable checkout ID is retained; re-entry reads the exact checkout
+before any further submit. Delayed/incomplete reads remain paused until virtual
+time or fault conditions allow exact reconciliation. After an application-ledger
+write fault, re-entry retries only that local write from the confirmed order
+snapshot. The run control is labelled “Resume / reconcile” while paused.
+
+This is workflow re-entry inside the current process. `SimulationController`
+keeps the active provider bundle and application database in memory, so a full
+server-process restart cannot yet restore and resume the run. Persistent run
+manifest/context restoration and acceptance evidence remain open. No software
+tests or live provider actions were run.
+
+## 24 October 2026 — Phase 2 scenario inputs and seeded start
+
+Added a Phase 2 eligible-purchase preset. Run creation accepts validated
+synthetic Amazon input overrides and either `END_TO_END` or
+`SEEDED_RESERVATION`. The seeded path creates one exact provider reservation,
+reconciles it into the isolated application database, then starts the shared
+workflow from that reservation without submitting another reservation. The
+scenario console exposes account, product, cart, checkout, delivery, and
+existing unpaid-payout inputs for the next run. Existing unpaid payout exposure
+is seeded as a separate synthetic BFMR reservation and reconciled into the
+application database, so the fixed $200 policy evaluates it through the normal
+exposure logic. At that point fault editing, application-persistence faults,
+durable server-restart restore, uncertain-order reconciliation controls, and
+acceptance evidence remained open; see the newer amendment above for completed
+fault/re-entry controls. No software tests or provider actions were run.
+
+## 24 October 2026 — Phase 2 purchase-simulation store groundwork
+
+The simulator provider store now records each run's synthetic Amazon purchase
+configuration, prepared checkouts, committed orders, exact ASIN/quantity/total,
+and logical visibility time. It can represent multiple orders against one
+checkout so a duplicate submission remains visible. This is storage groundwork;
+the workflow/provider integration, scenario editor, fault lifecycle, and
+acceptance remain unfinished. No software tests or provider actions were run.
+
+`SimulatedAmazonProvider` now reads the run-pinned synthetic account, product,
+checkout, cart and delivery observations, and records submit/read outcomes only
+in the simulator store. The simulation bundle binds it to the matching store and
+run. It models rejection, lost confirmation, delayed visibility and duplicate
+submission. It is not yet wired into the shared purchase workflow; this adapter
+remains unreachable from Phase 2 scenarios until that integration is complete.
+No software tests or provider actions were run.
+
+`purchaseReservedDeal` now accepts structured simulated-provider observations
+and applies the fixed $100 item-total, payout-coverage, $200 cumulative exposure,
+gift, free non-Prime delivery, and 14-day delivery checks before submission.
+It requires exact account/product/quantity/total evidence, explicit provider
+confirmation, and a separate exact order readback. `dealEmailWorkflow.ts` still
+does not select this path, so Phase 2 cannot yet execute end to end. No software
+tests or provider actions were run.
+
+The Phase 2 `END_TO_END` workflow path now uses simulated BFMR supplier/deal
+evidence and the run-bound Amazon provider after its Phase 1 reservation barrier.
+It persists a confirmed order in the application ledger and deliberately stops
+before BFMR Purchase/Shipment operations, which belong to later phases. Delivery
+cutoff evaluation uses the simulation clock. The seeded-reservation start,
+scenario editor, restart restoration/reconciliation, and application-write fault
+are still missing. No software tests or provider actions were run.
+
+When a Phase 2 supplier or purchase rule requires cancellation, the durable
+workflow now records `CANCELLATION_REQUIRED` and pauses before the live
+cancellation service. Simulated workflows also skip the production batch and
+post-reservation journals. This protects the Phase 2 scenario from reading or
+mutating those private files and from invoking a later-phase live BFMR write.
+
 ## 24 October 2026 — Phase 1 provider simulation engine, interfaces, and scenario console
 
 Per `docs/PROVIDER_SIMULATION_PROPOSAL.md` and approved rollout choices:
