@@ -30,7 +30,7 @@ export class SimulatedBfmrApi implements IBfmrApi {
   public async readRecentReservedRows(): Promise<ProviderTrackerRow[]> {
     const fault = await this.store.checkAndTriggerFault(this.runId, 'TRACKER_READ');
     if (fault) {
-      if (fault.faultType === 'INCOMPLETE_READ') {
+      if (fault.faultType === 'INCOMPLETE_READ' || fault.faultType === 'DELAY_VISIBILITY') {
         throw new Error('My Tracker pagination failed: simulated incomplete read (HTTP 500)');
       }
       if (fault.faultType === 'FAIL_BEFORE_COMMIT') {
@@ -42,8 +42,10 @@ export class SimulatedBfmrApi implements IBfmrApi {
     const deals = await this.store.getDeals(this.runId);
     const dealMap = new Map(deals.map((d) => [d.dealId, d]));
 
-    return reservations.map((r) => {
+    const states = await Promise.all(reservations.map(r => this.store.getReservationExposure(this.runId, r.reserveId)));
+    return reservations.map((r, index) => {
       const deal = dealMap.get(r.dealId);
+      const state = states[index];
       return {
         reserve_id: r.reserveId,
         deal_id: r.dealId,
@@ -57,8 +59,19 @@ export class SimulatedBfmrApi implements IBfmrApi {
         payout_price: deal ? (deal.payoutCents / 100).toFixed(2) : '0.00',
         retail_price: deal ? (deal.retailCents / 100).toFixed(2) : '0.00',
         created_at: r.createdAt,
+        purchase_id: state?.purchase_id,
+        order_no: state?.order_no,
+        shipment_id: state?.shipment_id,
+        tracking_number: state?.tracking_number,
+        shipping_company: state?.shipping_company,
       };
     });
+  }
+
+  public async readTrackingTrackerRows(): Promise<ProviderTrackerRow[]> {
+    const fault = await this.store.checkAndTriggerFault(this.runId, 'BFMR_TRACKER_READ');
+    if (fault) throw new Error(`Simulated BFMR tracker read requires reconciliation (${fault.faultType}).`);
+    return this.readRecentReservedRows();
   }
 
   public async inspectReservations(
@@ -120,5 +133,31 @@ export class SimulatedBfmrApi implements IBfmrApi {
       payoutPriceCents: deal.payoutCents,
       retailers: [{ retailerName: deal.retailer, productUrl: `https://www.amazon.com/dp/${deal.asin}` }],
     };
+  }
+
+  public async submitPurchase(input: { orderId: string; reserveId: string; dealId: string }): Promise<boolean> {
+    const fault = await this.store.checkAndTriggerFault(this.runId, 'BFMR_PURCHASE_SUBMIT');
+    if (fault?.faultType === 'FAIL_BEFORE_COMMIT') throw new Error('Simulated BFMR Purchase rejected before commit.');
+    await this.store.submitBfmrPurchase(this.runId, input);
+    if (fault?.faultType === 'DROP_CONFIRMATION_AFTER_COMMIT' || fault?.faultType === 'DELAY_VISIBILITY') {
+      throw new Error('Simulated BFMR Purchase committed but confirmation is uncertain.');
+    }
+    return true;
+  }
+
+  public async submitPurchaseTracking(orderId: string, trackingNumber: string, carrier: string): Promise<boolean> {
+    const fault = await this.store.checkAndTriggerFault(this.runId, 'BFMR_SHIPMENT_SUBMIT');
+    if (fault?.faultType === 'FAIL_BEFORE_COMMIT') throw new Error('Simulated BFMR Shipment rejected before commit.');
+    const rows = await this.readRecentReservedRows();
+    const matches = rows.filter(row => String(row.order_no ?? '') === orderId);
+    if (matches.length !== 1) throw new Error('Exact simulated BFMR Purchase row is unavailable for Shipment.');
+    const row = matches[0];
+    await this.store.submitBfmrShipment(this.runId, {
+      orderId, reserveId: String(row.reserve_id), purchaseId: String(row.purchase_id), trackingNumber, carrier,
+    });
+    if (fault?.faultType === 'DROP_CONFIRMATION_AFTER_COMMIT' || fault?.faultType === 'DELAY_VISIBILITY') {
+      throw new Error('Simulated BFMR Shipment committed but confirmation is uncertain.');
+    }
+    return true;
   }
 }
