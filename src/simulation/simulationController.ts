@@ -7,6 +7,10 @@ import { processEmail, WorkflowReviewRequiredError, type ReceivedEmail } from '.
 import type { ProviderBundle } from '../providers/interfaces';
 import type { RelationalRuntime } from '../services/relationalRuntime';
 import type {
+  SimulatedAmazonScenario,
+  SimulatedReservation,
+  ScriptedFault,
+  FaultType,
   ScenarioDefinition,
   SimulationRunRecord,
   StateComparisonDiff,
@@ -18,6 +22,100 @@ interface ActiveRunContext {
   bundle: ProviderBundle;
   appRuntime: RelationalRuntime;
   email: ReceivedEmail;
+}
+
+function purchaseScenarioForRun(base: ScenarioDefinition, overrides: {
+  amazon?: unknown;
+  purchaseStart?: unknown;
+  faults?: unknown;
+}): ScenarioDefinition {
+  const scenario = structuredClone(base);
+  if (scenario.phase !== 2) {
+    if (overrides.amazon !== undefined || overrides.purchaseStart !== undefined || overrides.faults !== undefined) {
+      throw new Error('Purchase inputs can only be edited for Phase 2 scenarios.');
+    }
+    return scenario;
+  }
+  if (!scenario.amazon) throw new Error('Phase 2 scenario is missing its Amazon input profile.');
+  if (overrides.purchaseStart !== undefined) {
+    if (overrides.purchaseStart !== 'END_TO_END' && overrides.purchaseStart !== 'SEEDED_RESERVATION') {
+      throw new Error('Purchase start must be END_TO_END or SEEDED_RESERVATION.');
+    }
+    scenario.purchaseStart = overrides.purchaseStart;
+  }
+  if (overrides.amazon !== undefined) {
+    if (!overrides.amazon || typeof overrides.amazon !== 'object' || Array.isArray(overrides.amazon)) {
+      throw new Error('Amazon scenario inputs must be an object.');
+    }
+    const value = overrides.amazon as Record<string, unknown>;
+    const fields = ['accountEmail','accountState','asin','available','quantity','itemSubtotalCents','shippingCents',
+      'taxCents','discountCents','isGift','isFreeNonPrimeDelivery','addressMatches','paymentCardMatches','cartState',
+      'deliveryEstimate','existingUnpaidPayoutCents','orderVisibilityDelaySeconds'];
+    if (Object.keys(value).some(key => !fields.includes(key))) throw new Error('Unknown Amazon scenario input.');
+    const merged = { ...scenario.amazon, ...value } as SimulatedAmazonScenario;
+    if (!/^[^\s@]+@example\.invalid$/i.test(merged.accountEmail) ||
+        !['AUTHENTICATED','AUTH_REQUIRED','CHALLENGE'].includes(merged.accountState) ||
+        !/^[A-Z0-9]{10}$/.test(merged.asin) || typeof merged.available !== 'boolean' ||
+        !Number.isSafeInteger(merged.quantity) || merged.quantity < 1 || merged.quantity > 10 ||
+        ![merged.itemSubtotalCents, merged.shippingCents, merged.taxCents, merged.discountCents,
+          merged.existingUnpaidPayoutCents].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 999999999999) ||
+        ![merged.isGift, merged.isFreeNonPrimeDelivery, merged.addressMatches, merged.paymentCardMatches].every(v => typeof v === 'boolean') ||
+        !['EMPTY','EXPECTED_ITEM','OTHER_ITEMS','UNKNOWN'].includes(merged.cartState) ||
+        !merged.deliveryEstimate || !['KNOWN','ABSENT','UNKNOWN'].includes(merged.deliveryEstimate.type) ||
+        typeof merged.deliveryEstimate.rawText !== 'string' ||
+        (merged.deliveryEstimate.latestDate !== undefined && !Number.isFinite(Date.parse(merged.deliveryEstimate.latestDate))) ||
+        (merged.orderVisibilityDelaySeconds !== undefined && (!Number.isSafeInteger(merged.orderVisibilityDelaySeconds) ||
+          merged.orderVisibilityDelaySeconds < 0 || merged.orderVisibilityDelaySeconds > 86400))) {
+      throw new Error('Amazon scenario inputs failed validation.');
+    }
+    scenario.amazon = merged;
+    scenario.initialDeals = scenario.initialDeals.map(deal => ({
+      ...deal, asin: merged.asin, retailCents: merged.itemSubtotalCents,
+    }));
+  }
+  if (overrides.faults !== undefined) {
+    if (!Array.isArray(overrides.faults) || overrides.faults.length > 12) {
+      throw new Error('Fault scenarios must be a list with at most 12 entries.');
+    }
+    const targetOps: ScriptedFault['targetOp'][] = [
+      'VERIFY_SESSION','SUBMIT_RESERVATION','RESOLVE_DEAL','TRACKER_READ','CANCEL_RESERVATION',
+      'AMAZON_ACCOUNT','AMAZON_SUPPLIER_READ','AMAZON_CART_READ','AMAZON_CHECKOUT_PREPARE',
+      'AMAZON_ORDER_SUBMIT','AMAZON_ORDER_READ','APPLICATION_ORDER_PERSIST',
+    ];
+    const faultTypes: FaultType[] = [
+      'FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY','INCOMPLETE_READ',
+      'AUTH_CHALLENGE','CART_STATE_UNKNOWN','DUPLICATE_SUBMISSION','APPLICATION_PERSISTENCE_FAILURE',
+    ];
+    const allowed: Partial<Record<ScriptedFault['targetOp'], FaultType[]>> = {
+      VERIFY_SESSION: ['FAIL_BEFORE_COMMIT'], SUBMIT_RESERVATION: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT'],
+      RESOLVE_DEAL: ['FAIL_BEFORE_COMMIT'], TRACKER_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ'],
+      CANCEL_RESERVATION: ['FAIL_BEFORE_COMMIT'], AMAZON_ACCOUNT: ['AUTH_CHALLENGE'],
+      AMAZON_SUPPLIER_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ'], AMAZON_CART_READ: ['CART_STATE_UNKNOWN'],
+      AMAZON_CHECKOUT_PREPARE: ['FAIL_BEFORE_COMMIT'],
+      AMAZON_ORDER_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY','DUPLICATE_SUBMISSION'],
+      AMAZON_ORDER_READ: ['DELAY_VISIBILITY','INCOMPLETE_READ','FAIL_BEFORE_COMMIT'],
+      APPLICATION_ORDER_PERSIST: ['APPLICATION_PERSISTENCE_FAILURE'],
+    };
+    const seenIds = new Set<string>();
+    scenario.faults = overrides.faults.map((raw: unknown) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Each fault must be an object.');
+      const fault = raw as Record<string, unknown>;
+      const { id, targetOp, faultType, triggerOnAttempt, errorDetail } = fault;
+      if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(id) || seenIds.has(id) ||
+          typeof targetOp !== 'string' || !targetOps.includes(targetOp as ScriptedFault['targetOp']) ||
+          typeof faultType !== 'string' || !faultTypes.includes(faultType as FaultType) ||
+          !allowed[targetOp as ScriptedFault['targetOp']]?.includes(faultType as FaultType) ||
+          !Number.isSafeInteger(triggerOnAttempt) || (triggerOnAttempt as number) < 1 || (triggerOnAttempt as number) > 100 ||
+          (errorDetail !== undefined && (typeof errorDetail !== 'string' || errorDetail.length > 300)) ||
+          Object.keys(fault).some(key => !['id','targetOp','faultType','triggerOnAttempt','errorDetail'].includes(key))) {
+        throw new Error('Fault scenario failed validation for its target, type, attempt, or detail.');
+      }
+      seenIds.add(id);
+      return { id, targetOp: targetOp as ScriptedFault['targetOp'], faultType: faultType as FaultType,
+        triggerOnAttempt: triggerOnAttempt as number, ...(errorDetail ? { errorDetail: errorDetail as string } : {}) };
+    });
+  }
+  return scenario;
 }
 
 export class SimulationController {
@@ -42,23 +140,62 @@ export class SimulationController {
     return SCENARIO_CATALOG.find((s) => s.id === scenarioId);
   }
 
-  public async createRun(scenarioId: string): Promise<SimulationRunRecord> {
+  public async createRun(scenarioId: string, overrides: { amazon?: unknown; purchaseStart?: unknown; faults?: unknown } = {}): Promise<SimulationRunRecord> {
     await this.init();
-    const scenario = this.getScenario(scenarioId);
-    if (!scenario) throw new Error(`Scenario not found: ${scenarioId}`);
+    const definition = this.getScenario(scenarioId);
+    if (!definition) throw new Error(`Scenario not found: ${scenarioId}`);
 
     const runId = `RUN-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
+    const scenario = purchaseScenarioForRun(definition, overrides);
+    let seededReservation: SimulatedReservation | undefined;
+    const initialReservations: SimulatedReservation[] = [];
+    const existingExposure = scenario.amazon?.existingUnpaidPayoutCents ?? 0;
+    if (scenario.phase === 2 && existingExposure > 0) {
+      const exposureDealId = `${scenario.initialDeals[0].dealId}-EXPOSURE`;
+      scenario.initialDeals.push({
+        dealId: exposureDealId, slug: `synthetic-existing-exposure-${runId.toLowerCase()}`,
+        title: 'Synthetic Prior Reservation for Exposure',
+        dealUrl: `https://bfmr.com/deals/synthetic-existing-exposure-${runId.toLowerCase()}`,
+        retailer: 'Amazon', isClosed: false, availableSlots: 0, payoutCents: existingExposure,
+        retailCents: 0, asin: scenario.amazon?.asin,
+      });
+      initialReservations.push({
+        reserveId: `SIM-EXPOSURE-${runId}`, dealId: exposureDealId,
+        accountId: 'synthetic-operator-1', quantity: 1, status: 'reserved', createdAt: new Date().toISOString(),
+      });
+    }
+    if (scenario.phase === 2 && scenario.purchaseStart === 'SEEDED_RESERVATION') {
+      if (scenario.initialDeals.length !== 1 || !scenario.amazon) throw new Error('Seeded purchase scenarios require one exact deal and Amazon profile.');
+      const deal = scenario.initialDeals[0];
+      seededReservation = {
+        reserveId: `SIM-SEED-${runId}`, dealId: deal.dealId, accountId: 'synthetic-operator-1', quantity: 1,
+        status: 'reserved', createdAt: new Date().toISOString(),
+      };
+      initialReservations.push(seededReservation);
+    }
+    if (initialReservations.length) scenario.initialReservations = initialReservations;
 
     const runRecord = await this.store.createRun(scenario, runId);
     const bundle = createSimulatedProviderBundle(this.store, runId, {
       accountId: 'synthetic-operator-1',
       initialTime: new Date(runRecord.virtualTime),
+      phase: scenario.phase,
+      purchaseStart: scenario.purchaseStart,
+      seededReservation,
     });
 
     const appRuntime = await createSimulationAppRuntime({
       account: 'synthetic-operator-1',
-      retailerEmail: 'buyer@example.invalid',
+      retailerEmail: scenario.amazon?.accountEmail ?? 'buyer@example.invalid',
     });
+
+    if (scenario.initialReservations?.length) {
+      const seedRows = await bundle.bfmrApi.readRecentReservedRows();
+      const result = await appRuntime.sync.reconcile(seedRows, {
+        complete: true, accountValidated: true, financialContractValidated: true,
+      });
+      if (!result.promoted) throw new Error('Seeded provider reservation could not be established in application state.');
+    }
 
     const email: ReceivedEmail = {
       id: `msg-${runId.toLowerCase()}`,
