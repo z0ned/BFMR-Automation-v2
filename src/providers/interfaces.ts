@@ -60,12 +60,39 @@ export interface IAmazonProvider {
   verifyAccount(expectedAccount: string): Promise<'AUTHENTICATED' | 'AUTH_REQUIRED' | 'CHALLENGE'>;
   readSupplier(productUrl: string): Promise<{ asin: string; available: boolean; priceCents?: number }>;
   prepareCheckout?(options: { asin: string; quantity: number }): Promise<{
+    preparedCheckoutId: string;
+    accountEmail: string;
+    asin: string;
+    quantity: number;
+    itemSubtotalCents: number;
+    shippingCents: number;
+    taxCents: number;
+    discountCents: number;
     reviewAvailable: boolean;
     completeTotalCents: number;
     isGift: boolean;
-    isFreeDelivery: boolean;
+    isFreeNonPrimeDelivery: boolean;
+    addressMatches: boolean;
+    paymentCardMatches: boolean;
+    cartState: 'EMPTY' | 'EXPECTED_ITEM' | 'OTHER_ITEMS' | 'UNKNOWN';
+    deliveryEstimate: {
+      type: 'KNOWN' | 'ABSENT' | 'UNKNOWN';
+      rawText: string;
+      latestDate?: string;
+    };
   }>;
-  submitOrder?(preparedCheckoutId: string): Promise<{ orderId: string; status: 'PENDING' | 'CONFIRMED' | 'UNCERTAIN' }>;
+  submitOrder?(preparedCheckoutId: string): Promise<{
+    orderId?: string;
+    asin: string;
+    quantity: number;
+    totalCents: number;
+    status: 'REJECTED' | 'PENDING' | 'CONFIRMED' | 'UNCERTAIN';
+  }>;
+  readOrder?(preparedCheckoutId: string): Promise<
+    | { status: 'FOUND'; orderId: string; asin: string; quantity: number; totalCents: number; purchasedAt: string }
+    | { status: 'NOT_FOUND' | 'INCOMPLETE' }
+  >;
+  removePreparedCartItem?(preparedCheckoutId: string): Promise<boolean>;
 }
 
 /**
@@ -94,6 +121,14 @@ export interface ProviderBundle {
   readonly mode: 'live' | 'simulation';
   readonly intakeMode: 'production' | 'testing';
   readonly runId?: string;
+  readonly simulationScenario?: {
+    phase: 1 | 2 | 3 | 4 | 5 | 6;
+    purchaseStart?: 'END_TO_END' | 'SEEDED_RESERVATION';
+    seededReservation?: { reserveId: string; dealId: string; accountId: string; quantity: number; status: string; createdAt: string };
+  };
+  readonly simulationFaults?: {
+    consume(targetOp: string): Promise<{ faultType: string; errorDetail?: string } | null>;
+  };
   readonly bfmrApi: IBfmrApi;
   readonly bfmrBrowser: IBfmrBrowser;
   readonly amazon: IAmazonProvider;
