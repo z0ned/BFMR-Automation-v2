@@ -11,7 +11,8 @@ export function createSimulatedProviderBundle(
   store: SimulatedStore,
   runId: string,
   options: { accountId?: string; initialTime?: Date; phase?: 1 | 2 | 3 | 4 | 5 | 6;
-    purchaseStart?: 'END_TO_END' | 'SEEDED_RESERVATION'; seededReservation?: SimulatedReservation } = {}
+    purchaseStart?: 'END_TO_END' | 'SEEDED_RESERVATION'; trackingStart?: 'PHASE2_PURCHASE' | 'SEEDED_ORDER';
+    seededReservation?: SimulatedReservation } = {}
 ): ProviderBundle {
   const accountId = options.accountId || 'synthetic-operator-1';
   const bfmrApi = new SimulatedBfmrApi(store, runId, accountId);
@@ -27,6 +28,7 @@ export function createSimulatedProviderBundle(
     simulationScenario: {
       phase: options.phase ?? 1,
       purchaseStart: options.purchaseStart,
+      trackingStart: options.trackingStart,
       seededReservation: options.seededReservation,
     },
     simulationFaults: {
