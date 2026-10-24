@@ -2,7 +2,7 @@
 
 **Status: DRAFT FOR REVIEW — not approved for implementation.**  
 **Prepared:** 23 October 2026  
-**Updated:** 24 October 2026 — explicit `BFMR_PROVIDER_MODE` configuration.  
+**Updated:** 24 October 2026 — explicit `BFMR_PROVIDER_MODE` configuration.<br>
 **Source review baseline:** repository revision `3218a34`.  
 **Scope of this change:** documentation only. No application, configuration,
 database, service or provider behavior has been changed. Interface names,
