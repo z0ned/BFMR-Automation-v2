@@ -4,6 +4,18 @@ import type { ProviderTrackerRow } from '../providers/interfaces';
 export type ScenarioPhase = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type PurchaseScenarioStart = 'END_TO_END' | 'SEEDED_RESERVATION';
+export type TrackingScenarioStart = 'PHASE2_PURCHASE' | 'SEEDED_ORDER';
+
+export interface SimulatedTrackingScenario {
+  initialStatus: 'PENDING' | 'SHIPPED' | 'DELIVERED' | 'INCOMPLETE' | 'MISMATCHED' | 'MULTIPLE';
+  trackingNumber: string;
+  carrier: string;
+  visibilityDelaySeconds: number;
+  purchaseAgeHours: number;
+  orderIdMatches: boolean;
+  asinMatches: boolean;
+  totalMatches: boolean;
+}
 
 export interface SimulatedAmazonScenario {
   accountEmail: string;
@@ -65,7 +77,8 @@ export interface ScriptedFault {
   id: string;
   targetOp: 'VERIFY_SESSION' | 'SUBMIT_RESERVATION' | 'RESOLVE_DEAL' | 'TRACKER_READ' | 'CANCEL_RESERVATION' |
     'AMAZON_ACCOUNT' | 'AMAZON_SUPPLIER_READ' | 'AMAZON_CART_READ' | 'AMAZON_CHECKOUT_PREPARE' |
-    'AMAZON_ORDER_SUBMIT' | 'AMAZON_ORDER_READ' | 'APPLICATION_ORDER_PERSIST';
+    'AMAZON_ORDER_SUBMIT' | 'AMAZON_ORDER_READ' | 'APPLICATION_ORDER_PERSIST' |
+    'AMAZON_TRACKING_READ' | 'BFMR_TRACKER_READ' | 'BFMR_PURCHASE_SUBMIT' | 'BFMR_SHIPMENT_SUBMIT';
   faultType: FaultType;
   triggerOnAttempt: number;
   errorDetail?: string;
@@ -81,6 +94,8 @@ export interface ScenarioDefinition {
   initialReservations?: SimulatedReservation[];
   purchaseStart?: PurchaseScenarioStart;
   amazon?: SimulatedAmazonScenario;
+  trackingStart?: TrackingScenarioStart;
+  tracking?: SimulatedTrackingScenario;
   faults?: ScriptedFault[];
   sampleEmail: {
     subject: string;
