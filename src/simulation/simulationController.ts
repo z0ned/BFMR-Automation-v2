@@ -3,12 +3,15 @@ import { SCENARIO_CATALOG } from './scenarioCatalog';
 import { createSimulatedProviderBundle } from './simulatedBundle';
 import { createSimulationAppRuntime } from './appRuntimeFixture';
 import { StateReconciler } from './reconciler';
+import { runSimulatedAmazonTracking } from './simulatedTracking';
+import { atlantaDayAndHour } from '../services/nightlyAmazonTracking';
 import { processEmail, WorkflowReviewRequiredError, type ReceivedEmail } from '../services/dealEmailWorkflow';
 import type { ProviderBundle } from '../providers/interfaces';
 import type { RelationalRuntime } from '../services/relationalRuntime';
 import type {
   SimulatedAmazonScenario,
   SimulatedReservation,
+  SimulatedTrackingScenario,
   ScriptedFault,
   FaultType,
   ScenarioDefinition,
@@ -22,26 +25,37 @@ interface ActiveRunContext {
   bundle: ProviderBundle;
   appRuntime: RelationalRuntime;
   email: ReceivedEmail;
+  purchaseStageComplete: boolean;
 }
 
 function purchaseScenarioForRun(base: ScenarioDefinition, overrides: {
   amazon?: unknown;
   purchaseStart?: unknown;
+  trackingStart?: unknown;
+  tracking?: unknown;
   faults?: unknown;
 }): ScenarioDefinition {
   const scenario = structuredClone(base);
-  if (scenario.phase !== 2) {
-    if (overrides.amazon !== undefined || overrides.purchaseStart !== undefined || overrides.faults !== undefined) {
-      throw new Error('Purchase inputs can only be edited for Phase 2 scenarios.');
+  if (scenario.phase !== 2 && scenario.phase !== 3) {
+    if (overrides.amazon !== undefined || overrides.purchaseStart !== undefined || overrides.trackingStart !== undefined ||
+        overrides.tracking !== undefined || overrides.faults !== undefined) {
+      throw new Error('Purchase/tracking inputs can only be edited for Phase 2 or Phase 3 scenarios.');
     }
     return scenario;
   }
   if (!scenario.amazon) throw new Error('Phase 2 scenario is missing its Amazon input profile.');
   if (overrides.purchaseStart !== undefined) {
+    if (scenario.phase !== 2) throw new Error('Purchase start mode is configured through Phase 3 tracking start.');
     if (overrides.purchaseStart !== 'END_TO_END' && overrides.purchaseStart !== 'SEEDED_RESERVATION') {
       throw new Error('Purchase start must be END_TO_END or SEEDED_RESERVATION.');
     }
     scenario.purchaseStart = overrides.purchaseStart;
+  }
+  if (overrides.trackingStart !== undefined) {
+    if (scenario.phase !== 3 || !['PHASE2_PURCHASE','SEEDED_ORDER'].includes(String(overrides.trackingStart))) {
+      throw new Error('Tracking start must be PHASE2_PURCHASE or SEEDED_ORDER in Phase 3.');
+    }
+    scenario.trackingStart = overrides.trackingStart as 'PHASE2_PURCHASE' | 'SEEDED_ORDER';
   }
   if (overrides.amazon !== undefined) {
     if (!overrides.amazon || typeof overrides.amazon !== 'object' || Array.isArray(overrides.amazon)) {
@@ -73,6 +87,26 @@ function purchaseScenarioForRun(base: ScenarioDefinition, overrides: {
       ...deal, asin: merged.asin, retailCents: merged.itemSubtotalCents,
     }));
   }
+  if (overrides.tracking !== undefined) {
+    if (scenario.phase !== 3 || !overrides.tracking || typeof overrides.tracking !== 'object' || Array.isArray(overrides.tracking)) {
+      throw new Error('Tracking scenario inputs are editable only in Phase 3.');
+    }
+    const value = overrides.tracking as Record<string, unknown>;
+    const fields = ['initialStatus','trackingNumber','carrier','visibilityDelaySeconds','purchaseAgeHours',
+      'orderIdMatches','asinMatches','totalMatches'];
+    if (Object.keys(value).some(key => !fields.includes(key))) throw new Error('Unknown tracking scenario input.');
+    const merged = { ...scenario.tracking, ...value } as SimulatedTrackingScenario;
+    if (!['PENDING','SHIPPED','DELIVERED','INCOMPLETE','MISMATCHED','MULTIPLE'].includes(merged.initialStatus) ||
+        typeof merged.trackingNumber !== 'string' || merged.trackingNumber.length > 40 ||
+        (merged.trackingNumber !== '' && !/^[A-Z0-9-]{8,40}$/i.test(merged.trackingNumber)) ||
+        typeof merged.carrier !== 'string' || merged.carrier.length > 80 ||
+        !Number.isSafeInteger(merged.visibilityDelaySeconds) || merged.visibilityDelaySeconds < 0 || merged.visibilityDelaySeconds > 604800 ||
+        !Number.isSafeInteger(merged.purchaseAgeHours) || merged.purchaseAgeHours < 1 || merged.purchaseAgeHours > 8760 ||
+        ![merged.orderIdMatches,merged.asinMatches,merged.totalMatches].every(item => typeof item === 'boolean')) {
+      throw new Error('Tracking scenario inputs failed validation.');
+    }
+    scenario.tracking = merged;
+  }
   if (overrides.faults !== undefined) {
     if (!Array.isArray(overrides.faults) || overrides.faults.length > 12) {
       throw new Error('Fault scenarios must be a list with at most 12 entries.');
@@ -81,6 +115,8 @@ function purchaseScenarioForRun(base: ScenarioDefinition, overrides: {
       'VERIFY_SESSION','SUBMIT_RESERVATION','RESOLVE_DEAL','TRACKER_READ','CANCEL_RESERVATION',
       'AMAZON_ACCOUNT','AMAZON_SUPPLIER_READ','AMAZON_CART_READ','AMAZON_CHECKOUT_PREPARE',
       'AMAZON_ORDER_SUBMIT','AMAZON_ORDER_READ','APPLICATION_ORDER_PERSIST',
+      'AMAZON_TRACKING_READ','BFMR_PURCHASE_SUBMIT','BFMR_SHIPMENT_SUBMIT',
+      'BFMR_TRACKER_READ',
     ];
     const faultTypes: FaultType[] = [
       'FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY','INCOMPLETE_READ',
@@ -95,6 +131,10 @@ function purchaseScenarioForRun(base: ScenarioDefinition, overrides: {
       AMAZON_ORDER_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY','DUPLICATE_SUBMISSION'],
       AMAZON_ORDER_READ: ['DELAY_VISIBILITY','INCOMPLETE_READ','FAIL_BEFORE_COMMIT'],
       APPLICATION_ORDER_PERSIST: ['APPLICATION_PERSISTENCE_FAILURE'],
+      AMAZON_TRACKING_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ','DELAY_VISIBILITY'],
+      BFMR_PURCHASE_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY'],
+      BFMR_SHIPMENT_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY'],
+      BFMR_TRACKER_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ','DELAY_VISIBILITY'],
     };
     const seenIds = new Set<string>();
     scenario.faults = overrides.faults.map((raw: unknown) => {
@@ -140,7 +180,7 @@ export class SimulationController {
     return SCENARIO_CATALOG.find((s) => s.id === scenarioId);
   }
 
-  public async createRun(scenarioId: string, overrides: { amazon?: unknown; purchaseStart?: unknown; faults?: unknown } = {}): Promise<SimulationRunRecord> {
+  public async createRun(scenarioId: string, overrides: { amazon?: unknown; purchaseStart?: unknown; trackingStart?: unknown; tracking?: unknown; faults?: unknown } = {}): Promise<SimulationRunRecord> {
     await this.init();
     const definition = this.getScenario(scenarioId);
     if (!definition) throw new Error(`Scenario not found: ${scenarioId}`);
@@ -149,8 +189,9 @@ export class SimulationController {
     const scenario = purchaseScenarioForRun(definition, overrides);
     let seededReservation: SimulatedReservation | undefined;
     const initialReservations: SimulatedReservation[] = [];
+    const phase2Purchase = scenario.phase === 2 || (scenario.phase === 3 && scenario.trackingStart === 'PHASE2_PURCHASE');
     const existingExposure = scenario.amazon?.existingUnpaidPayoutCents ?? 0;
-    if (scenario.phase === 2 && existingExposure > 0) {
+    if (phase2Purchase && existingExposure > 0) {
       const exposureDealId = `${scenario.initialDeals[0].dealId}-EXPOSURE`;
       scenario.initialDeals.push({
         dealId: exposureDealId, slug: `synthetic-existing-exposure-${runId.toLowerCase()}`,
@@ -164,11 +205,23 @@ export class SimulationController {
         accountId: 'synthetic-operator-1', quantity: 1, status: 'reserved', createdAt: new Date().toISOString(),
       });
     }
-    if (scenario.phase === 2 && scenario.purchaseStart === 'SEEDED_RESERVATION') {
-      if (scenario.initialDeals.length !== 1 || !scenario.amazon) throw new Error('Seeded purchase scenarios require one exact deal and Amazon profile.');
-      const deal = scenario.initialDeals[0];
+    if ((scenario.phase === 2 && scenario.purchaseStart === 'SEEDED_RESERVATION') ||
+        (scenario.phase === 3 && scenario.trackingStart === 'PHASE2_PURCHASE')) {
+      const deal = scenario.initialDeals.find(item => item.dealId === definition.initialDeals[0]?.dealId);
+      if (!deal || !scenario.amazon) throw new Error('Seeded purchase scenarios require one exact deal and Amazon profile.');
       seededReservation = {
         reserveId: `SIM-SEED-${runId}`, dealId: deal.dealId, accountId: 'synthetic-operator-1', quantity: 1,
+        status: 'reserved', createdAt: new Date().toISOString(),
+      };
+      initialReservations.push(seededReservation);
+    }
+    if (scenario.phase === 3 && scenario.trackingStart === 'SEEDED_ORDER') {
+      const deal = scenario.initialDeals.find(item => item.dealId === definition.initialDeals[0]?.dealId);
+      if (!deal || !scenario.amazon || !scenario.tracking) {
+        throw new Error('Seeded tracking scenarios require one exact deal, Amazon profile, and tracking profile.');
+      }
+      seededReservation = {
+        reserveId: `SIM-TRACK-SEED-${runId}`, dealId: deal.dealId, accountId: 'synthetic-operator-1', quantity: 1,
         status: 'reserved', createdAt: new Date().toISOString(),
       };
       initialReservations.push(seededReservation);
@@ -179,8 +232,9 @@ export class SimulationController {
     const bundle = createSimulatedProviderBundle(this.store, runId, {
       accountId: 'synthetic-operator-1',
       initialTime: new Date(runRecord.virtualTime),
-      phase: scenario.phase,
-      purchaseStart: scenario.purchaseStart,
+      phase: phase2Purchase ? 2 : scenario.phase,
+      purchaseStart: phase2Purchase ? 'SEEDED_RESERVATION' : scenario.purchaseStart,
+      trackingStart: scenario.trackingStart,
       seededReservation,
     });
 
@@ -195,6 +249,20 @@ export class SimulationController {
         complete: true, accountValidated: true, financialContractValidated: true,
       });
       if (!result.promoted) throw new Error('Seeded provider reservation could not be established in application state.');
+    }
+
+    if (scenario.phase === 3 && scenario.trackingStart === 'SEEDED_ORDER') {
+      if (!seededReservation || !scenario.amazon || !scenario.tracking) throw new Error('Seeded tracking scenario is incomplete.');
+      const purchasedAt = new Date(Date.parse(runRecord.virtualTime) - scenario.tracking.purchaseAgeHours * 60 * 60 * 1000).toISOString();
+      const seededOrder = await this.store.seedAmazonTrackingOrder(runId, {
+        reserveId: seededReservation.reserveId, dealId: seededReservation.dealId,
+        asin: scenario.amazon.asin, totalCents: scenario.amazon.itemSubtotalCents + scenario.amazon.taxCents +
+          scenario.amazon.shippingCents - scenario.amazon.discountCents, purchasedAt,
+      });
+      await appRuntime.ledger.add({ orderId: seededOrder.orderId, reserveId: seededReservation.reserveId,
+        dealId: seededReservation.dealId, asin: seededOrder.asin, totalCents: seededOrder.totalCents,
+        purchasedAt, status: 'PENDING', packages: [] });
+      await this.store.updateRunStatus(runId, 'STEPPING');
     }
 
     const email: ReceivedEmail = {
@@ -217,6 +285,7 @@ export class SimulationController {
       bundle,
       appRuntime,
       email,
+      purchaseStageComplete: scenario.phase === 3 && scenario.trackingStart === 'SEEDED_ORDER',
     });
 
     return this.store.getRun(runId);
@@ -235,6 +304,14 @@ export class SimulationController {
     if (!ctx) throw new Error(`Active run context not found for ${runId}.`);
 
     const existingRun = await this.store.getRun(runId);
+    if (ctx.scenario.phase === 3 && ctx.scenario.trackingStart === 'SEEDED_ORDER') {
+      const diff = await this.reconciler.evaluateDiff(runId, ctx.appRuntime.db);
+      return { run: existingRun, diff };
+    }
+    if (ctx.scenario.phase === 3 && ctx.purchaseStageComplete) {
+      const diff = await this.reconciler.evaluateDiff(runId, ctx.appRuntime.db);
+      return { run: existingRun, diff };
+    }
     if (existingRun.status === 'COMPLETED') {
       const diff = await this.reconciler.evaluateDiff(runId, ctx.appRuntime.db);
       return { run: existingRun, diff };
@@ -277,8 +354,15 @@ export class SimulationController {
         async () => {} // Assertion guard passes in controlled simulation
       );
 
-      await this.store.updateRunStatus(runId, 'COMPLETED');
-      await this.store.logEvent(runId, 'INFO', 'WORKFLOW', `Workflow completed successfully.`);
+      if (ctx.scenario.phase === 3 && ctx.scenario.trackingStart === 'PHASE2_PURCHASE') {
+        ctx.purchaseStageComplete = true;
+        if (ctx.bundle.simulationScenario) ctx.bundle.simulationScenario.phase = 3;
+        await this.store.updateRunStatus(runId, 'STEPPING');
+        await this.store.logEvent(runId, 'INFO', 'WORKFLOW', 'Phase 2 purchase is ready; advance virtual time to a due tracking window and run the Phase 3 tracking pass.');
+      } else {
+        await this.store.updateRunStatus(runId, 'COMPLETED');
+        await this.store.logEvent(runId, 'INFO', 'WORKFLOW', `Workflow completed successfully.`);
+      }
     } catch (err: any) {
       if (err instanceof WorkflowReviewRequiredError) {
         const causeMsg = (err as any).causeError?.message ? ` (Reason: ${(err as any).causeError.message})` : '';
@@ -311,6 +395,42 @@ export class SimulationController {
 
   public async advanceTime(runId: string, seconds: number): Promise<string> {
     return this.store.advanceTime(runId, seconds);
+  }
+
+  public async advanceToNextTrackingWindow(runId: string): Promise<string> {
+    const run = await this.store.getRun(runId);
+    const start = new Date(run.virtualTime);
+    const startAtlanta = atlantaDayAndHour(start);
+    for (let minute = 1; minute <= 2880; minute++) {
+      const candidate = new Date(start.getTime() + minute * 60_000);
+      const local = atlantaDayAndHour(candidate);
+      const nextWindow = startAtlanta.hour < 3
+        ? local.day === startAtlanta.day && local.hour >= 3
+        : local.day !== startAtlanta.day && local.hour >= 3;
+      if (nextWindow) return this.store.advanceTime(runId, minute * 60);
+    }
+    throw new Error('Unable to resolve the next 03:00 America/New_York tracking window.');
+  }
+
+  public async runTrackingPass(runId: string): Promise<{
+    run: SimulationRunRecord; diff: StateComparisonDiff; tracking?: { checked: number; skipped: number; reviews: string[] }; error?: string;
+  }> {
+    const ctx = this.activeRuns.get(runId);
+    if (!ctx || ctx.scenario.phase !== 3) throw new Error('Tracking passes are available only for an active Phase 3 run.');
+    if (!ctx.purchaseStageComplete) throw new Error('Run the Phase 2 purchase step before tracking this order.');
+    try {
+      const tracking = await runSimulatedAmazonTracking(ctx.appRuntime, ctx.bundle, this.store);
+      await this.store.updateRunStatus(runId, 'STEPPING');
+      const run = await this.store.getRun(runId);
+      const diff = await this.reconciler.evaluateDiff(runId, ctx.appRuntime.db);
+      return { run, diff, tracking };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await this.store.logEvent(runId, 'ERROR', 'WORKFLOW', 'Simulated tracking pass failed.', { error: detail.slice(0, 160) });
+      const run = await this.store.getRun(runId);
+      const diff = await this.reconciler.evaluateDiff(runId, ctx.appRuntime.db);
+      return { run, diff, error: detail };
+    }
   }
 
   public async close(): Promise<void> {
