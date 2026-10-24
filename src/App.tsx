@@ -13,7 +13,10 @@ import {
   Activity,
 } from 'lucide-react';
 import type {
+  PurchaseScenarioStart,
   ScenarioDefinition,
+  SimulatedAmazonScenario,
+  ScriptedFault,
   SimulationRunRecord,
   StateComparisonDiff,
 } from './simulation/types';
@@ -27,6 +30,9 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
+  const [amazonDraft, setAmazonDraft] = useState<SimulatedAmazonScenario | null>(null);
+  const [purchaseStart, setPurchaseStart] = useState<PurchaseScenarioStart>('END_TO_END');
+  const [faultDrafts, setFaultDrafts] = useState<ScriptedFault[]>([]);
 
   useEffect(() => {
     fetchScenarios();
@@ -50,15 +56,29 @@ export default function App() {
 
   const selectedScenario = scenarios.find((s) => s.id === selectedScenarioId) || scenarios[0];
 
+  useEffect(() => {
+    setAmazonDraft(selectedScenario?.amazon ? structuredClone(selectedScenario.amazon) : null);
+    setPurchaseStart(selectedScenario?.purchaseStart ?? 'END_TO_END');
+    setFaultDrafts(structuredClone(selectedScenario?.faults ?? []));
+  }, [selectedScenarioId, scenarios]);
+
+  const updateAmazon = <K extends keyof SimulatedAmazonScenario>(key: K, value: SimulatedAmazonScenario[K]) => {
+    setAmazonDraft((current) => current ? { ...current, [key]: value } : current);
+  };
+
   const handleCreateRun = async (scenarioId: string) => {
     try {
       setIsLoading(true);
       const res = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenarioId }),
+        body: JSON.stringify({ scenarioId,
+          ...(selectedScenario?.id === scenarioId && selectedScenario?.phase === 2
+            ? { amazon: amazonDraft ?? selectedScenario.amazon, purchaseStart, faults: faultDrafts } : {}) }),
       });
-      const run: SimulationRunRecord = await res.json();
+      const response = await res.json();
+      if (!res.ok) throw new Error(response.error || `Run creation failed (${res.status}).`);
+      const run: SimulationRunRecord = response;
       setActiveRun(run);
 
       // Fetch initial diff
@@ -68,9 +88,29 @@ export default function App() {
       setNotificationMsg(`Run ${run.runId} initialized.`);
     } catch (err: any) {
       console.error('Failed to create run:', err);
+      setNotificationMsg(err?.message || 'Run creation failed.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const addFault = () => setFaultDrafts(current => [...current, {
+    id: `fault-${window.crypto.randomUUID()}`,
+    targetOp: 'AMAZON_ORDER_SUBMIT', faultType: 'FAIL_BEFORE_COMMIT', triggerOnAttempt: 1,
+  }]);
+
+  const updateFault = (index: number, patch: Partial<ScriptedFault>) => setFaultDrafts(current =>
+    current.map((fault, i) => i === index ? { ...fault, ...patch } : fault));
+
+  const faultTypesByTarget: Record<ScriptedFault['targetOp'], ScriptedFault['faultType'][]> = {
+    VERIFY_SESSION: ['FAIL_BEFORE_COMMIT'], SUBMIT_RESERVATION: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT'],
+    RESOLVE_DEAL: ['FAIL_BEFORE_COMMIT'], TRACKER_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ'],
+    CANCEL_RESERVATION: ['FAIL_BEFORE_COMMIT'], AMAZON_ACCOUNT: ['AUTH_CHALLENGE'],
+    AMAZON_SUPPLIER_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ'], AMAZON_CART_READ: ['CART_STATE_UNKNOWN'],
+    AMAZON_CHECKOUT_PREPARE: ['FAIL_BEFORE_COMMIT'],
+    AMAZON_ORDER_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY','DUPLICATE_SUBMISSION'],
+    AMAZON_ORDER_READ: ['DELAY_VISIBILITY','INCOMPLETE_READ','FAIL_BEFORE_COMMIT'],
+    APPLICATION_ORDER_PERSIST: ['APPLICATION_PERSISTENCE_FAILURE'],
   };
 
   const handleExecute = async () => {
@@ -121,7 +161,7 @@ export default function App() {
             BFMR Scenario Studio
           </span>
           <span className="text-xs text-slate-500 font-mono">
-            Phase 1 · Reservations
+            Phase 1–2 · Reservations and Purchases
           </span>
         </div>
 
@@ -151,7 +191,7 @@ export default function App() {
               Scenario Library
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Select or clone Phase 1 reservation scenarios.
+              Select reservation or purchase scenarios.
             </p>
           </div>
 
@@ -191,7 +231,7 @@ export default function App() {
               className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded transition-colors disabled:opacity-50"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Initialize Run from Scenario</span>
+                  <span>Initialize Run from Scenario</span>
             </button>
           </div>
         </aside>
@@ -277,6 +317,8 @@ export default function App() {
                         ? 'Executing...'
                         : activeRun.status === 'COMPLETED'
                         ? 'Completed'
+                        : activeRun.status === 'PAUSED'
+                        ? 'Resume / reconcile'
                         : 'Run Workflow Step'}
                     </span>
                   </button>
@@ -315,6 +357,129 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {selectedScenario?.phase === 2 && amazonDraft && (
+            <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xs font-mono uppercase tracking-wider text-slate-300">Purchase Scenario Inputs</h2>
+                  <p className="text-xs text-slate-500 mt-1">Inputs apply to the next run. Policy thresholds are fixed by the workflow.</p>
+                </div>
+                <label className="text-xs text-slate-400 flex items-center gap-2">
+                  Start from
+                  <select className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200"
+                    value={purchaseStart} onChange={e => setPurchaseStart(e.target.value as PurchaseScenarioStart)}>
+                    <option value="END_TO_END">New Phase 1 reservation</option>
+                    <option value="SEEDED_RESERVATION">Seeded reservation</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-xs">
+                <label className="text-slate-400 space-y-1">Synthetic account email
+                  <input className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={amazonDraft.accountEmail}
+                    onChange={e => updateAmazon('accountEmail', e.target.value)} />
+                </label>
+                <label className="text-slate-400 space-y-1">Account state
+                  <select className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={amazonDraft.accountState}
+                    onChange={e => updateAmazon('accountState', e.target.value as SimulatedAmazonScenario['accountState'])}>
+                    <option value="AUTHENTICATED">Authenticated</option><option value="AUTH_REQUIRED">Login required</option><option value="CHALLENGE">Challenge required</option>
+                  </select>
+                </label>
+                <label className="text-slate-400 space-y-1">ASIN
+                  <input maxLength={10} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono" value={amazonDraft.asin}
+                    onChange={e => updateAmazon('asin', e.target.value.toUpperCase())} />
+                </label>
+                <label className="text-slate-400 space-y-1">Quantity
+                  <input type="number" min={1} max={10} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={amazonDraft.quantity}
+                    onChange={e => updateAmazon('quantity', Number(e.target.value))} />
+                </label>
+
+                {([
+                  ['itemSubtotalCents', 'Item subtotal (cents)'], ['shippingCents', 'Shipping (cents)'],
+                  ['taxCents', 'Tax (cents)'], ['discountCents', 'Discount (cents)'],
+                  ['existingUnpaidPayoutCents', 'Existing unpaid payouts (cents)'],
+                  ['orderVisibilityDelaySeconds', 'Order visibility delay (seconds)'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="text-slate-400 space-y-1">{label}
+                    <input type="number" min={0} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
+                      value={amazonDraft[key] ?? 0} onChange={e => updateAmazon(key, Number(e.target.value) as SimulatedAmazonScenario[typeof key])} />
+                  </label>
+                ))}
+
+                <label className="text-slate-400 space-y-1">Initial cart state
+                  <select className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={amazonDraft.cartState}
+                    onChange={e => updateAmazon('cartState', e.target.value as SimulatedAmazonScenario['cartState'])}>
+                    <option value="EMPTY">Empty</option><option value="EXPECTED_ITEM">Expected item only</option><option value="OTHER_ITEMS">Other items present</option><option value="UNKNOWN">Unknown</option>
+                  </select>
+                </label>
+                <label className="text-slate-400 space-y-1">Delivery evidence
+                  <select className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={amazonDraft.deliveryEstimate.type}
+                    onChange={e => updateAmazon('deliveryEstimate', { ...amazonDraft.deliveryEstimate, type: e.target.value as SimulatedAmazonScenario['deliveryEstimate']['type'] })}>
+                    <option value="ABSENT">Absent</option><option value="KNOWN">Known date</option><option value="UNKNOWN">Ambiguous</option>
+                  </select>
+                </label>
+                <label className="text-slate-400 space-y-1">Delivery evidence text
+                  <input className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={amazonDraft.deliveryEstimate.rawText}
+                    onChange={e => updateAmazon('deliveryEstimate', { ...amazonDraft.deliveryEstimate, rawText: e.target.value })} />
+                </label>
+                <label className="text-slate-400 space-y-1">Latest delivery date
+                  <input type="datetime-local" className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200"
+                    value={amazonDraft.deliveryEstimate.latestDate?.slice(0, 16) ?? ''}
+                    onChange={e => updateAmazon('deliveryEstimate', { ...amazonDraft.deliveryEstimate,
+                      latestDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })} />
+                </label>
+
+                {([
+                  ['available', 'Product available'], ['isGift', 'Gift selected'], ['isFreeNonPrimeDelivery', 'Free non-Prime delivery'],
+                  ['addressMatches', 'Address matches'], ['paymentCardMatches', 'Payment card matches'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-slate-300 bg-slate-950 border border-slate-800 rounded px-3 py-2">
+                    <input type="checkbox" checked={amazonDraft[key]} onChange={e => updateAmazon(key, e.target.checked)} />{label}
+                  </label>
+                ))}
+              </div>
+              <div className="text-[11px] text-slate-500">Amounts are integer cents. The $100 item cap, payout coverage, $200 exposure cap, gift, delivery, and address/card checks remain application rules.</div>
+              <div className="border-t border-slate-800 pt-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-mono uppercase tracking-wider text-slate-300">Scripted faults</h3>
+                    <p className="text-[11px] text-slate-500 mt-1">Faults are applied to the next run and trigger on the selected attempt.</p>
+                  </div>
+                  <button type="button" onClick={addFault} className="px-2.5 py-1.5 rounded bg-slate-800 text-xs text-slate-200 hover:bg-slate-700">Add fault</button>
+                </div>
+                {faultDrafts.map((fault, index) => (
+                  <div key={fault.id} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2 items-end bg-slate-950 border border-slate-800 rounded p-3">
+                    <label className="text-[11px] text-slate-400 space-y-1">Operation
+                      <select className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={fault.targetOp}
+                        onChange={e => {
+                          const targetOp = e.target.value as ScriptedFault['targetOp'];
+                          updateFault(index, { targetOp, faultType: faultTypesByTarget[targetOp][0] });
+                        }}>
+                        {Object.keys(faultTypesByTarget).map(target => <option key={target} value={target}>{target.replaceAll('_', ' ')}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-[11px] text-slate-400 space-y-1">Fault behavior
+                      <select className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={fault.faultType}
+                        onChange={e => updateFault(index, { faultType: e.target.value as ScriptedFault['faultType'] })}>
+                        {faultTypesByTarget[fault.targetOp].map(type => <option key={type} value={type}>{type.replaceAll('_', ' ')}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-[11px] text-slate-400 space-y-1">Trigger on attempt
+                      <input type="number" min={1} max={100} className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={fault.triggerOnAttempt}
+                        onChange={e => updateFault(index, { triggerOnAttempt: Number(e.target.value) })} />
+                    </label>
+                    <label className="text-[11px] text-slate-400 space-y-1">Error detail (optional)
+                      <input maxLength={300} className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={fault.errorDetail ?? ''}
+                        onChange={e => updateFault(index, { errorDetail: e.target.value || undefined })} />
+                    </label>
+                    <button type="button" onClick={() => setFaultDrafts(current => current.filter((_, i) => i !== index))}
+                      className="px-2.5 py-1.5 rounded border border-slate-700 text-xs text-slate-300 hover:border-rose-700 hover:text-rose-300">Remove</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Dual Store Comparison Matrix & Timeline */}
           {activeRun && (
