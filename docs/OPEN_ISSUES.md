@@ -156,6 +156,28 @@ Implemented comprehensive security, architectural, and code quality hardening (c
 
 ## Remaining application work
 
+### Phase 2 simulated Amazon purchases
+
+Purchase-scenario configuration, run-scoped checkout/order storage, a synthetic
+Amazon adapter, and a structured-provider branch in `purchaseReservedDeal` are
+being added on `codex/phase2-purchase-simulation`. The service applies fixed
+purchase checks and requires a distinct exact order readback. The Phase 2
+end-to-end workflow now reserves through Phase 1, evaluates simulated supplier
+evidence, and persists a confirmed synthetic order without performing BFMR
+Purchase/Shipment. A failed eligibility rule pauses at
+`CANCELLATION_REQUIRED`; it does not call the live cancellation path. The
+server API and scenario console now support a validated seeded-reservation start
+as well as end-to-end. Purchase inputs are editable for the next run; existing
+unpaid payouts are seeded as a separate synthetic BFMR reservation so the
+unchanged application exposure logic evaluates them. Fault editing,
+application-write fault, and workflow re-entry for uncertain provider outcomes
+are implemented. A paused run can read back its exact prepared checkout before
+any resubmission, or retry only local ledger persistence after an exact order is
+confirmed. Fault targets/types/attempts/details are editable for the next run.
+Durable simulator run-context restoration after a full server restart, and
+implementation acceptance evidence remain open. No software tests or live
+provider actions are claimed for this work.
+
 ### Tracking across ranked retailer accounts
 
 The worker automates one selected Amazon account per run. After a rank change and restart, outstanding orders on another account can be outside the selected ledger projection. Review/reconcile those orders before reprioritizing, preserve their original account identities and establish continuing tracking. Multi-account tracking, safe account transitions and acceptance remain pending; storing multiple accounts does not implement them.
