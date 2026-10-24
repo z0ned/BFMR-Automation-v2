@@ -44,6 +44,8 @@ async function createServer() {
       const run = await simulationController.createRun(scenarioId, {
         amazon: req.body.amazon,
         purchaseStart: req.body.purchaseStart,
+        trackingStart: req.body.trackingStart,
+        tracking: req.body.tracking,
         faults: req.body.faults,
       });
       res.json(run);
@@ -84,6 +86,24 @@ async function createServer() {
       const seconds = Number(req.body.seconds || 60);
       const newTime = await simulationController.advanceTime(req.params.runId, seconds);
       res.json({ newTime });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/runs/:runId/advance-to-tracking-window', async (req, res) => {
+    try {
+      const newTime = await simulationController.advanceToNextTrackingWindow(req.params.runId);
+      res.json({ newTime });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/runs/:runId/track', async (req, res) => {
+    try {
+      const result = await simulationController.runTrackingPass(req.params.runId);
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
