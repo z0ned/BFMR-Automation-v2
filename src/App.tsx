@@ -14,8 +14,10 @@ import {
 } from 'lucide-react';
 import type {
   PurchaseScenarioStart,
+  TrackingScenarioStart,
   ScenarioDefinition,
   SimulatedAmazonScenario,
+  SimulatedTrackingScenario,
   ScriptedFault,
   SimulationRunRecord,
   StateComparisonDiff,
@@ -33,6 +35,8 @@ export default function App() {
   const [amazonDraft, setAmazonDraft] = useState<SimulatedAmazonScenario | null>(null);
   const [purchaseStart, setPurchaseStart] = useState<PurchaseScenarioStart>('END_TO_END');
   const [faultDrafts, setFaultDrafts] = useState<ScriptedFault[]>([]);
+  const [trackingStart, setTrackingStart] = useState<TrackingScenarioStart>('SEEDED_ORDER');
+  const [trackingDraft, setTrackingDraft] = useState<SimulatedTrackingScenario | null>(null);
 
   useEffect(() => {
     fetchScenarios();
@@ -60,6 +64,8 @@ export default function App() {
     setAmazonDraft(selectedScenario?.amazon ? structuredClone(selectedScenario.amazon) : null);
     setPurchaseStart(selectedScenario?.purchaseStart ?? 'END_TO_END');
     setFaultDrafts(structuredClone(selectedScenario?.faults ?? []));
+    setTrackingStart(selectedScenario?.trackingStart ?? 'SEEDED_ORDER');
+    setTrackingDraft(selectedScenario?.tracking ? structuredClone(selectedScenario.tracking) : null);
   }, [selectedScenarioId, scenarios]);
 
   const updateAmazon = <K extends keyof SimulatedAmazonScenario>(key: K, value: SimulatedAmazonScenario[K]) => {
@@ -73,8 +79,10 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenarioId,
-          ...(selectedScenario?.id === scenarioId && selectedScenario?.phase === 2
-            ? { amazon: amazonDraft ?? selectedScenario.amazon, purchaseStart, faults: faultDrafts } : {}) }),
+          ...(selectedScenario?.id === scenarioId && selectedScenario.phase === 2
+            ? { amazon: amazonDraft ?? selectedScenario.amazon, purchaseStart, faults: faultDrafts } : {}),
+          ...(selectedScenario?.id === scenarioId && selectedScenario.phase === 3
+            ? { amazon: amazonDraft ?? selectedScenario.amazon, trackingStart, tracking: trackingDraft ?? selectedScenario.tracking, faults: faultDrafts } : {}) }),
       });
       const response = await res.json();
       if (!res.ok) throw new Error(response.error || `Run creation failed (${res.status}).`);
@@ -111,6 +119,14 @@ export default function App() {
     AMAZON_ORDER_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY','DUPLICATE_SUBMISSION'],
     AMAZON_ORDER_READ: ['DELAY_VISIBILITY','INCOMPLETE_READ','FAIL_BEFORE_COMMIT'],
     APPLICATION_ORDER_PERSIST: ['APPLICATION_PERSISTENCE_FAILURE'],
+    AMAZON_TRACKING_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ','DELAY_VISIBILITY'],
+    BFMR_TRACKER_READ: ['FAIL_BEFORE_COMMIT','INCOMPLETE_READ','DELAY_VISIBILITY'],
+    BFMR_PURCHASE_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY'],
+    BFMR_SHIPMENT_SUBMIT: ['FAIL_BEFORE_COMMIT','DROP_CONFIRMATION_AFTER_COMMIT','DELAY_VISIBILITY'],
+  };
+
+  const updateTracking = <K extends keyof SimulatedTrackingScenario>(key: K, value: SimulatedTrackingScenario[K]) => {
+    setTrackingDraft(current => current ? { ...current, [key]: value } : current);
   };
 
   const handleExecute = async () => {
@@ -150,6 +166,33 @@ export default function App() {
     } catch (err: any) {
       console.error('Failed to advance time:', err);
     }
+  };
+
+  const handleAdvanceToTrackingWindow = async () => {
+    if (!activeRun) return;
+    try {
+      const res = await fetch(`/api/runs/${activeRun.runId}/advance-to-tracking-window`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not advance to the next tracking window.');
+      setActiveRun(prev => prev ? { ...prev, virtualTime: data.newTime } : null);
+      setNotificationMsg(`Virtual time advanced to ${new Date(data.newTime).toLocaleString()} (America/New_York tracking window).`);
+    } catch (err: any) { setNotificationMsg(err?.message || 'Could not advance virtual time.'); }
+  };
+
+  const handleTracking = async () => {
+    if (!activeRun) return;
+    try {
+      setIsExecuting(true);
+      const res = await fetch(`/api/runs/${activeRun.runId}/track`, { method: 'POST' });
+      const data: { run: SimulationRunRecord; diff: StateComparisonDiff; tracking?: { checked: number; skipped: number; reviews: string[] }; error?: string } = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Tracking pass failed.');
+      setActiveRun(data.run);
+      setDiff(data.diff);
+      setNotificationMsg(data.error || (data.tracking
+        ? `Tracking pass: ${data.tracking.checked} checked, ${data.tracking.skipped} not due, ${data.tracking.reviews.length} review item(s).`
+        : 'Tracking pass completed.'));
+    } catch (err: any) { setNotificationMsg(err?.message || 'Tracking pass failed.'); }
+    finally { setIsExecuting(false); }
   };
 
   return (
@@ -297,6 +340,12 @@ export default function App() {
                     <FastForward className="w-3.5 h-3.5" />
                     <span>+5m</span>
                   </button>
+                  {activeRun.phase === 3 && <button
+                    onClick={handleAdvanceToTrackingWindow}
+                    disabled={isLoading || isExecuting}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-mono text-slate-300 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded transition-colors disabled:opacity-50"
+                    title="Advance virtual time to the next daily tracking window"
+                  ><Clock className="w-3.5 h-3.5" /><span>Next 03:00 ET</span></button>}
                   <button
                     onClick={() => selectedScenario && handleCreateRun(selectedScenario.id)}
                     disabled={isLoading || isExecuting}
@@ -306,9 +355,9 @@ export default function App() {
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>New Run</span>
                   </button>
-                  <button
+                  {(activeRun.phase !== 3 || trackingStart === 'PHASE2_PURCHASE') && <button
                     onClick={handleExecute}
-                    disabled={isExecuting || activeRun.status === 'COMPLETED'}
+                    disabled={isExecuting || activeRun.status === 'COMPLETED' || (activeRun.phase === 3 && activeRun.status === 'STEPPING')}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded transition-colors disabled:opacity-50"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
@@ -319,9 +368,19 @@ export default function App() {
                         ? 'Completed'
                         : activeRun.status === 'PAUSED'
                         ? 'Resume / reconcile'
+                        : activeRun.phase === 3 && activeRun.status === 'STEPPING'
+                        ? 'Purchase ready'
+                        : activeRun.phase === 3
+                        ? 'Create simulated order'
                         : 'Run Workflow Step'}
                     </span>
-                  </button>
+                  </button>}
+                  {activeRun.phase === 3 && (trackingStart === 'SEEDED_ORDER' || activeRun.status === 'STEPPING' || activeRun.status === 'PAUSED') && (
+                    <button onClick={handleTracking} disabled={isExecuting || isLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-violet-600 hover:bg-violet-500 rounded transition-colors disabled:opacity-50">
+                      <Activity className="w-3.5 h-3.5" /><span>{isExecuting ? 'Tracking...' : 'Run Tracking Pass'}</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -358,22 +417,63 @@ export default function App() {
             )}
           </div>
 
-          {selectedScenario?.phase === 2 && amazonDraft && (
+          {(selectedScenario?.phase === 2 || selectedScenario?.phase === 3) && amazonDraft && (
             <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-xs font-mono uppercase tracking-wider text-slate-300">Purchase Scenario Inputs</h2>
-                  <p className="text-xs text-slate-500 mt-1">Inputs apply to the next run. Policy thresholds are fixed by the workflow.</p>
+                  <h2 className="text-xs font-mono uppercase tracking-wider text-slate-300">{selectedScenario.phase === 3 ? 'Order and Tracking Scenario Inputs' : 'Purchase Scenario Inputs'}</h2>
+                  <p className="text-xs text-slate-500 mt-1">Inputs apply to the next run. Purchase policy thresholds are fixed by the workflow.</p>
                 </div>
                 <label className="text-xs text-slate-400 flex items-center gap-2">
-                  Start from
+                  {selectedScenario.phase === 3 ? 'Tracking start' : 'Purchase start'}
                   <select className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200"
-                    value={purchaseStart} onChange={e => setPurchaseStart(e.target.value as PurchaseScenarioStart)}>
-                    <option value="END_TO_END">New Phase 1 reservation</option>
-                    <option value="SEEDED_RESERVATION">Seeded reservation</option>
+                    value={selectedScenario.phase === 3 ? trackingStart : purchaseStart}
+                    onChange={e => selectedScenario.phase === 3
+                      ? setTrackingStart(e.target.value as TrackingScenarioStart)
+                      : setPurchaseStart(e.target.value as PurchaseScenarioStart)}>
+                    {selectedScenario.phase === 3 ? <>
+                      <option value="PHASE2_PURCHASE">Create order with Phase 2 workflow</option>
+                      <option value="SEEDED_ORDER">Seed a confirmed order</option>
+                    </> : <>
+                      <option value="END_TO_END">New Phase 1 reservation</option>
+                      <option value="SEEDED_RESERVATION">Seeded reservation</option>
+                    </>}
                   </select>
                 </label>
               </div>
+              {selectedScenario.phase === 3 && trackingDraft && <div className="border-t border-slate-800 pt-4 space-y-3">
+                <h3 className="text-xs font-mono uppercase tracking-wider text-slate-300">Amazon tracking evidence</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-xs">
+                  <label className="text-slate-400 space-y-1">Initial Amazon status
+                    <select className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={trackingDraft.initialStatus}
+                      onChange={e => updateTracking('initialStatus', e.target.value as SimulatedTrackingScenario['initialStatus'])}>
+                      {(['PENDING','SHIPPED','DELIVERED','INCOMPLETE','MISMATCHED','MULTIPLE'] as const).map(status => <option key={status} value={status}>{status.replaceAll('_',' ')}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-slate-400 space-y-1">Tracking number
+                    <input maxLength={40} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200 font-mono" value={trackingDraft.trackingNumber}
+                      onChange={e => updateTracking('trackingNumber', e.target.value.toUpperCase())} />
+                  </label>
+                  <label className="text-slate-400 space-y-1">Carrier
+                    <input maxLength={80} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={trackingDraft.carrier}
+                      onChange={e => updateTracking('carrier', e.target.value)} />
+                  </label>
+                  <label className="text-slate-400 space-y-1">Amazon tracking visibility delay (seconds)
+                    <input type="number" min={0} max={604800} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={trackingDraft.visibilityDelaySeconds}
+                      onChange={e => updateTracking('visibilityDelaySeconds', Number(e.target.value))} />
+                  </label>
+                  <label className="text-slate-400 space-y-1">Order age at run start (hours)
+                    <input type="number" min={1} max={8760} className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-slate-200" value={trackingDraft.purchaseAgeHours}
+                      onChange={e => updateTracking('purchaseAgeHours', Number(e.target.value))} />
+                  </label>
+                  {([
+                    ['orderIdMatches', 'Amazon Order # matches'], ['asinMatches', 'ASIN matches'], ['totalMatches', 'Complete total matches'],
+                  ] as const).map(([key,label]) => <label key={key} className="flex items-center gap-2 text-slate-300 bg-slate-950 border border-slate-800 rounded px-3 py-2">
+                    <input type="checkbox" checked={trackingDraft[key]} onChange={e => updateTracking(key, e.target.checked)} />{label}
+                  </label>)}
+                </div>
+                <div className="text-[11px] text-slate-500">Multiple tracking numbers, missing carrier/number evidence, and identity mismatches stop for review. Amazon delivery changes are recorded in the application and simulated Amazon state only.</div>
+              </div>}
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-xs">
                 <label className="text-slate-400 space-y-1">Synthetic account email
