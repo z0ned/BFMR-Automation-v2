@@ -1,10 +1,10 @@
 # Provider interface and scenario simulator — review proposal
 
-**Status: Phase 1 and Phase 2 purchase-simulation source implementation delivered 24 October 2026; acceptance evidence and durable full-process restart restoration remain open.**
+**Status: Phase 1–3 simulator source implementation delivered 24 October 2026; acceptance evidence and durable full-process restart restoration remain open.**
 **Prepared:** 23 October 2026  
-**Updated:** 24 October 2026 — operator approved Phase 1; provider interface bundle (`src/providers/`) and mode gating implemented.<br>
+**Updated:** 24 October 2026 — Phase 1–3 simulator implementation recorded; tracking requirements confirmed by the operator.<br>
 **Source review baseline:** repository revision `3218a34`.  
-**Scope of this change:** Phase 1 reservations and Phase 2 purchase scenario implementation are present in source. Phase 2 includes end-to-end and seeded starts, editable purchase evidence/faults, fixed-policy checkout, exact order reconciliation, and an application-ledger persistence fault boundary. A full process restart does not yet restore the in-memory active run context.
+**Scope of this change:** Phase 1 reservations, Phase 2 purchases, and Phase 3 tracking scenario implementations are present in source. Phase 3 supports a Phase 2 generated order or seeded order, scheduled virtual-time reads, exact identity validation, and synthetic BFMR Purchase/Shipment tracker readback. Amazon delivery changes update simulated Amazon and application records only; the simulator does not change BFMR delivery status. A full process restart does not yet restore the in-memory active run context.
 
 ## 1. What this will let you do
 
@@ -399,7 +399,7 @@ phase testing, without pretending that later workflows are implemented.
 | --- | --- | --- |
 | **1. Reservations** | Provider bundle, isolated run stores, scenario screen, BFMR deal/account/supplier/API model, reservation browser adapter and local browser fixture. | Single/multiple-new-deal intake; one reservation per distinct offer; quantity-one reservation barrier; bundle handling; duplicate/unavailable offers; wrong identity; challenge; confirmation loss; delayed/missing tracker pages; interrupted-run reconciliation. |
 | **2. Purchases** | Simulated Amazon account/product/cart/review/submission/order model; representative local checkout pages. | All shared $100, payout-coverage, $200 exposure, gift, free non-Prime delivery and current delivery-deadline checks execute. Test one cent above/below boundaries, cart uncertainty, submission-response loss, local write failure and restart without duplicate order. |
-| **3. Tracking** | Simulated Amazon order/shipment reads and BFMR purchase/shipment tracker writes. | Scheduled tracking, exact order/product/total matching, pending shipment, delivered event, partial/mismatched tracking, delayed BFMR readback and uncertain update. |
+| **3. Tracking** | Simulated Amazon order/shipment reads and synthetic BFMR Purchase/Shipment tracker writes. Amazon delivery changes update the Amazon and application records only. | Scheduled tracking, exact order/product/total matching, pending shipment, delivered event, partial/mismatched tracking, delayed BFMR readback and uncertain update. |
 | **4. Cancellations** | Full reservation/purchase cancellation behavior and exact readback. | Reserved versus Purchased eligibility, incorrect IDs, already-cancelled records, mixed valid/invalid batch, commit followed by response loss and release confirmation. |
 | **5. Payments** | Provider payment observations, payment-message inputs and application reimbursement scenarios. | Partial/full/duplicate/unknown payments, tracking match failures, contradictory provider/local evidence and remaining exposure. Never equate a “paid” label to an amount without evidence. |
 | **6. Insurance** | Filing, profile updates, shipment details/listing and void-request state model. | Eligibility failures, optional profile fallback, address/country/state checks, profile persistence side effects, filing/void uncertainty and review-pending versus completed outcomes. |
@@ -450,6 +450,26 @@ durability boundary independently. An uncertain order cannot be submitted again
 until the workflow reconciles exact order evidence. A seeded reservation must
 exist in both provider truth and application state before the purchase workflow
 starts, while end-to-end runs must use the reservation created by Phase 1.
+
+### Operator-confirmed Phase 3 scenario behavior — 24 October 2026
+
+The operator confirmed that the tracking simulator must support both orders
+created by the Phase 2 workflow and seeded orders. Amazon tracking observations
+must match the exact order ID, ASIN and complete order total before they update
+the application ledger. Pending shipment is valid evidence; incomplete,
+partial, multiple-number or mismatched evidence stops for review. One tracking
+number per order remains the supported cardinality. Delivery updates the
+simulated Amazon and application records; it does not change BFMR delivery
+status. Purchase and Shipment tracker records are written only to the synthetic
+BFMR simulator, with exact readback after uncertain outcomes. Rules and
+thresholds stay fixed in shared workflow logic.
+
+The Phase 3 screen allows the initial status, tracking identity, carrier,
+visibility delay, purchase age, and exact-match fault controls to vary. The
+operator advances virtual time to the next 03:00 America/New_York tracking
+window and starts a tracking pass manually. This implementation is simulator
+source only; real Amazon extraction and BFMR API field/readback contracts still
+require provider evidence.
 
 ## 11. Changes needed in the current code — later, after approval
 
