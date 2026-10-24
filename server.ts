@@ -41,7 +41,11 @@ async function createServer() {
         res.status(400).json({ error: 'scenarioId is required' });
         return;
       }
-      const run = await simulationController.createRun(scenarioId);
+      const run = await simulationController.createRun(scenarioId, {
+        amazon: req.body.amazon,
+        purchaseStart: req.body.purchaseStart,
+        faults: req.body.faults,
+      });
       res.json(run);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
