@@ -1,10 +1,10 @@
 # Provider interface and scenario simulator — review proposal
 
-**Status: APPROVED FOR PHASE 1 IMPLEMENTATION (Reservations, provider bundle, scenario UI).**  
+**Status: Phase 1 and Phase 2 purchase-simulation source implementation delivered 24 October 2026; acceptance evidence and durable full-process restart restoration remain open.**
 **Prepared:** 23 October 2026  
 **Updated:** 24 October 2026 — operator approved Phase 1; provider interface bundle (`src/providers/`) and mode gating implemented.<br>
 **Source review baseline:** repository revision `3218a34`.  
-**Scope of this change:** Provider interfaces and live bundle integration implemented in `src/providers/`, `src/services/bfmrWorker.ts`, and `src/services/dealEmailWorkflow.ts`. Remaining Phase 1 simulator engine and web UI in progress.
+**Scope of this change:** Phase 1 reservations and Phase 2 purchase scenario implementation are present in source. Phase 2 includes end-to-end and seeded starts, editable purchase evidence/faults, fixed-policy checkout, exact order reconciliation, and an application-ledger persistence fault boundary. A full process restart does not yet restore the in-memory active run context.
 
 ## 1. What this will let you do
 
@@ -34,7 +34,7 @@ API behaves exactly the same way. Real-provider contract checks remain separate.
 | Telegram | Live Telegram is allowed. Test messages must clearly identify themselves. |
 | Scenario management | Provide a screen for creating/selecting/running scenarios. |
 | Initial data | No preference specified. Recommend synthetic data first. |
-| Current authorization | Produce this design for review; make no code changes yet. |
+| Current authorization | Phase 1 implementation is complete in source. Phase 2 purchase-simulation implementation is authorized as specified below. |
 
 “Testing” currently supports live providers with separate credentials. This
 proposal uses `BFMR_PROVIDER_MODE=simulation` as an explicit **simulation profile**
@@ -415,6 +415,42 @@ Each phase is reviewed on its own. The insurance API's existence does not approv
 new unattended insurance actions in the production application. Production scope
 and unresolved provider contracts remain governed by current project requirements.
 
+### Operator-confirmed Phase 2 scenario behavior — 24 October 2026
+
+The operator authorized implementation of the purchase-simulation phase with
+these requirements:
+
+- Support both an end-to-end scenario that creates its reservation through the
+  Phase 1 workflow and an isolated purchase scenario that starts from a seeded
+  reservation.
+- Make all scenario-specific account, product, cart, checkout, order and
+  delivery evidence editable through scenario setup. Keep the application’s
+  purchase policy fixed in shared workflow logic; scenarios vary evidence and
+  values, never policy thresholds or decisions.
+- The scenario input contract includes the synthetic account identity/state,
+  ASIN/availability/quantity, item subtotal, shipping, tax, discount, gift and
+  non-Prime delivery selections, address/card match evidence, initial cart
+  state, delivery estimate, existing unpaid payout exposure, and optional order
+  visibility delay.
+- The provider boundary returns structured checkout evidence and an exact
+  prepared-checkout identity. Submission can be rejected, pending, confirmed,
+  or uncertain; exact order readback is separate from submission. The same
+  application policy evaluates these observations and seeded unpaid-payout
+  exposure before the one allowed submit.
+- Model cart uncertainty, order submission before commit, order committed with
+  lost confirmation, delayed order visibility, duplicate submission attempts,
+  application database persistence failure, and restart/reconciliation. The
+  simulated provider must not hide duplicate actions behind invented
+  idempotency.
+- Phase 2 completes at an order confirmed with exact order ID, ASIN, quantity
+  and total evidence. Shipment and tracking behavior remains Phase 3.
+
+Scenario faults must preserve the provider-commit boundary and the application
+durability boundary independently. An uncertain order cannot be submitted again
+until the workflow reconciles exact order evidence. A seeded reservation must
+exist in both provider truth and application state before the purchase workflow
+starts, while end-to-end runs must use the reservation created by Phase 1.
+
 ## 11. Changes needed in the current code — later, after approval
 
 | Current boundary | Proposed change |
@@ -486,6 +522,9 @@ fixtures and separately authorized real access.
 | Data | Synthetic initial scenarios; reviewed sanitized captures only when useful later. |
 | Rollout | Build and review reservations first, then the remaining phases in the operator's exact order. |
 
-**Approval of this document would authorize only the implementation scope the
-operator subsequently confirms. No provider interface, simulator, database or
-screen has been implemented by preparing this draft.**
+**Implementation status update — 24 October 2026:** The operator approved the
+Phase 1 source work and authorized Phase 2 purchase-simulation implementation.
+The Phase 2 source work described above is implemented. This is not provider
+acceptance: real-provider contract evidence remains separate, durable simulator
+run restoration across a full process restart remains open, and no software
+tests or live provider actions are claimed for this implementation.
