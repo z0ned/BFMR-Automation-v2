@@ -88,6 +88,17 @@ export class SimulatedAmazonProvider implements IAmazonProvider {
     return this.store.readAmazonOrder(this.runId, preparedCheckoutId);
   }
 
+  public async readTracking(orderId: string) {
+    const fault = await this.store.checkAndTriggerFault(this.runId, 'AMAZON_TRACKING_READ');
+    if (fault) {
+      if (['INCOMPLETE_READ','DELAY_VISIBILITY','FAIL_BEFORE_COMMIT'].includes(fault.faultType)) {
+        return { status: 'INCOMPLETE' as const, evidence: { faultType: fault.faultType } };
+      }
+      throw new Error(`[Simulated Amazon tracking read: ${fault.faultType}] ${fault.errorDetail || 'Tracking read failed.'}`);
+    }
+    return this.store.readAmazonTracking(this.runId, orderId);
+  }
+
   public async removePreparedCartItem(preparedCheckoutId: string): Promise<boolean> {
     const fault = await this.store.checkAndTriggerFault(this.runId, 'AMAZON_CART_READ');
     const scenario = await this.store.getAmazonScenario(this.runId);
