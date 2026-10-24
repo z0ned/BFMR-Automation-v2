@@ -1,5 +1,23 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 24 October 2026 — Phase 3 simulated Amazon tracking
+
+Implemented a Phase 3 tracking scenario in the simulator. Runs can start from a
+Phase 2 purchase workflow or a seeded confirmed order. The console exposes
+pending, shipped, delivered, incomplete, mismatched and multiple-package
+evidence, tracking identity fields, carrier and visibility delay. The operator
+advances the run's virtual clock to the next 03:00 America/New_York window and
+starts the tracking pass manually. Rules remain fixed in shared workflow code.
+
+The tracking pass verifies the exact Amazon order ID, ASIN and complete total.
+Incomplete, mismatched, partial and multiple-number evidence is retained for
+review. A single exact tracking number updates the application ledger from the
+simulated Amazon observation. Synthetic BFMR Purchase and Shipment records are
+then written and confirmed by exact tracker readback; uncertainty does not
+trigger an automatic repeat write. Amazon delivery events do not change BFMR
+delivery status. No live Amazon or BFMR action, software test, provider contract
+verification or full-process restart restoration is claimed.
+
 ## 24 October 2026 — Phase 2 fault controls and uncertain-order re-entry
 
 Phase 2 purchase runs now expose editable, validated scripted faults for
