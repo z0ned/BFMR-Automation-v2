@@ -1,6 +1,8 @@
 import { PGlite } from '@electric-sql/pglite';
+import { randomUUID } from 'node:crypto';
 import type {
   ScenarioDefinition,
+  SimulatedAmazonScenario,
   SimulatedDeal,
   SimulatedReservation,
   ScriptedFault,
@@ -28,7 +30,8 @@ export class SimulatedStore {
           status TEXT NOT NULL,
           created_at TIMESTAMPTZ NOT NULL,
           virtual_time TIMESTAMPTZ NOT NULL,
-          step_count INT NOT NULL DEFAULT 0
+          step_count INT NOT NULL DEFAULT 0,
+          amazon_config JSONB
         );
 
         CREATE TABLE IF NOT EXISTS sim_deals (
@@ -68,6 +71,34 @@ export class SimulatedStore {
           error_detail TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS sim_amazon_checkouts (
+          run_id TEXT NOT NULL,
+          checkout_id TEXT NOT NULL,
+          asin TEXT NOT NULL,
+          quantity INT NOT NULL,
+          item_subtotal_cents INT NOT NULL,
+          shipping_cents INT NOT NULL,
+          tax_cents INT NOT NULL,
+          discount_cents INT NOT NULL,
+          complete_total_cents INT NOT NULL,
+          state TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (run_id, checkout_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS sim_amazon_orders (
+          run_id TEXT NOT NULL,
+          order_id TEXT NOT NULL,
+          checkout_id TEXT NOT NULL,
+          asin TEXT NOT NULL,
+          quantity INT NOT NULL,
+          total_cents INT NOT NULL,
+          status TEXT NOT NULL,
+          visible_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL,
+          PRIMARY KEY (run_id, order_id)
+        );
+
         CREATE TABLE IF NOT EXISTS sim_events (
           id SERIAL PRIMARY KEY,
           run_id TEXT NOT NULL,
@@ -93,9 +124,10 @@ export class SimulatedStore {
     const now = new Date().toISOString();
 
     await this.db.query(
-      `INSERT INTO sim_runs (run_id, scenario_id, scenario_name, phase, status, created_at, virtual_time, step_count)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 0)`,
-      [runId, scenario.id, scenario.name, scenario.phase, 'IDLE', now, now]
+      `INSERT INTO sim_runs (run_id, scenario_id, scenario_name, phase, status, created_at, virtual_time, step_count, amazon_config)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8)`,
+      [runId, scenario.id, scenario.name, scenario.phase, 'IDLE', now, now,
+        scenario.amazon ? JSON.stringify(scenario.amazon) : null]
     );
 
     for (const deal of scenario.initialDeals) {
@@ -273,6 +305,99 @@ export class SimulatedStore {
       status: r.status as any,
       createdAt: r.created_at,
     }));
+  }
+
+  public async getAmazonScenario(runId: string): Promise<SimulatedAmazonScenario> {
+    await this.init();
+    const result = await this.db.query<{ amazon_config: SimulatedAmazonScenario | null }>(
+      'SELECT amazon_config FROM sim_runs WHERE run_id = $1', [runId]
+    );
+    const config = result.rows[0]?.amazon_config;
+    if (!config) throw new Error(`Run ${runId} has no Amazon purchase scenario.`);
+    return config;
+  }
+
+  public async createAmazonCheckout(runId: string, input: { asin: string; quantity: number }): Promise<{
+    preparedCheckoutId: string;
+    scenario: SimulatedAmazonScenario;
+    completeTotalCents: number;
+  }> {
+    const scenario = await this.getAmazonScenario(runId);
+    if (input.asin !== scenario.asin) throw new Error('Amazon checkout ASIN does not match the registered scenario identity.');
+    const total = scenario.itemSubtotalCents + scenario.shippingCents + scenario.taxCents - scenario.discountCents;
+    if (![scenario.itemSubtotalCents, scenario.shippingCents, scenario.taxCents, scenario.discountCents, total]
+      .every(Number.isSafeInteger) || total < 0) throw new Error('Scenario checkout amounts are invalid.');
+    const checkoutId = `sim-checkout-${randomUUID()}`;
+    const now = await this.getVirtualTime(runId);
+    await this.db.query(
+      `INSERT INTO sim_amazon_checkouts
+       (run_id, checkout_id, asin, quantity, item_subtotal_cents, shipping_cents, tax_cents, discount_cents,
+        complete_total_cents, state, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PREPARED',$10)`,
+      [runId, checkoutId, scenario.asin, input.quantity, scenario.itemSubtotalCents, scenario.shippingCents,
+        scenario.taxCents, scenario.discountCents, total, now]
+    );
+    await this.logEvent(runId, 'INFO', 'PROVIDER', `Simulated Amazon checkout prepared for ${scenario.asin}.`,
+      { checkoutId, quantity: input.quantity, totalCents: total });
+    return { preparedCheckoutId: checkoutId, scenario, completeTotalCents: total };
+  }
+
+  public async submitAmazonOrder(runId: string, checkoutId: string, options: {
+    duplicate: boolean;
+    visibilityDelaySeconds: number;
+  }): Promise<{ orderId: string; asin: string; quantity: number; totalCents: number; visibleAt: string }> {
+    await this.init();
+    const checkout = await this.db.query<{
+      asin: string; quantity: number; complete_total_cents: number;
+    }>('SELECT asin, quantity, complete_total_cents FROM sim_amazon_checkouts WHERE run_id=$1 AND checkout_id=$2',
+      [runId, checkoutId]);
+    if (checkout.rows.length !== 1) throw new Error('Prepared simulated checkout was not found.');
+    const c = checkout.rows[0];
+    const virtualTime = await this.getVirtualTime(runId);
+    const delay = Math.max(0, options.visibilityDelaySeconds);
+    const visibleAt = new Date(Date.parse(virtualTime) + delay * 1000).toISOString();
+    const count = options.duplicate ? 2 : 1;
+    let firstOrderId = '';
+    for (let i = 0; i < count; i++) {
+      const orderId = `SIM-${randomUUID()}`;
+      if (i === 0) firstOrderId = orderId;
+      await this.db.query(
+        `INSERT INTO sim_amazon_orders (run_id, order_id, checkout_id, asin, quantity, total_cents, status, visible_at, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'CONFIRMED',$7,$8)`,
+        [runId, orderId, checkoutId, c.asin, c.quantity, c.complete_total_cents, visibleAt, virtualTime]
+      );
+    }
+    await this.logEvent(runId, options.duplicate ? 'WARN' : 'INFO', 'PROVIDER',
+      options.duplicate ? 'Simulated duplicate Amazon order submission; provider did not deduplicate.' :
+        `Simulated Amazon order committed: ${firstOrderId}`,
+      { checkoutId, orderCount: count, totalCents: c.complete_total_cents, visibleAt });
+    return { orderId: firstOrderId, asin: c.asin, quantity: c.quantity, totalCents: c.complete_total_cents, visibleAt };
+  }
+
+  public async readAmazonOrder(runId: string, checkoutId: string): Promise<{
+    status: 'FOUND'; orderId: string; asin: string; quantity: number; totalCents: number; purchasedAt: string;
+  } | { status: 'NOT_FOUND' | 'INCOMPLETE' }> {
+    await this.init();
+    const virtualTime = await this.getVirtualTime(runId);
+    const result = await this.db.query<{
+      order_id: string; asin: string; quantity: number; total_cents: number; status: string;
+      visible_at: string; created_at: string;
+    }>(`SELECT order_id,asin,quantity,total_cents,status,visible_at,created_at FROM sim_amazon_orders
+        WHERE run_id=$1 AND checkout_id=$2 ORDER BY created_at`,
+      [runId, checkoutId]);
+    if (result.rows.length > 1) throw new Error('Multiple simulated orders match this checkout; exact order reconciliation is ambiguous.');
+    const row = result.rows[0];
+    if (!row) return { status: 'NOT_FOUND' };
+    if (Date.parse(row.visible_at) > Date.parse(virtualTime)) return { status: 'INCOMPLETE' };
+    return { status: 'FOUND', orderId: row.order_id, asin: row.asin, quantity: row.quantity,
+      totalCents: row.total_cents, purchasedAt: new Date(row.created_at).toISOString() };
+  }
+
+  private async getVirtualTime(runId: string): Promise<string> {
+    await this.init();
+    const result = await this.db.query<{ virtual_time: string }>('SELECT virtual_time FROM sim_runs WHERE run_id=$1', [runId]);
+    if (result.rows.length !== 1) throw new Error(`Run ${runId} not found.`);
+    return new Date(result.rows[0].virtual_time).toISOString();
   }
 
   public async createReservation(
