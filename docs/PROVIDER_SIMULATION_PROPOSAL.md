@@ -2,6 +2,7 @@
 
 **Status: DRAFT FOR REVIEW — not approved for implementation.**  
 **Prepared:** 23 October 2026  
+**Updated:** 24 October 2026 — explicit `BFMR_PROVIDER_MODE` configuration.  
 **Source review baseline:** repository revision `3218a34`.  
 **Scope of this change:** documentation only. No application, configuration,
 database, service or provider behavior has been changed. Interface names,
@@ -38,9 +39,69 @@ API behaves exactly the same way. Real-provider contract checks remain separate.
 | Current authorization | Produce this design for review; make no code changes yet. |
 
 “Testing” currently supports live providers with separate credentials. This
-proposal introduces an explicit **simulation profile** within the test environment;
+proposal uses `BFMR_PROVIDER_MODE=simulation` as an explicit **simulation profile**
+within the test environment;
 it must not silently turn an existing live test setup into a simulator, or allow
 a simulator run to fall back to live BFMR/Amazon.
+
+### Environment and provider selection
+
+The operator has added `BFMR_PROVIDER_MODE` to their private `.env` file. This
+setting is now the named selector in this proposal. Adding the variable alone
+does not implement provider switching: the current application has not been
+changed to read or act on it as part of this documentation update.
+
+One codebase serves both environments. Two independent settings select its
+configuration and provider implementations at startup:
+
+| Setting | Proposed values | Responsibility |
+| --- | --- | --- |
+| `BFMR_INTAKE_MODE` | `production`, `testing` | Existing environment/database/private-state selection and Gmail provenance rules. Existing unset-to-production behavior is unchanged by this proposal. |
+| `BFMR_PROVIDER_MODE` | `live`, `simulation` | Select the complete BFMR/Amazon provider bundle within that environment. It does not select a database or change Gmail sender authentication. |
+
+Proposed combinations:
+
+| Intake mode | Provider mode | BFMR API/browser | Amazon | Gmail | Telegram | Startup |
+| --- | --- | --- | --- | --- | --- | --- |
+| `production` | `live` | Live | Live | Live production intake | Live production notifications | Allowed subject to existing production gates. |
+| `production` | `simulation` | None started | None started | None started | None started | Reject before creating providers or starting intake. |
+| `testing` | `live` | Live test-account configuration | Live test-account configuration | Live dedicated test intake | Live, labelled TEST | Preserve existing live-test capability and all identity/financial/recovery gates. This is **not** a simulation run. |
+| `testing` | `simulation` | Simulated | Simulated | Live dedicated test intake | Live, labelled TEST with simulated-provider context | Use a validated, pinned scenario/run and isolated application/provider stores. |
+
+**Proposed validation:** `BFMR_PROVIDER_MODE` is explicit and case-sensitive;
+missing, blank or unrecognized values stop startup before provider construction,
+intake or external actions. There is no implicit fallback to `live`. This is a
+future implementation requirement for review, not a claim about current runtime
+behavior. Both provider modes remain subject to all applicable environment gates.
+
+Example configuration for the proposed simulation run:
+
+```dotenv
+BFMR_INTAKE_MODE=testing
+BFMR_PROVIDER_MODE=simulation
+```
+
+Example production configuration:
+
+```dotenv
+BFMR_INTAKE_MODE=production
+BFMR_PROVIDER_MODE=live
+```
+
+`BFMR_PROVIDER_MODE` is an unsuffixed control setting in the selected private
+configuration file, not a credential with a `_TEST` or `_PRODUCTION` suffix.
+On the installed Ubuntu host, use `/etc/bfmr/testing.env` and
+`/etc/bfmr/production.env` respectively. Existing explicit `BFMR_ENV_FILE` and
+legacy production `.env` selection rules remain unchanged; this update does not
+move, read or rewrite the operator's private settings.
+
+Log/display both selected modes and the resolved provider types without secrets.
+Include them in the immutable run manifest, configuration digest, audit events,
+recovery/report context and screen banner. Recovery must use the same selection;
+changing the environment file cannot reinterpret an existing simulated run as
+live work. Select providers once at startup, with no hot switching, mixed bundle
+or live fallback when a simulated operation is unsupported. Gmail and Telegram
+remain live in simulation; they are not switched to database adapters by this key.
 
 ## 3. Proposed architecture
 
@@ -181,7 +242,7 @@ Proposed logical simulator records:
 | Record group | Important contents |
 | --- | --- |
 | Scenario definitions | Name, immutable version, description, initial synthetic state, assertions, contract/seed versions. |
-| Runs | Scenario version, application revision, provider bundle, random seed, identities, clocks, lifecycle and immutable configuration digest. |
+| Runs | Scenario version, application revision, `BFMR_INTAKE_MODE`, `BFMR_PROVIDER_MODE`, resolved provider bundle, random seed, identities, clocks, lifecycle and immutable configuration digest. |
 | Provider entities | Deals, items/suppliers, reservations, carts, orders, purchases, shipments, payment observations and insurance records with exact relationships. |
 | Fault rules | Target operation/entity, match conditions, which occurrence triggers, whether mutation commits, response fault and visibility delay. |
 | Requests/actions/events | Operation, redacted inputs, attempt identity, provider commit outcome, response delivered and event sequence. |
@@ -365,7 +426,7 @@ and unresolved provider contracts remain governed by current project requirement
 | `playwrightBrowser.ts`, reservation/supplier/cancellation services | Move live DOM work behind the browser interface; add database-backed and local-fixture adapters. |
 | `reservedDealPurchase.ts`, Amazon evaluation/checkout/shipment services | Separate shared policy/causal evidence from browser mechanics; remove raw Page dependencies from shared orchestration. |
 | `reservationAlerts.ts` and other notification call sites | Centralize test/run labels and preserve actual delivery/error handling. |
-| `environment.ts`, `relationalRuntime.ts`, launcher/service configuration | Validate simulation-specific synthetic BFMR/Amazon identities and capabilities without requiring live credentials or proof reservations. Preserve full live-mode checks. |
+| `environment.ts`, `relationalRuntime.ts`, launcher/service configuration | Validate the `BFMR_INTAKE_MODE` / `BFMR_PROVIDER_MODE` combination before creating providers; select and pin the bundle. Validate simulation-specific synthetic BFMR/Amazon identities and capabilities without requiring live credentials or proof reservations. Preserve full live-mode checks. |
 | Recovery/report tools | Select the same pinned provider bundle and run context; reconcile simulated state without live network access or generic queue resets. |
 | New simulator/controller/screen | Provision reviewed run stores, serve fixtures/scenarios, record faults/events and display state comparisons. |
 
@@ -377,7 +438,8 @@ checks and the original incident remain unchanged.
 
 ## 12. Isolation and operational rules
 
-- Production startup rejects any simulated provider bundle, scenario/run setting
+- `BFMR_INTAKE_MODE=production` permits only `BFMR_PROVIDER_MODE=live`. Production
+  startup rejects any simulated provider bundle, scenario/run setting
   or local simulator endpoint. Simulation startup rejects any live BFMR/Amazon
   adapter or mixed bundle. Selection changes require stopping and creating a new
   run; environment mode alone is not sufficient evidence.
@@ -419,7 +481,7 @@ fixtures and separately authorized real access.
 | Decision | Recommendation |
 | --- | --- |
 | Overall approach | Approve a provider bundle with independently persisted provider/application state. |
-| Simulation profile | Explicit test-only bundle: BFMR simulated, Amazon simulated, Gmail live, Telegram live with mandatory TEST labels. |
+| Simulation profile | `BFMR_INTAKE_MODE=testing` with `BFMR_PROVIDER_MODE=simulation`: BFMR simulated, Amazon simulated, Gmail live, Telegram live with mandatory TEST labels. |
 | Screen | Local web screen, starting with scenario library, run controls, timeline and state differences. |
 | Browser coverage | Fast workflow simulation plus explicitly selected Playwright/local-fixture rehearsal; neither claims live DOM acceptance. |
 | Run isolation | Fresh per-run application database; run-scoped simulator database; preserve existing test/production state. |
