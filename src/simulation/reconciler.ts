@@ -59,6 +59,7 @@ export class StateReconciler {
         const statusMatches =
           p.status.toLowerCase() === app.status.toLowerCase() ||
           (p.status.toLowerCase() === 'reserved' && app.status.toLowerCase() === 'active') ||
+          (['purchased','delivered'].includes(p.status.toLowerCase()) && app.status.toLowerCase() === 'active') ||
           (p.status.toLowerCase() === 'cancelled' && app.status.toLowerCase() === 'canceled') ||
           (p.status.toLowerCase() === 'canceled' && app.status.toLowerCase() === 'canceled');
         const quantityMatches = p.quantity === app.quantity;
