@@ -10,7 +10,8 @@ import { isTrustedBfmrDealUrl } from './bfmrUrl';
 
 export const EMAIL_WORKFLOW_ACTION = 'DEAL_EMAIL_WORKFLOW';
 export const DEAL_STEPS = ['PENDING', 'RESERVING', 'RESERVED', 'EVALUATING', 'ELIGIBLE', 'CHECKOUT_PREPARING',
-  'CHECKOUT_INTENT', 'ORDER_CONFIRMED', 'ORDER_RECORDED', 'PURCHASE_UPDATE_INTENT', 'COMPLETE', 'CANCEL_INTENT', 'CANCELLED', 'SKIPPED'] as const;
+  'CHECKOUT_INTENT', 'ORDER_CONFIRMED', 'ORDER_RECORDED', 'PURCHASE_UPDATE_INTENT', 'COMPLETE', 'CANCEL_INTENT',
+  'CANCELLATION_REQUIRED', 'CANCELLED', 'SKIPPED'] as const;
 export type DealStep = typeof DEAL_STEPS[number];
 export interface DealProgress {
   dealUrl: string;
@@ -18,7 +19,7 @@ export interface DealProgress {
   dealId?: string;
   targetAsin?: string;
   reference?: ReservationReference;
-  checkout?: { asin: string; totalCents: number; payoutCents: number; productUrl: string };
+  checkout?: { asin: string; totalCents: number; payoutCents: number; productUrl: string; preparedCheckoutId?: string };
   order?: AmazonOrderRecord;
   cancelReason?: 'SUPPLIER_ABSENT' | 'CHECKOUT_RULE';
   cartNeedsReview?: boolean;
@@ -87,7 +88,8 @@ export function validateDealEmailState(value: unknown): DealEmailState {
     if (d.targetAsin !== undefined && !/^[A-Z0-9]{10}$/.test(d.targetAsin)) throw new Error('Invalid workflow cart identity.');
     if (d.checkout && (!/^[A-Z0-9]{10}$/.test(d.checkout.asin) || !Number.isSafeInteger(d.checkout.totalCents) ||
         d.checkout.totalCents <= 0 || d.checkout.totalCents > 10000 || !Number.isSafeInteger(d.checkout.payoutCents) ||
-        d.checkout.payoutCents < d.checkout.totalCents || d.checkout.productUrl !== `https://www.amazon.com/dp/${d.checkout.asin}`)) {
+        d.checkout.payoutCents < d.checkout.totalCents || d.checkout.productUrl !== `https://www.amazon.com/dp/${d.checkout.asin}` ||
+        (d.checkout.preparedCheckoutId !== undefined && !/^sim-checkout-[0-9a-f-]{36}$/.test(d.checkout.preparedCheckoutId)))) {
       throw new Error('Invalid locked checkout intent.');
     }
     if (['CHECKOUT_INTENT', 'ORDER_CONFIRMED', 'ORDER_RECORDED', 'PURCHASE_UPDATE_INTENT', 'COMPLETE'].includes(d.step) && !d.checkout) {
@@ -98,7 +100,10 @@ export function validateDealEmailState(value: unknown): DealEmailState {
       if (!d.checkout || d.order.reserveId !== d.reference?.reserveId || d.order.dealId !== d.dealId ||
           d.order.asin !== d.checkout.asin || d.order.totalCents !== d.checkout.totalCents ||
           d.order.status !== 'PENDING' || d.order.packages.length !== 0 ||
-          Date.parse(d.order.purchasedAt) < Date.parse(s.startedAt) || Date.parse(d.order.purchasedAt) > Date.now()) throw new Error('Workflow order identity conflicts.');
+          Date.parse(d.order.purchasedAt) < Date.parse(s.startedAt) ||
+          (process.env.BFMR_PROVIDER_MODE !== 'simulation' && Date.parse(d.order.purchasedAt) > Date.now())) {
+        throw new Error('Workflow order identity conflicts.');
+      }
     }
     if (['ORDER_CONFIRMED', 'ORDER_RECORDED', 'PURCHASE_UPDATE_INTENT', 'COMPLETE'].includes(d.step) && !d.order) {
       throw new Error('Workflow causal order identity is missing.');
@@ -109,11 +114,11 @@ export function validateDealEmailState(value: unknown): DealEmailState {
 }
 
 const transitions: Record<DealStep, readonly DealStep[]> = {
-  PENDING: ['RESERVING'], RESERVING: ['RESERVING', 'RESERVED', 'SKIPPED'], RESERVED: ['EVALUATING'],
-  EVALUATING: ['ELIGIBLE', 'CANCEL_INTENT'], ELIGIBLE: ['CHECKOUT_PREPARING'],
-  CHECKOUT_PREPARING: ['CHECKOUT_INTENT', 'CANCEL_INTENT'], CHECKOUT_INTENT: ['ORDER_CONFIRMED'],
-  ORDER_CONFIRMED: ['ORDER_RECORDED'], ORDER_RECORDED: ['PURCHASE_UPDATE_INTENT'], PURCHASE_UPDATE_INTENT: ['COMPLETE'],
-  CANCEL_INTENT: ['CANCELLED'], COMPLETE: [], CANCELLED: [], SKIPPED: [],
+  PENDING: ['RESERVING', 'RESERVED'], RESERVING: ['RESERVING', 'RESERVED', 'SKIPPED'], RESERVED: ['EVALUATING'],
+  EVALUATING: ['ELIGIBLE', 'CANCEL_INTENT', 'CANCELLATION_REQUIRED'], ELIGIBLE: ['CHECKOUT_PREPARING', 'CANCELLATION_REQUIRED'],
+  CHECKOUT_PREPARING: ['CHECKOUT_INTENT', 'CANCEL_INTENT', 'CANCELLATION_REQUIRED'], CHECKOUT_INTENT: ['ORDER_CONFIRMED'],
+  ORDER_CONFIRMED: ['ORDER_RECORDED'], ORDER_RECORDED: ['PURCHASE_UPDATE_INTENT', 'COMPLETE'], PURCHASE_UPDATE_INTENT: ['COMPLETE'],
+  CANCEL_INTENT: ['CANCELLED'], CANCELLATION_REQUIRED: [], COMPLETE: [], CANCELLED: [], SKIPPED: [],
 };
 function sameIdentity(before: DealEmailState, after: DealEmailState) {
   for (const key of ['schemaVersion', 'workflowId', 'account', 'source', 'messageId', 'messageType', 'sourceSha256', 'retailerAccountId', 'startedAt'] as const) {
@@ -185,7 +190,8 @@ export class DealEmailWorkflowStore {
       phase: 'SNAPSHOT', outcome: state.status, evidence: JSON.parse(JSON.stringify(state)) as JsonObject });
     return { revision: row.id, state: structuredClone(state) };
   }
-  async claim(email: WorkflowEmail, messageType: DealEmailState['messageType'], dealUrls: string[], retailerAccountId: string): Promise<WorkflowCheckpoint> {
+  async claim(email: WorkflowEmail, messageType: DealEmailState['messageType'], dealUrls: string[], retailerAccountId: string,
+    allowPausedSimulationResume = false): Promise<WorkflowCheckpoint> {
     return this.db.withTransaction(async tx => {
       if (email.source !== 'LOCAL_PDF_TEST') {
         const work = await tx.query<{ state: string; payload: WorkflowEmail | null }>(`SELECT state,payload FROM public.gmail_intake_work
@@ -209,6 +215,9 @@ export class DealEmailWorkflowStore {
           throw new Error('Existing workflow source/account/deal identity conflicts.');
         }
         if (previous.state.status === 'COMPLETE') return previous;
+        if (previous.state.status === 'PAUSED' && allowPausedSimulationResume) {
+          return this.append(tx, { ...previous.state, status: 'RUNNING' });
+        }
         if (previous.state.status !== 'READY') throw new Error('Interrupted workflow cannot be automatically re-entered.');
         return this.append(tx, { ...previous.state, status: 'RUNNING' });
       }
