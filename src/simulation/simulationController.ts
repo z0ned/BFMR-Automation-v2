@@ -17,6 +17,7 @@ interface ActiveRunContext {
   scenario: ScenarioDefinition;
   bundle: ProviderBundle;
   appRuntime: RelationalRuntime;
+  email: ReceivedEmail;
 }
 
 export class SimulationController {
@@ -59,11 +60,26 @@ export class SimulationController {
       retailerEmail: 'buyer@example.invalid',
     });
 
+    const email: ReceivedEmail = {
+      id: `msg-${runId.toLowerCase()}`,
+      sender: scenario.sampleEmail.sender,
+      subject: scenario.sampleEmail.subject,
+      body: scenario.sampleEmail.body,
+      inboxAtFetch: true,
+      receivedAt: new Date(runRecord.createdAt).toISOString(),
+      headers: [
+        { name: 'From', value: scenario.sampleEmail.sender },
+        { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' },
+        { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' },
+      ],
+    };
+
     this.activeRuns.set(runId, {
       runId,
       scenario,
       bundle,
       appRuntime,
+      email,
     });
 
     return this.store.getRun(runId);
@@ -81,6 +97,12 @@ export class SimulationController {
     const ctx = this.activeRuns.get(runId);
     if (!ctx) throw new Error(`Active run context not found for ${runId}.`);
 
+    const existingRun = await this.store.getRun(runId);
+    if (existingRun.status === 'COMPLETED') {
+      const diff = await this.reconciler.evaluateDiff(runId, ctx.appRuntime.db);
+      return { run: existingRun, diff };
+    }
+
     await this.store.updateRunStatus(runId, 'RUNNING');
     await this.store.logEvent(runId, 'INFO', 'WORKFLOW', `Starting workflow execution for scenario: ${ctx.scenario.name}`);
 
@@ -97,19 +119,7 @@ export class SimulationController {
     let errorDetail: string | undefined;
 
     try {
-      const email: ReceivedEmail = {
-        id: `msg-${runId.toLowerCase()}`,
-        sender: ctx.scenario.sampleEmail.sender,
-        subject: ctx.scenario.sampleEmail.subject,
-        body: ctx.scenario.sampleEmail.body,
-        inboxAtFetch: true,
-        receivedAt: new Date().toISOString(),
-        headers: [
-          { name: 'From', value: ctx.scenario.sampleEmail.sender },
-          { name: 'Received', value: 'from mail.example by mx.google.com with ESMTPS' },
-          { name: 'Authentication-Results', value: 'mx.google.com; dmarc=pass header.from=buyformeretail.com; dkim=pass header.d=buyformeretail.com' },
-        ],
-      };
+      const email = ctx.email;
 
       // Enroll message in gmail_intake_work per CON-001 requirements
       const { createHash } = await import('node:crypto');

@@ -181,8 +181,8 @@ export class SimulatedStore {
       scenarioName: r.scenario_name,
       phase: r.phase as any,
       status: r.status as any,
-      createdAt: r.created_at,
-      virtualTime: r.virtual_time,
+      createdAt: new Date(r.created_at).toISOString(),
+      virtualTime: new Date(r.virtual_time).toISOString(),
       stepCount: r.step_count,
       activeFaults: faultsRes.rows.map((f) => ({
         id: f.id,

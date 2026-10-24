@@ -15,6 +15,7 @@ Per `docs/PROVIDER_SIMULATION_PROPOSAL.md` and approved rollout choices:
 - Built Express simulation API in `server.ts` mounted with Vite middlewares on port 3000 (`/api/scenarios`, `/api/runs`, `/api/runs/:id/execute`, `/api/runs/:id/diff`, `/api/runs/:id/advance-time`).
 - Built interactive React Scenario Console in `src/App.tsx` displaying the scenario catalog, run status, state diff table, virtual time controls, audit event logs, and deal previews.
 - Verified Phase 1 scenarios (clean single deal reservation, multi-deal quantity one barrier, lost confirmation self-healing, closed deal skip, and defensive tracker read error).
+- Pinned deterministic email enrollment on `ActiveRunContext` to guarantee identical source SHA-256 across repeated workflow step invocations and added explicit 'New Run' controls in the UI.
 
 ## 23 October 2026 — readable BFMR API reference
 

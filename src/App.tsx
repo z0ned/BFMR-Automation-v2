@@ -258,12 +258,27 @@ export default function App() {
                     <span>+5m</span>
                   </button>
                   <button
+                    onClick={() => selectedScenario && handleCreateRun(selectedScenario.id)}
+                    disabled={isLoading || isExecuting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 border border-slate-700 hover:border-slate-600 rounded transition-colors disabled:opacity-50"
+                    title="Initialize a new clean simulation run for this scenario"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>New Run</span>
+                  </button>
+                  <button
                     onClick={handleExecute}
-                    disabled={isExecuting}
+                    disabled={isExecuting || activeRun.status === 'COMPLETED'}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded transition-colors disabled:opacity-50"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>{isExecuting ? 'Executing...' : 'Run Workflow Step'}</span>
+                    <span>
+                      {isExecuting
+                        ? 'Executing...'
+                        : activeRun.status === 'COMPLETED'
+                        ? 'Completed'
+                        : 'Run Workflow Step'}
+                    </span>
                   </button>
                 </div>
               )}
