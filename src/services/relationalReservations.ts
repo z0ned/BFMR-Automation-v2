@@ -24,15 +24,17 @@ export async function recordReservationNotAttempted(runtime: RelationalRuntime, 
     evidence: { bfmr_deal_id: prepared.dealId } }));
 }
 
+import type { IBfmrApi } from '../providers/interfaces';
+
 /** Persist intent before the provider form action. Deal and reservation rates
  * are independent facts; an email payout is never used as creation evidence.
  */
 export async function prepareRelationalReservation(runtime: RelationalRuntime, input: {
   dealUrl: string; dealId: string; title: string; email?: TriggerEmail; correlationId?: string;
-}): Promise<PreparedRelationalReservation> {
+}, bfmrApi?: IBfmrApi): Promise<PreparedRelationalReservation> {
   if (input.email) assertEmailSinceCutover(runtime.baselineStartsAt, input.email.receivedAt);
   await runtime.verifyRetailerAccount();
-  const deal = await readCanonicalDealTerms(input.dealUrl, input.dealId, input.title);
+  const deal = await readCanonicalDealTerms(input.dealUrl, input.dealId, input.title, bfmrApi);
   const correlationId = input.correlationId ?? randomUUID();
   await runtime.db.withTransaction(async tx => {
     const email = input.email ? await tx.emails.upsert({ gmailMessageId: input.email.id,
@@ -48,11 +50,15 @@ export async function prepareRelationalReservation(runtime: RelationalRuntime, i
   return { correlationId, dealId: input.dealId, deal, email: input.email };
 }
 
-export async function captureRelationalReservation(runtime: RelationalRuntime, reference: ReservationReference,
-  prepared: PreparedRelationalReservation): Promise<void> {
+export async function captureRelationalReservation(
+  runtime: RelationalRuntime,
+  reference: ReservationReference,
+  prepared: PreparedRelationalReservation,
+  bfmrApi?: IBfmrApi
+): Promise<void> {
   if (reference.dealId !== prepared.dealId) throw new Error('Confirmed reservation differs from the submitted deal; review required.');
   try {
-    const rows = await readRecentReservedRows();
+    const rows = bfmrApi ? await bfmrApi.readRecentReservedRows() : await readRecentReservedRows();
     const matches = rows.filter(row => String(row.reserve_id ?? '').trim() === reference.reserveId);
     if (matches.length !== 1) throw new Error('New reservation creation terms are missing or ambiguous.');
     const terms = normalizeTrackerReservation(matches[0]);
@@ -78,8 +84,8 @@ export async function captureRelationalReservation(runtime: RelationalRuntime, r
 /** Failed collection is recorded as a newer incomplete attempt, so exposure
  * cannot fall back to an earlier successful observation after a failed read.
  */
-export async function readTrackerWithFailureEvidence(runtime: RelationalRuntime) {
-  try { return await readRecentReservedRows(); }
+export async function readTrackerWithFailureEvidence(runtime: RelationalRuntime, bfmrApi?: IBfmrApi) {
+  try { return bfmrApi ? await bfmrApi.readRecentReservedRows() : await readRecentReservedRows(); }
   catch {
     await runtime.sync.reconcile([], { complete: false, accountValidated: false, financialContractValidated: false });
     throw new Error('Complete BFMR collection failed; an incomplete reconciliation attempt was retained.');

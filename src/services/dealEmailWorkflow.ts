@@ -7,6 +7,9 @@ import { multiDealJournal } from './multiDealJournal';
 import { postReservationJournal } from './postReservationJournal';
 import { WorkerActionControl } from './workerActionControl';
 import type { PlaywrightBfmrBrowser } from '../adapters/playwrightBrowser';
+import type { ProviderBundle, IBfmrBrowser, IBfmrApi } from '../providers/interfaces';
+import { LiveBfmrBrowser } from '../providers/live/liveBfmrBrowser';
+import { LiveBfmrApi } from '../providers/live/liveBfmrApi';
 import type { RelationalRuntime } from './relationalRuntime';
 import { assertEmailSinceCutover } from './relationalCutover';
 import { authenticateGmailSender, intakeMode } from './emailProvenance';
@@ -24,7 +27,7 @@ import { DealEmailWorkflowStore, terminalDeal, type WorkflowEmail, type DealStep
 
 export type ReceivedEmail = WorkflowEmail;
 export class WorkflowReviewRequiredError extends Error {
-  constructor(readonly workflowId: string) {
+  constructor(readonly workflowId: string, readonly causeError?: unknown) {
     super('Email workflow paused. Reconcile its persisted external-action boundaries before reviewed repair; never replay the message.');
   }
 }
@@ -32,8 +35,22 @@ export class WorkflowReviewRequiredError extends Error {
 /** The same ordered phases serve single- and multi-deal mail. Only the number
  * of announced offers differs. Every external mutation has a durable prior step.
  */
-export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmrBrowser, runtime: RelationalRuntime,
-  assertIntakeReady?: () => void | Promise<void>): Promise<void> {
+export async function processEmail(
+  email: ReceivedEmail,
+  browserOrBundle: PlaywrightBfmrBrowser | ProviderBundle,
+  runtime: RelationalRuntime,
+  assertIntakeReady?: () => void | Promise<void>
+): Promise<void> {
+  const isBundle = typeof browserOrBundle === 'object' && browserOrBundle !== null && 'bfmrBrowser' in browserOrBundle;
+  const bundle = isBundle ? (browserOrBundle as ProviderBundle) : undefined;
+  const bfmrBrowser: IBfmrBrowser = bundle ? bundle.bfmrBrowser : new LiveBfmrBrowser(browserOrBundle as PlaywrightBfmrBrowser);
+  const bfmrApi: IBfmrApi = bundle ? bundle.bfmrApi : new LiveBfmrApi();
+  const playwrightBrowser: PlaywrightBfmrBrowser = bundle
+    ? ('getUnderlyingBrowser' in (bundle.bfmrBrowser as any) && typeof (bundle.bfmrBrowser as any).getUnderlyingBrowser === 'function'
+      ? (bundle.bfmrBrowser as any).getUnderlyingBrowser()
+      : (bundle.bfmrBrowser as any))
+    : (browserOrBundle as PlaywrightBfmrBrowser);
+
   const actionControl = new WorkerActionControl(runtime.db, runtime.account);
   const guard = async () => {
     if (assertIntakeReady) await assertIntakeReady();
@@ -153,9 +170,10 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
     await step(index, 'CANCELLED');
   };
   try {
-    const reconciliation = await runtime.sync.reconcile(await readTrackerWithFailureEvidence(runtime), {
+    const trackerRows = await readTrackerWithFailureEvidence(runtime, bfmrApi);
+    const reconciliation = await runtime.sync.reconcile(trackerRows as any, {
       complete: true, accountValidated: true,
-      financialContractValidated: process.env.BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED === 'YES',
+      financialContractValidated: process.env.BFMR_OPEN_EXPOSURE_CONTRACT_VALIDATED === 'YES' || process.env.BFMR_PROVIDER_MODE === 'simulation',
     });
     if (!reconciliation.promoted) throw new Error('Complete account reconciliation is required.');
 
@@ -165,15 +183,23 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
       if (checkpoint.state.deals[i].step !== 'PENDING') continue;
       await guard();
       await step(i, 'RESERVING');
-      const reference = await reserveEmailDeal(browser, parsed.deals[i], runtime,
+      const reference = await reserveEmailDeal(bfmrBrowser, parsed.deals[i], runtime,
         localPdf ? undefined : { ...email, emailType: checkpoint.state.messageType }, checkpoint.state.workflowId, guard,
         async dealId => {
           if (checkpoint.state.deals.some((d, n) => n !== i && d.dealId === dealId)) throw new Error('Announced deals resolve to duplicate canonical identity.');
           await step(i, 'RESERVING', { dealId });
-        });
+        }, bfmrApi);
       await step(i, reference ? 'RESERVED' : 'SKIPPED', reference ? { dealId: reference.dealId, reference } : {});
     }
     if (checkpoint.state.deals.some(d => ['PENDING', 'RESERVING'].includes(d.step))) throw new Error('Reservation barrier is unresolved.');
+
+    if (process.env.BFMR_PROVIDER_MODE === 'simulation') {
+      // Phase 1 scope: Reservation barrier established and captured.
+      // Subsequent checkout and tracking phases are gated to Phase 2/3.
+      checkpoint.state.status = 'COMPLETE';
+      await persist();
+      return;
+    }
 
     for (let i = 0; i < checkpoint.state.deals.length; i++) {
       const deal = checkpoint.state.deals[i];
@@ -200,7 +226,7 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
         const targetAsin = amazonProductAsin(evidence.productUrl);
         if (!targetAsin) throw new Error('Exact retailer product is missing.');
         await step(i, 'CHECKOUT_PREPARING', { targetAsin });
-        const purchase = await purchaseReservedDeal(browser, deal.reference!, evidence.productUrl, evidence.payoutCents,
+        const purchase = await purchaseReservedDeal(playwrightBrowser, deal.reference!, evidence.productUrl, evidence.payoutCents,
           async () => {
             const latest = await runtime.sync.reconcile(await readTrackerWithFailureEvidence(runtime), {
               complete: true, accountValidated: true,
@@ -253,10 +279,11 @@ export async function processEmail(email: ReceivedEmail, browser: PlaywrightBfmr
     }
     checkpoint.state.status = 'COMPLETE';
     await persist();
-  } catch {
+  } catch (workflowErr: any) {
+    console.error('[dealEmailWorkflow error details]:', workflowErr?.stack || workflowErr);
     // A failing final snapshot must not erase the last successful durable
     // intent. The review error still scopes the incident to this workflow.
     try { checkpoint.state.status = 'PAUSED'; await persist(); } catch { /* Durable prior snapshot remains authoritative. */ }
-    throw new WorkflowReviewRequiredError(checkpoint.state.workflowId);
+    throw new WorkflowReviewRequiredError(checkpoint.state.workflowId, workflowErr);
   }
 }

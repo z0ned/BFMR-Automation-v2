@@ -1,20 +1,32 @@
 import type { PlaywrightBfmrBrowser } from '../adapters/playwrightBrowser';
+import type { IBfmrBrowser, IBfmrApi } from '../providers/interfaces';
+import { LiveBfmrBrowser } from '../providers/live/liveBfmrBrowser';
+import { LiveBfmrApi } from '../providers/live/liveBfmrApi';
 import type { RelationalRuntime } from './relationalRuntime';
 import type { ReceivedEmail } from './dealEmailWorkflow';
 import type { ReservationReference } from './amazonEvaluation';
 import { prepareRelationalReservation, captureRelationalReservation, recordReservationNotAttempted } from './relationalReservations';
-import { checkDealReservation, resolveBfmrDealId } from './bfmrTrackerApi';
 import { automaticConfirmation } from './automaticConfirmation';
 
+function toBfmrBrowser(browser: PlaywrightBfmrBrowser | IBfmrBrowser): IBfmrBrowser {
+  if ('getCurrentUrl' in browser && typeof browser.getCurrentUrl === 'function') {
+    return browser as IBfmrBrowser;
+  }
+  return new LiveBfmrBrowser(browser as PlaywrightBfmrBrowser);
+}
+
 export async function reserveEmailDeal(
-  browser: PlaywrightBfmrBrowser,
+  browserOrAdapter: PlaywrightBfmrBrowser | IBfmrBrowser,
   deal: { canonicalDealId: string; dealUrl: string; dealTitle?: string },
   runtime: RelationalRuntime,
   email: (ReceivedEmail & { emailType: string }) | undefined,
   correlationId: string,
   assertIntakeReady: () => void | Promise<void>,
   onIntent?: (dealId: string) => Promise<void>,
+  api?: IBfmrApi
 ): Promise<ReservationReference | null> {
+  const browser = toBfmrBrowser(browserOrAdapter);
+  const bfmrApi = api ?? new LiveBfmrApi();
   const dealUrl = deal.dealUrl;
   console.log(`\n[BFMR workflow] Reserving one BFMR offer: ${dealUrl}`);
 
@@ -56,8 +68,9 @@ export async function reserveEmailDeal(
   if (!visibleDealTitle) throw new Error('BFMR did not expose a visible deal title for the My Tracker check. No reservation was attempted.');
   console.log(`[BFMR workflow] BFMR deal title: ${visibleDealTitle}`);
 
-  const dealId = await resolveBfmrDealId((await browser.init()).url());
-  const before = await checkDealReservation(dealId, visibleDealTitle);
+  const currentUrl = await browser.getCurrentUrl();
+  const dealId = await bfmrApi.resolveDealId(currentUrl);
+  const before = await bfmrApi.inspectReservations(dealId, visibleDealTitle, 'DUPLICATE');
   if (before.status === 'UNKNOWN') throw new Error(`My Tracker preflight failed: ${before.error}. No reservation was attempted.`);
   if (before.status === 'CONFIRMED' || before.status === 'EXISTING') {
     console.log(`[BFMR workflow] SKIPPED: My Tracker already has a reserved row for this deal (quantity ${before.quantity}). No reservation was attempted.`);
@@ -65,8 +78,8 @@ export async function reserveEmailDeal(
   }
 
   const prepared = await prepareRelationalReservation(runtime, {
-    dealUrl: (await browser.init()).url(), dealId, title: visibleDealTitle, email, correlationId,
-  });
+    dealUrl: currentUrl, dealId, title: visibleDealTitle, email, correlationId,
+  }, bfmrApi);
   await runtime.ownership.verifyOwnership();
   await runtime.verifyRetailerAccount();
   await assertIntakeReady();
@@ -84,7 +97,7 @@ export async function reserveEmailDeal(
   }
 
   console.log('[BFMR workflow] Checking My Tracker automatically; no further form submission.');
-  const result = await automaticConfirmation(() => checkDealReservation(dealId, visibleDealTitle, 'CONFIRMATION'));
+  const result = await automaticConfirmation(() => bfmrApi.inspectReservations(dealId, visibleDealTitle, 'CONFIRMATION'));
   if (result.status !== 'CONFIRMED') {
     const detail = result.status === 'UNKNOWN'
       ? result.error
@@ -96,6 +109,6 @@ export async function reserveEmailDeal(
 
   console.log(`[BFMR workflow] PASS: My Tracker API confirmed quantity one for ${dealId}.`);
   if (!result.reference) throw new Error('My Tracker confirmed quantity one but omitted the exact reservation ID; review before evaluating or ordering.');
-  await captureRelationalReservation(runtime, result.reference, prepared);
+  await captureRelationalReservation(runtime, result.reference, prepared, bfmrApi);
   return result.reference;
 }

@@ -1,0 +1,8 @@
+{
+  "name": "BFMR Automation v2",
+  "description": "TypeScript implementation for BFMR email deal classification, reservation workflows, and relational persistence inspection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

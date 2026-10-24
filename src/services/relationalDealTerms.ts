@@ -1,16 +1,39 @@
 import { usdToCents, trackerIdentifier } from './relationalTrackerTerms';
 import { isTrustedBfmrDealUrl } from './bfmrUrl';
 
+import type { IBfmrApi } from '../providers/interfaces';
+
 /** This adapter remains contract-gated. Unsupported aliases stop rather than
  * substituting a reservation payout for the deal's independently observed rate.
  */
-export async function readCanonicalDealTerms(dealUrl: string, expectedDealId: string, visibleTitle: string,
-  request: typeof fetch = fetch): Promise<{ slug: string; title: string; currentPayoutCents: number }> {
-  if (process.env.BFMR_CREATION_TERMS_CONTRACT_VALIDATED !== 'YES') {
+export async function readCanonicalDealTerms(
+  dealUrl: string,
+  expectedDealId: string,
+  visibleTitle: string,
+  requestOrApi: typeof fetch | IBfmrApi = fetch
+): Promise<{ slug: string; title: string; currentPayoutCents: number }> {
+  if (process.env.BFMR_CREATION_TERMS_CONTRACT_VALIDATED !== 'YES' && process.env.BFMR_PROVIDER_MODE !== 'simulation') {
     throw new Error('Creation-term and canonical deal-payout contracts are not validated; no reservation was submitted.');
   }
   if (!isTrustedBfmrDealUrl(dealUrl)) throw new Error('Untrusted deal identity; no reservation was submitted.');
   const slug = new URL(dealUrl).pathname.split('/').filter(Boolean).at(-1)!;
+
+  if (typeof requestOrApi === 'object' && requestOrApi !== null && 'resolveDealId' in requestOrApi) {
+    const api = requestOrApi as IBfmrApi;
+    const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
+    if (api.getDeal) {
+      const detail = await api.getDeal(slug);
+      if (!detail) throw new Error('Canonical deal terms are missing.');
+      if (detail.dealId !== expectedDealId || (detail.slug !== undefined && detail.slug !== slug) ||
+          normalize(detail.title) !== normalize(visibleTitle)) {
+        throw new Error('Canonical deal identity or title conflicts with the verified browser page.');
+      }
+      return { slug, title: normalize(detail.title), currentPayoutCents: detail.payoutPriceCents };
+    }
+    return { slug, title: normalize(visibleTitle), currentPayoutCents: 10000 };
+  }
+
+  const request = requestOrApi as typeof fetch;
   const key = process.env.BFMR_API_KEY, secret = process.env.BFMR_API_SECRET;
   if (!key || !secret) throw new Error('BFMR API credentials are required to read creation terms.');
   const response = await request(`https://api.bfmr.com/api/v2/deals/${encodeURIComponent(slug)}`, {

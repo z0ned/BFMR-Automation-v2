@@ -1,5 +1,21 @@
 # BFMR Automation v2 — Implementation Reference
 
+## 24 October 2026 — Phase 1 provider simulation engine, interfaces, and scenario console
+
+Per `docs/PROVIDER_SIMULATION_PROPOSAL.md` and approved rollout choices:
+- Created standard provider interfaces in `src/providers/interfaces.ts`: `IBfmrApi`, `IBfmrBrowser`, `IAmazonProvider`, `ITelegramNotifier`, and `IClock`.
+- Implemented live provider wrappers in `src/providers/live/` and bundle resolution in `src/providers/providerBundle.ts`.
+- Gated simulation mode via `validateProviderMode()` and `assertTestingProviders()`: `BFMR_PROVIDER_MODE=simulation` is allowed only with `BFMR_INTAKE_MODE=testing`; production mode strictly rejects simulation before provider construction or intake enrollment.
+- Implemented in-process dual-store architecture with PGlite (`@electric-sql/pglite`):
+  - Isolated provider truth store (`SimulatedStore`) managing `sim_runs`, `sim_deals`, `sim_reservations`, `sim_fault_rules`, and `sim_events`.
+  - Isolated application fixture (`createSimulationAppRuntime`) running canonical `database/schema.sql` and `database/gmail_intake.sql`.
+- Implemented fault-injecting simulated providers (`SimulatedBfmrBrowser`, `SimulatedBfmrApi`, `SimulatedAmazonProvider`, `SimulatedTelegramNotifier`, `SimulatedClock`).
+- Wired `IBfmrApi` across `emailReservation.ts`, `dealEmailWorkflow.ts`, `relationalReservations.ts`, and `relationalDealTerms.ts`.
+- Established state reconciler (`StateReconciler`) computing real-time diffs between provider truth (`sim_reservations`) and application SQL (`reservations`).
+- Built Express simulation API in `server.ts` mounted with Vite middlewares on port 3000 (`/api/scenarios`, `/api/runs`, `/api/runs/:id/execute`, `/api/runs/:id/diff`, `/api/runs/:id/advance-time`).
+- Built interactive React Scenario Console in `src/App.tsx` displaying the scenario catalog, run status, state diff table, virtual time controls, audit event logs, and deal previews.
+- Verified Phase 1 scenarios (clean single deal reservation, multi-deal quantity one barrier, lost confirmation self-healing, closed deal skip, and defensive tracker read error).
+
 ## 23 October 2026 — readable BFMR API reference
 
 [BFMR_API_REFERENCE.md](BFMR_API_REFERENCE.md) reformats the operator-supplied

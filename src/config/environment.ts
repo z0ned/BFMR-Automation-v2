@@ -90,14 +90,31 @@ export function configureEnvironment(env: NodeJS.ProcessEnv = process.env): void
 /** Live test workers need distinct verified provider identities, beyond a DB name. */
 export function assertTestingProviders(env: NodeJS.ProcessEnv = process.env): void {
   if (intakeMode(env.BFMR_INTAKE_MODE) !== 'testing') return;
-  for (const key of ['BFMR_EXPECTED_ACCOUNT', 'GMAIL_ACCOUNT_EMAIL', 'AMAZON_EXPECTED_ACCOUNT']) {
-    const selected = env[key]?.trim().toLowerCase();
-    const production = env[key + '_PRODUCTION']?.trim().toLowerCase();
-    if (!selected || !production || selected === production) {
-      throw new Error(`Testing requires separate ${key}_TEST and ${key}_PRODUCTION identities.`);
-    }
+
+  const isSimulation = env.BFMR_PROVIDER_MODE === 'simulation';
+
+  // Gmail identity checks always apply since Gmail intake is live in simulation
+  const selectedGmail = env.GMAIL_ACCOUNT_EMAIL?.trim().toLowerCase();
+  const prodGmail = env.GMAIL_ACCOUNT_EMAIL_PRODUCTION?.trim().toLowerCase();
+  if (!selectedGmail || !prodGmail || selectedGmail === prodGmail) {
+    throw new Error('Testing requires separate GMAIL_ACCOUNT_EMAIL_TEST and GMAIL_ACCOUNT_EMAIL_PRODUCTION identities.');
   }
-  for (const key of ['GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_PUBSUB_TOPIC', 'GOOGLE_PUBSUB_SUBSCRIPTION', 'BFMR_API_KEY', 'BFMR_API_SECRET']) {
+
+  for (const key of ['GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_PUBSUB_TOPIC', 'GOOGLE_PUBSUB_SUBSCRIPTION']) {
     if (!env[key]?.trim()) throw new Error(`Testing requires explicit ${key}_TEST; production defaults are unavailable.`);
+  }
+
+  // Live test provider credentials for BFMR and Amazon are only required in live provider mode
+  if (!isSimulation) {
+    for (const key of ['BFMR_EXPECTED_ACCOUNT', 'AMAZON_EXPECTED_ACCOUNT']) {
+      const selected = env[key]?.trim().toLowerCase();
+      const production = env[key + '_PRODUCTION']?.trim().toLowerCase();
+      if (!selected || !production || selected === production) {
+        throw new Error(`Testing requires separate ${key}_TEST and ${key}_PRODUCTION identities.`);
+      }
+    }
+    for (const key of ['BFMR_API_KEY', 'BFMR_API_SECRET']) {
+      if (!env[key]?.trim()) throw new Error(`Testing requires explicit ${key}_TEST; production defaults are unavailable.`);
+    }
   }
 }

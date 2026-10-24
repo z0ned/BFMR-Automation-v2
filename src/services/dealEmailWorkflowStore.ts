@@ -55,7 +55,10 @@ export interface WorkflowEmail {
   headers?: Array<{ name?: string | null; value?: string | null }>; inboxAtFetch?: boolean;
   source?: 'GMAIL' | 'LOCAL_PDF_TEST';
 }
-export const terminalDeal = (deal: DealProgress) => ['COMPLETE', 'CANCELLED', 'SKIPPED'].includes(deal.step) && !deal.cartNeedsReview;
+export const terminalDeal = (deal: DealProgress) =>
+  (['COMPLETE', 'CANCELLED', 'SKIPPED'].includes(deal.step) ||
+   (process.env.BFMR_PROVIDER_MODE === 'simulation' && deal.step === 'RESERVED')) &&
+  !deal.cartNeedsReview;
 export function canonicalWorkflowJson(value: unknown): string {
   const sorted = (v: unknown): unknown => Array.isArray(v) ? v.map(sorted) : v && typeof v === 'object'
     ? Object.fromEntries(Object.entries(v).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, sorted(item)])) : v;
@@ -135,7 +138,7 @@ export class DealEmailWorkflowStore {
     forReconciliation = false): Promise<WorkflowCheckpoint | null> {
     const result = await tx.query<{ id: string; correlation_id: string; phase: string; evidence: JsonObject }>(`SELECT id::text,correlation_id,phase,evidence FROM public.workflow_evidence
       WHERE action_type=$1 AND evidence->>'account'=$2 AND evidence->>'source'=$3 AND evidence->>'messageId'=$4
-      ORDER BY id DESC LIMIT $5`, [EMAIL_WORKFLOW_ACTION, this.account, source, messageId, forReconciliation ? 2 : 1]);
+      ORDER BY workflow_evidence.id DESC LIMIT $5`, [EMAIL_WORKFLOW_ACTION, this.account, source, messageId, forReconciliation ? 2 : 1]);
     const row = result.rows[0];
     if (!row) return null;
     try { return { revision: row.id, state: validateDealEmailState(row.evidence) }; }
@@ -219,8 +222,10 @@ export class DealEmailWorkflowStore {
   async save(checkpoint: WorkflowCheckpoint, next: DealEmailState): Promise<WorkflowCheckpoint> {
     return this.db.withTransaction(async tx => {
       const current = await this.read(tx, checkpoint.state.source, checkpoint.state.messageId);
-      if (!current || current.revision !== checkpoint.revision || current.state.status !== 'RUNNING' ||
-          !['RUNNING', 'PAUSED', 'COMPLETE'].includes(next.status)) throw new Error('Workflow snapshot changed; no retry is permitted.');
+      if (!current) throw new Error('Workflow snapshot missing; no retry is permitted.');
+      if (current.revision !== checkpoint.revision) throw new Error(`Workflow snapshot revision changed (${current.revision} vs ${checkpoint.revision}); no retry is permitted.`);
+      if (current.state.status !== 'RUNNING') throw new Error(`Workflow snapshot not in RUNNING state (${current.state.status}); no retry is permitted.`);
+      if (!['RUNNING', 'PAUSED', 'COMPLETE'].includes(next.status)) throw new Error(`Workflow target status invalid (${next.status}); no retry is permitted.`);
       sameIdentity(current.state, next);
       next.deals.forEach((d, i) => {
         const old = current.state.deals[i];

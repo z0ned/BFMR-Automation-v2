@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for BFMR Phase 1 Provider Interface, Simulator, and Scenario Management Web UI. Includes architectural blueprints, UX flows, PGlite persistence strategy, and fault-injection mechanics.",
+  "updatedAt":  "2026-10-24T13:30:34.609672257Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

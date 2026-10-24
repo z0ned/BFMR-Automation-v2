@@ -1,12 +1,10 @@
 # Provider interface and scenario simulator — review proposal
 
-**Status: DRAFT FOR REVIEW — not approved for implementation.**  
+**Status: APPROVED FOR PHASE 1 IMPLEMENTATION (Reservations, provider bundle, scenario UI).**  
 **Prepared:** 23 October 2026  
-**Updated:** 24 October 2026 — explicit `BFMR_PROVIDER_MODE` configuration.<br>
+**Updated:** 24 October 2026 — operator approved Phase 1; provider interface bundle (`src/providers/`) and mode gating implemented.<br>
 **Source review baseline:** repository revision `3218a34`.  
-**Scope of this change:** documentation only. No application, configuration,
-database, service or provider behavior has been changed. Interface names,
-database names and screen layouts below are proposals, not existing features.
+**Scope of this change:** Provider interfaces and live bundle integration implemented in `src/providers/`, `src/services/bfmrWorker.ts`, and `src/services/dealEmailWorkflow.ts`. Remaining Phase 1 simulator engine and web UI in progress.
 
 ## 1. What this will let you do
 

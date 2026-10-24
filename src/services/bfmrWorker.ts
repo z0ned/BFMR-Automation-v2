@@ -22,6 +22,7 @@ import { multiDealJournal } from './multiDealJournal';
 import { runDueAmazonTracking } from './nightlyAmazonTracking';
 import { ensureBfmrTracking } from './bfmrTrackingSubmission';
 import { bfmrStatusStore, runDueBfmrStatusCheck } from './bfmrDailyStatus';
+import { resolveProviderBundle } from '../providers/providerBundle';
 import { DealEmailWorkflowStore } from './dealEmailWorkflowStore';
 import { processEmail, WorkflowReviewRequiredError } from './dealEmailWorkflow';
 
@@ -77,12 +78,14 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
   }
   const { ownership, ledger: orderLedger } = runtime;
   let browser: PlaywrightBfmrBrowser;
+  let providerBundle: ReturnType<typeof resolveProviderBundle>;
   let store: PostgresGmailIntakeStore;
   try {
     const isHeadless = process.env.BFMR_HEADLESS === 'true' ||
       process.env.PLAYWRIGHT_HEADLESS === 'true' ||
       (!process.env.DISPLAY && process.platform !== 'win32');
     browser = new PlaywrightBfmrBrowser({ headless: isHeadless });
+    providerBundle = resolveProviderBundle(process.env, { browser, isHeadless });
     store = new PostgresGmailIntakeStore(runtime.connectionString, {
       account, mailbox: adapters.mailbox, subscription: adapters.subscriptionName, topic: adapters.topic,
       verifyOwnership: () => ownership.verifyOwnership(),
@@ -191,7 +194,7 @@ export async function runBfmrWorker(options: { beforeProcessing?: (browser: Play
       const alertDeal = parseIncomingEmail({ ...email, messageId: email.id });
       await withReservationFailureAlert(`Email-triggered processing stopped.\nDeal: ${alertDeal.dealUrl || 'identity unavailable'}`, async () => {
         try {
-          await processEmail(email, browser, runtime, assertActionsReady);
+          await processEmail(email, providerBundle, runtime, assertActionsReady);
           await auditRecovery();
         } catch (error) {
           await control.block('EMAIL_ACTION_REQUIRES_REVIEW', error instanceof WorkflowReviewRequiredError ? error.workflowId : undefined);

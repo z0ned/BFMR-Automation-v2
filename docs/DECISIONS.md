@@ -1,5 +1,16 @@
 # Decision register
 
+## 24 October 2026 — unified provider interface bundle and simulation mode gating
+
+Implement the provider interfaces per `docs/PROVIDER_SIMULATION_PROPOSAL.md` Section 4:
+`IBfmrApi`, `IBfmrBrowser`, `IAmazonProvider`, `ITelegramNotifier`, and `IClock`, aggregated into a run-pinned `ProviderBundle`.
+Wire `resolveProviderBundle` into `src/services/bfmrWorker.ts`, `dealEmailWorkflow.ts`, and `emailReservation.ts`, enabling seamless switching between live adapters and simulated stores under `BFMR_PROVIDER_MODE`.
+Gating rules enforced:
+- `BFMR_PROVIDER_MODE=simulation` permitted only under `BFMR_INTAKE_MODE=testing`.
+- `BFMR_INTAKE_MODE=production` rejects `simulation` before creating providers or starting intake.
+- Testing provider assertion (`assertTestingProviders`) skips live BFMR/Amazon credentials when in simulation mode while strictly preserving live Gmail provenance.
+- Backwards compatibility preserved for existing callers via automatic adapter wrapping.
+
 ## 23 October 2026 — clean Ubuntu host provisioning
 
 Use Ubuntu 24.04 LTS with native PostgreSQL and the same bootstrap script for
