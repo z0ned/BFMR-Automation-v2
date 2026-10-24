@@ -189,4 +189,28 @@ export const SCENARIO_CATALOG: ScenarioDefinition[] = [
 <a href="https://bfmr.com/deals/macbook-air-13-inch-m3">Apple 2024 MacBook Air 13-inch M3</a>`,
     },
   },
+  {
+    id: 'phase2-budget-headphones-purchase',
+    name: 'Phase 2 — Eligible Amazon Purchase',
+    phase: 2,
+    purchaseStart: 'END_TO_END',
+    description: 'End-to-end path through a quantity-one reservation, fixed checkout policy checks, and one confirmed simulated Amazon order.',
+    expectedOutcome: 'One reserved offer produces one synthetic order with exact ASIN, quantity, and complete total. No BFMR Purchase/Shipment update is attempted.',
+    initialDeals: [{
+      dealId: '20001', slug: 'synthetic-budget-headphones', title: 'Synthetic Budget Headphones',
+      dealUrl: 'https://bfmr.com/deals/synthetic-budget-headphones', retailer: 'Amazon',
+      isClosed: false, availableSlots: 3, payoutCents: 9000, retailCents: 7500, asin: 'B0SIMPHASE',
+    }],
+    amazon: {
+      accountEmail: 'buyer@example.invalid', accountState: 'AUTHENTICATED', asin: 'B0SIMPHASE', available: true,
+      quantity: 1, itemSubtotalCents: 7500, shippingCents: 0, taxCents: 500, discountCents: 0,
+      isGift: true, isFreeNonPrimeDelivery: true, addressMatches: true, paymentCardMatches: true,
+      cartState: 'EMPTY', deliveryEstimate: { type: 'ABSENT', rawText: 'No delivery estimate shown' },
+      existingUnpaidPayoutCents: 0, orderVisibilityDelaySeconds: 0,
+    },
+    sampleEmail: {
+      sender: 'deals@buyformeretail.com', subject: 'NEW DEAL | Synthetic Budget Headphones | Amazon',
+      body: `<h2>NEW DEAL</h2><p>• Synthetic Budget Headphones</p><p>Retailer: Amazon</p><p>Payout: $90.00 | Retail: $75.00</p><a href="https://bfmr.com/deals/synthetic-budget-headphones">Synthetic Budget Headphones</a>`,
+    },
+  },
 ];
